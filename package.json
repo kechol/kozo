@@ -1,0 +1,22 @@
+{
+  "name": "kozo-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "testing"
+  ],
+  "packageManager": "bun@1.4.2",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "check": "biome check .",
+    "format": "biome format --write .",
+    "compile": "bun run scripts/compile.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.13",
+    "@types/bun": "^1.4.2",
+    "typescript": "^7.0.2"
+  }
+}

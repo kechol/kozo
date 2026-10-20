@@ -168,6 +168,22 @@ These invariants hold everywhere in the code.
 - The local API binds to `127.0.0.1`, requires the API token, checks Origin on
   writes and enables no CORS. kozo opens no public port.
 
+## Toolchain and commands
+
+Use the Bun version pinned in `packageManager` in the root `package.json` and
+commit `bun.lock`. Keep registry URLs out of the lockfile: when a local
+registry mirror writes its URL into `bun.lock`, replace the URL with `""`
+before committing.
+
+```sh
+bun install --frozen-lockfile
+bun test              # every test; append a path to narrow it
+bun run typecheck     # tsc --noEmit
+bun run check         # Biome lint and format check
+bun run format        # Biome format --write
+bun run compile       # dist/kozo and dist/kozod for the current platform
+```
+
 ## External actions
 
 Pushes, pull requests, issues, releases, publication and other changes to
