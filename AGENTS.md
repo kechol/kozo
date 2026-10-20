@@ -184,8 +184,13 @@ bun run format        # Biome format --write
 bun run compile       # dist/kozo and dist/kozod for the current platform
 ```
 
-## External actions
+## Releases and external actions
 
-Pushes, pull requests, issues, releases, publication and other changes to
-external services require explicit authorization in the task. Permission to
-implement or commit locally does not authorize them.
+- Add a changeset (`bunx changeset`) for every user-visible change. All
+  `@kozo/*` packages share one version through a fixed group.
+- Releases come only from GitHub Actions: merging the version pull request
+  bumps the version, and a matching `v<version>` tag publishes the GitHub
+  Release. Never build or publish release artifacts from a laptop.
+- Pushes, pull requests, issues, tags, releases, publication and other changes
+  to external services require explicit authorization in the task. Permission
+  to implement or commit locally does not authorize them.

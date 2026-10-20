@@ -38,6 +38,22 @@ and usually the package name, for example `feat(cli): ...`. Explain in the body
 why the change is needed. Coding agents follow the full format in
 [AGENTS.md](AGENTS.md).
 
+## Changesets and releases
+
+Every user-visible change needs a changeset:
+
+```sh
+bunx changeset
+```
+
+Pick the bump level and describe the change in one or two sentences; the text
+lands verbatim in the changelog. All `@kozo/*` packages share one version.
+
+Releases are cut by maintainers. Merging the "chore: version packages" pull
+request bumps the version, and pushing a matching `v<version>` tag makes GitHub
+Actions build `kozo` and `kozod` for macOS and Linux and publish them as a
+GitHub Release. Nobody publishes from a laptop.
+
 ## What to keep out of the repository
 
 This is a public repository. Please do not add:

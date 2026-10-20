@@ -1,0 +1,92 @@
+name: Release
+
+# A push to main opens or updates the changesets version pull request. After it
+# merges, the maintainer pushes a `v<version>` tag, which cross-compiles both
+# executables and publishes them as a GitHub Release.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Prepare version pull request
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile
+      - name: Create or update the version pull request
+        uses: changesets/action@v2
+        with:
+          version-script: bun run version-packages
+          commit-message: "chore: version packages"
+          pr-title: "chore: version packages"
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile
+
+      - name: Validate the tag against the versioned tree
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+          version=$(bun -e 'console.log((await Bun.file("packages/cli/package.json").json()).version)')
+          if [[ "$TAG" != "v$version" ]]; then
+            echo "::error::Tag $TAG does not match the package version $version"
+            exit 1
+          fi
+          if compgen -G ".changeset/*.md" | grep -qv '^.changeset/README.md$'; then
+            echo "::error::Pending changesets remain; merge the version pull request before tagging"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - run: bun test
+
+      - name: Cross-compile and package
+        run: |
+          mkdir -p release
+          for target in darwin-arm64 darwin-x64 linux-arm64 linux-x64; do
+            bun run scripts/compile.ts --target "bun-$target" --outdir "release/$target"
+            cp LICENSE README.md "release/$target/"
+            tar -czf "release/kozo-$VERSION-$target.tar.gz" -C "release/$target" kozo kozod LICENSE README.md
+          done
+          (cd release && sha256sum kozo-*.tar.gz > SHA256SUMS.txt)
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          flags=(--generate-notes)
+          [[ "$TAG" == *-* ]] && flags+=(--prerelease)
+          gh release create "$TAG" "${flags[@]}" release/kozo-*.tar.gz release/SHA256SUMS.txt
