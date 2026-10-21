@@ -1,8 +1,8 @@
 import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { type BaseDocumentsProblem, readBaseDocuments } from "./base-documents.ts";
-import { changedFiles, diffCommand, literal, resolveBase, resolveCommit } from "./changes.ts";
-import { runCommand, secondsSince } from "./command.ts";
+import { changedFiles, diffCommand, globMatcher, literal, resolveRange } from "./changes.ts";
+import { guarded, runCommand, secondsSince } from "./command.ts";
 import { GitError, git } from "./git.ts";
 
 export interface ProveRun {
@@ -40,19 +40,11 @@ export interface ProveOptions {
  * it is restored to HEAD before returning.
  */
 export async function runProve(options: ProveOptions): Promise<ProveResult> {
-  try {
-    return await prove(options);
-  } catch (error) {
-    if (!(error instanceof GitError)) throw error;
-    options.log(`kozo: ${error.message}\n`);
-    return { status: "error", message: error.message };
-  }
+  return await guarded(options.log, [GitError], () => prove(options));
 }
 
 async function prove({ cwd, base, log }: ProveOptions): Promise<ProveResult> {
-  const baseTip = await resolveBase(cwd, base);
-  const head = await resolveCommit(cwd, "HEAD");
-  const mergeBase = (await git(cwd, ["merge-base", baseTip, head])).trim();
+  const { baseTip, head, mergeBase } = await resolveRange(cwd, base, "HEAD");
   const documents = await readBaseDocuments(cwd, baseTip);
   if (!documents.ok) {
     for (const issue of documents.issues) log(`kozo: ${issue}\n`);
@@ -69,40 +61,37 @@ async function prove({ cwd, base, log }: ProveOptions): Promise<ProveResult> {
     return { status: "error", message };
   }
 
-  const testGlobs = constraints.tests.map((pattern) => new Bun.Glob(pattern));
-  const isTest = (path: string) => testGlobs.some((glob) => glob.match(path));
+  const isTest = globMatcher(constraints.tests);
   const files = await changedFiles(cwd, await diffCommand(cwd), mergeBase, head);
   const nonTests = files.filter((file) => !isTest(file.path));
   // Each changed test file runs once, under the first entry that matches it.
-  const entryGlobs = constraints.prove.map((entry) => entry.files.map((p) => new Bun.Glob(p)));
-  const groups = new Map<number, string[]>();
+  const entries = constraints.prove.map((entry) => ({
+    run: entry.run,
+    matches: globMatcher(entry.files),
+    files: [] as string[],
+  }));
   for (const file of files) {
     if (file.change === "deleted" || !isTest(file.path)) continue;
-    const index = entryGlobs.findIndex((globs) => globs.some((glob) => glob.match(file.path)));
-    if (index >= 0) groups.set(index, [...(groups.get(index) ?? []), file.path]);
+    entries.find(({ matches }) => matches(file.path))?.files.push(file.path);
   }
   const result = {
     base: mergeBase,
     documentsAt: baseTip,
     reverted: nonTests.map((file) => file.path),
   };
-  if (groups.size === 0) {
-    log("kozo: the diff changes no test file that a prove entry runs\n");
-    return { status: "fail", reason: "no-tests", ...result, runs: [] };
-  }
-
-  const runs: ProveRun[] = [...groups]
-    .sort(([a], [b]) => a - b)
-    .map(([index, files]) => ({
+  const runs: ProveRun[] = entries
+    .filter((entry) => entry.files.length > 0)
+    .map(({ run, files }) => ({
       files,
-      command: (constraints.prove[index]?.run ?? "").replaceAll(
-        "{files}",
-        files.map(shellQuote).join(" "),
-      ),
+      command: run.replaceAll("{files}", files.map(shellQuote).join(" ")),
       withChange: 0,
       withoutChange: null,
       seconds: 0,
     }));
+  if (runs.length === 0) {
+    log("kozo: the diff changes no test file that a prove entry runs\n");
+    return { status: "fail", reason: "no-tests", ...result, runs };
+  }
   for (const run of runs) {
     log(`==> with the change: ${run.command}\n`);
     const started = performance.now();

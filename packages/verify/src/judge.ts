@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
+import type { z } from "zod";
 
 export interface SessionRequest {
   instructions: string;
@@ -29,6 +30,17 @@ export interface Verifier {
 }
 
 export class SessionError extends Error {}
+
+/** Checks a session's output against the judgment schema it was asked to answer with. */
+export function parseAnswer<T>(schema: z.ZodType<T>, name: string, output: unknown): T {
+  const judgment = schema.safeParse(output);
+  if (!judgment.success) {
+    throw new SessionError(
+      `the ${name} answer does not match its schema: ${judgment.error.message}`,
+    );
+  }
+  return judgment.data;
+}
 
 // What claude needs to run and to sign in. Everything else, GitHub tokens and cloud credentials
 // included, stays out of the session and of the shell it starts.

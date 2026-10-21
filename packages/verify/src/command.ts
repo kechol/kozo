@@ -20,3 +20,24 @@ async function forward(stream: ReadableStream<Uint8Array>, log: (text: string) =
 export function secondsSince(start: number) {
   return Math.round((performance.now() - start) / 1000);
 }
+
+type ErrorClass = abstract new (...args: never[]) => Error;
+
+/**
+ * Runs a verification layer, turning the errors it expects, such as a failed git call, into its
+ * `error` status; anything else is a bug in kozo and is thrown on.
+ */
+export async function guarded<T>(
+  log: (text: string) => void,
+  expected: readonly ErrorClass[],
+  layer: () => Promise<T>,
+): Promise<T | { status: "error"; message: string }> {
+  try {
+    return await layer();
+  } catch (error) {
+    if (!expected.some((type) => error instanceof type)) throw error;
+    const { message } = error as Error;
+    log(`kozo: ${message}\n`);
+    return { status: "error", message };
+  }
+}

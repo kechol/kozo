@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { exampleCharter, gitRepository } from "@kozo/testing";
-import { charterPath } from "./base-documents.ts";
-import { constraintsPath } from "./gates.ts";
+import { charterPath, constraintsPath } from "./base-documents.ts";
 import { proveLine, runProve } from "./prove.ts";
 
 const constraints = `

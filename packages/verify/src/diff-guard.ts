@@ -3,10 +3,11 @@ import {
   type ChangedFile,
   changedFiles,
   diffCommand,
+  globMatcher,
   literal,
-  resolveBase,
-  resolveCommit,
+  resolveRange,
 } from "./changes.ts";
+import { guarded } from "./command.ts";
 import { GitError, git, showFile } from "./git.ts";
 import { changedGateScripts, findTestWeakening, type TestWeakening } from "./test-weakening.ts";
 import { parseChangedLines } from "./unified-diff.ts";
@@ -47,21 +48,11 @@ export interface DiffGuardOptions {
 }
 
 export async function runDiffGuard(options: DiffGuardOptions): Promise<DiffGuardResult> {
-  try {
-    return await guard(options);
-  } catch (error) {
-    if (!(error instanceof GitError)) throw error;
-    options.log(`kozo: ${error.message}\n`);
-    return { status: "error", message: error.message };
-  }
+  return await guarded(options.log, [GitError], () => guard(options));
 }
 
 async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise<DiffGuardResult> {
-  // The documents come from the base ref's tip, not the merge base: a branch forked from an old
-  // commit must not be judged by the looser Charter that commit may carry.
-  const baseTip = await resolveBase(cwd, base);
-  const headCommit = await resolveCommit(cwd, head);
-  const mergeBase = (await git(cwd, ["merge-base", baseTip, headCommit])).trim();
+  const { baseTip, head: headCommit, mergeBase } = await resolveRange(cwd, base, head);
   const documents = await readBaseDocuments(cwd, baseTip);
   if (!documents.ok) {
     for (const issue of documents.issues) log(`kozo: ${issue}\n`);
@@ -79,15 +70,14 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
     violations.push({ kind: "files", changed: files.length, limit: limits.files });
   }
 
-  const scopeGlobs = scope?.map((pattern) => new Bun.Glob(pattern));
+  const inScope = scope && globMatcher(scope);
   const protectedGlobs = charter.protected_paths.map((pattern) => ({
     pattern,
     glob: new Bun.Glob(pattern),
   }));
-  const testGlobs = constraints.tests.map((pattern) => new Bun.Glob(pattern));
-  const isTest = (path: string) => testGlobs.some((glob) => glob.match(path));
+  const isTest = globMatcher(constraints.tests);
   for (const file of files) {
-    if (scopeGlobs && !scopeGlobs.some((glob) => glob.match(file.path))) {
+    if (inScope && !inScope(file.path)) {
       violations.push({ kind: "out-of-scope", path: file.path });
     }
     const hit = protectedGlobs.find(({ glob }) => glob.match(file.path));
@@ -111,16 +101,18 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
   violations.push(...findTestWeakening(testChanges));
   // Workspace packages count too: a gate such as `pnpm -r test` runs their scripts by name.
   const gateCommands = Object.values(constraints.gates).map((gate) => gate.run);
-  for (const file of files.filter(({ path }) => /(?:^|\/)package\.json$/.test(path))) {
-    const [baseScripts, headScripts] = await Promise.all(
-      [mergeBase, headCommit].map(async (commit) =>
-        scriptsOf(await showFile(cwd, commit, file.path)),
-      ),
-    );
-    for (const script of changedGateScripts(gateCommands, baseScripts ?? {}, headScripts ?? {})) {
-      violations.push({ kind: "gate-script", path: file.path, script });
-    }
-  }
+  const manifests = files.filter(({ path }) => /(?:^|\/)package\.json$/.test(path));
+  const scriptChanges = await Promise.all(
+    manifests.map(async ({ path }) => {
+      const [baseScripts, headScripts] = await Promise.all(
+        [mergeBase, headCommit].map(async (commit) => scriptsOf(await showFile(cwd, commit, path))),
+      );
+      return changedGateScripts(gateCommands, baseScripts ?? {}, headScripts ?? {}).map(
+        (script): Violation => ({ kind: "gate-script", path, script }),
+      );
+    }),
+  );
+  violations.push(...scriptChanges.flat());
 
   for (const violation of violations) log(`kozo: ${describe(violation)}\n`);
   const status = violations.length === 0 ? "pass" : "fail";

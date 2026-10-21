@@ -1,13 +1,7 @@
 import { constants } from "node:fs";
 import { mkdir, open, realpath, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import {
-  type VerdictFile,
-  type VerifyRecord,
-  verdictFileSchema,
-  verifyJudgmentJsonSchema,
-  verifyJudgmentSchema,
-} from "@kozo/core";
+import { type VerifyRecord, verifyJudgmentJsonSchema, verifyJudgmentSchema } from "@kozo/core";
 import verifyDefinition from "../../../templates/factory/agents/verify/agent.md" with {
   type: "text",
 };
@@ -16,9 +10,11 @@ import verifyAppSkill from "../../../templates/factory/skills/verify-app/SKILL.m
 };
 import { parseAgentDefinition, parseSkill } from "./agent-definition.ts";
 import { resolveBase, resolveCommit } from "./changes.ts";
+import { guarded } from "./command.ts";
 import { GitError, showFile } from "./git.ts";
-import { SessionError, type Verifier } from "./judge.ts";
+import { parseAnswer, type SessionAnswer, SessionError, type Verifier } from "./judge.ts";
 import { stopProcessesIn } from "./processes.ts";
+import { updateVerdictFile } from "./verdict-file.ts";
 
 export const verifyAgent = parseAgentDefinition(verifyDefinition);
 export const verifyAppSkillDefinition = parseSkill(verifyAppSkill);
@@ -45,13 +41,7 @@ export type VerifyResult =
  * at the tip of `base`, like the Charter, so the diff under check cannot rewrite it.
  */
 export async function runVerify(options: VerifyOptions): Promise<VerifyResult> {
-  try {
-    return await verify(options);
-  } catch (error) {
-    if (!(error instanceof GitError || error instanceof SessionError)) throw error;
-    options.log(`kozo: ${error.message}\n`);
-    return { status: "error", message: error.message };
-  }
+  return await guarded(options.log, [GitError, SessionError], () => verify(options));
 }
 
 async function verify(options: VerifyOptions): Promise<VerifyResult> {
@@ -63,7 +53,7 @@ async function verify(options: VerifyOptions): Promise<VerifyResult> {
   }
   const head = await resolveCommit(cwd, "HEAD");
   const started = new Date();
-  let answer: Awaited<ReturnType<Verifier["verify"]>>;
+  let answer: SessionAnswer;
   try {
     answer = await options.verifier.verify({
       cwd,
@@ -78,13 +68,8 @@ async function verify(options: VerifyOptions): Promise<VerifyResult> {
     if (stopped.length > 0)
       log(`kozo: stopped processes left in the worktree: ${stopped.join(", ")}\n`);
   }
-  const judgment = verifyJudgmentSchema.safeParse(answer.output);
-  if (!judgment.success) {
-    throw new SessionError(
-      `the verify answer does not match its schema: ${judgment.error.message}`,
-    );
-  }
-  const { result, conditions } = judgment.data;
+  const judgment = parseAnswer(verifyJudgmentSchema, "verify", answer.output);
+  const { result, conditions } = judgment;
   if (conditions.length !== options.doneWhen.length) {
     throw new SessionError(
       `the verify answer covers ${conditions.length} conditions, not the ${options.doneWhen.length} given`,
@@ -97,7 +82,7 @@ async function verify(options: VerifyOptions): Promise<VerifyResult> {
     await resolveEvidence(cwd, path);
   }
   const record: VerifyRecord = {
-    ...judgment.data,
+    ...judgment,
     model: answer.model,
     costUsd: answer.costUsd,
     head,
@@ -160,16 +145,7 @@ export async function writeVerifyVerdict(
       await handle.close();
     }
   }
-  const verdictPath = join(dir, "verdict.json");
-  const file = Bun.file(verdictPath);
-  const existing: VerdictFile = (await file.exists())
-    ? verdictFileSchema.parse(await file.json())
-    : { version: 1 };
-  await Bun.write(
-    verdictPath,
-    `${JSON.stringify(verdictFileSchema.parse({ ...existing, verify: record }), null, 2)}\n`,
-  );
-  return verdictPath;
+  return await updateVerdictFile(dir, { verify: record });
 }
 
 /** Resolves an evidence path, following links, and refuses one that is missing or leaves `cwd`. */

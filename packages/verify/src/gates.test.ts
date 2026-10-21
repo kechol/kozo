@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { gitRepository, tempDirectory } from "@kozo/testing";
-import { constraintsPath, gatesLine, runGates } from "./gates.ts";
+import { constraintsPath } from "./base-documents.ts";
+import { gatesLine, runGates } from "./gates.ts";
 
 const constraints = `
 version: 1

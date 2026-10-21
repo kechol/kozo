@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { type GateLevel, parseConstraints } from "@kozo/core";
+import { constraintsPath } from "./base-documents.ts";
 import { resolveBase } from "./changes.ts";
 import { runCommand, secondsSince } from "./command.ts";
 import { GitError, showFile } from "./git.ts";
@@ -34,9 +35,6 @@ export interface GatesOptions {
   /** Receives the gates' own output and kozo's progress lines, unchanged. */
   log(text: string): void;
 }
-
-// A repository path, used both on disk and inside git commits.
-export const constraintsPath = ".kozo/constraints.yml";
 
 export async function runGates({ cwd, level, base, log }: GatesOptions): Promise<GatesResult> {
   const started = performance.now();

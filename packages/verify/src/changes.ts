@@ -49,6 +49,26 @@ export async function resolveCommit(cwd: string, ref: string) {
   return (await git(cwd, ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`])).trim();
 }
 
+/**
+ * Resolves the commits a verification layer works on. The documents come from the base ref's tip, not the
+ * merge base: a branch forked from an old commit must not be judged by the looser Charter that
+ * commit may carry. The diff is taken from the merge base.
+ */
+export async function resolveRange(cwd: string, base: string, head: string) {
+  const [baseTip, headCommit] = await Promise.all([
+    resolveBase(cwd, base),
+    resolveCommit(cwd, head),
+  ]);
+  const mergeBase = (await git(cwd, ["merge-base", baseTip, headCommit])).trim();
+  return { baseTip, head: headCommit, mergeBase };
+}
+
+/** Whether a path matches any of the globs. */
+export function globMatcher(patterns: readonly string[]) {
+  const globs = patterns.map((pattern) => new Bun.Glob(pattern));
+  return (path: string) => globs.some((glob) => glob.match(path));
+}
+
 /** Lists the files that `head` changes relative to `base`, a rename counting as two files. */
 export async function changedFiles(
   cwd: string,

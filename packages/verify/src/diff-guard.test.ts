@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { gitRepository } from "@kozo/testing";
-import { charterPath } from "./base-documents.ts";
+import { charterPath, constraintsPath } from "./base-documents.ts";
 import { diffGuardLine, runDiffGuard } from "./diff-guard.ts";
-import { constraintsPath } from "./gates.ts";
 
 const charter = `
 version: 1
