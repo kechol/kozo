@@ -59,6 +59,8 @@ export interface ApiOptions {
   commands: Commands;
   /** The current time, replaced in tests. */
   now?: () => Date;
+  /** Where a task's diff lives, for `kozo show --diff`. */
+  locateTask?(ref: string): Promise<{ repository: string; branch: string; base: string } | null>;
 }
 
 const error = (c: Context, status: number, message: string, issues?: string[]) =>
@@ -88,6 +90,7 @@ export function createApi({
   mode,
   commands,
   now = () => new Date(),
+  locateTask,
 }: ApiOptions) {
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
   const origins = new Set([...hosts].map((host) => `http://${host}`));
@@ -141,12 +144,14 @@ export function createApi({
     return [ref, parsedReference];
   };
 
-  app.get("/api/refs/:ref", (c) => {
+  app.get("/api/refs/:ref", async (c) => {
     const found = reference(c);
     if (found instanceof Response) return found;
     const [ref, parsedReference] = found;
     const result = detail(store.db, ref, parsedReference);
-    return result ? c.json(result) : error(c, 404, `${ref} does not exist`);
+    if (!result) return error(c, 404, `${ref} does not exist`);
+    const location = result.kind === "task" ? await locateTask?.(ref).catch(() => null) : null;
+    return c.json(location ? { ...result, diff: location } : result);
   });
 
   app.get("/api/refs/:ref/events", (c) => {

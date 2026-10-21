@@ -386,7 +386,11 @@ export function eventLine(event: {
 export async function show(args: readonly string[], out: Lines): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...args],
-    options: { follow: { type: "boolean", short: "f" }, json: { type: "boolean" } },
+    options: {
+      follow: { type: "boolean", short: "f" },
+      diff: { type: "boolean" },
+      json: { type: "boolean" },
+    },
     allowPositionals: true,
   });
   const ref = positionals[0];
@@ -394,6 +398,23 @@ export async function show(args: readonly string[], out: Lines): Promise<number>
     throw new FactoryUsageError("show needs an item, task or run reference");
   return withClient(out, async (client) => {
     const answer = await client.get(refPath(ref));
+    if (values.diff && answer.status === 200) {
+      const location = answer.body.diff as
+        | { repository: string; branch: string; base: string }
+        | undefined;
+      if (!location) throw new FactoryUsageError("--diff needs a task reference");
+      const child = Bun.spawn(
+        ["git", "-C", location.repository, "diff", `${location.base}...${location.branch}`],
+        { stdout: "pipe", stderr: "pipe" },
+      );
+      const text = await new Response(child.stdout).text();
+      if ((await child.exited) !== 0) {
+        out.stderr(`kozo: ${printable(await new Response(child.stderr).text())}`);
+        return FactoryExit.failure;
+      }
+      for (const line of text.trimEnd().split("\n")) out.stdout(printable(line));
+      return FactoryExit.success;
+    }
     const code = printAnswer(out, values.json, answer, () => describe(answer.body));
     if (!values.follow || code !== FactoryExit.success) return code;
     const response = await client.stream(`${refPath(ref)}/events`);
@@ -471,4 +492,18 @@ export async function verb(name: Verb, args: readonly string[], out: Lines): Pro
 
 function missing(message: string): never {
   throw new FactoryUsageError(message);
+}
+
+/** `kozo admin db-rebuild`: rebuilds kozo.db from the event logs. */
+export async function admin(args: readonly string[], out: Lines): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: [...args],
+    options: { json: { type: "boolean" } },
+    allowPositionals: true,
+  });
+  if (positionals[0] !== "db-rebuild") throw new FactoryUsageError("admin takes db-rebuild");
+  return withClient(out, async (client) => {
+    const answer = await client.post("/api/admin/db-rebuild");
+    return printAnswer(out, values.json, answer, () => [String(answer.body.message)]);
+  });
 }

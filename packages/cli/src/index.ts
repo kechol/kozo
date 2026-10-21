@@ -19,6 +19,7 @@ import {
 import pkg from "../package.json" with { type: "json" };
 import {
   add,
+  admin,
   down,
   FactoryExit,
   FactoryUsageError,
@@ -55,8 +56,9 @@ Commands:
       file's text, its body
   ls [inbox|items|tasks|runs] [--json]
       List what waits for you (the default) or every item, task or run
-  show <ref> [-f] [--json]
-      Show an item, task or run; -f follows its events
+  show <ref> [-f] [--diff] [--json]
+      Show an item, task or run; -f follows its events, and --diff prints a
+      task's diff against the default branch
   say <ref> <text>          Answer a question or instruct a run or task
   approve <item> [text]     Approve a start or a plan
   reject <item> <reason>    Reject a plan
@@ -65,6 +67,7 @@ Commands:
   retry <ref> [text]        Retry a task from its checkpoint or an item
   close <ref> --done | --cancel <reason>
       Complete an item or task that needed no change, or cancel it
+  admin db-rebuild          Rebuild kozo.db from the event logs
 
   gates [--level fast|full|deep] [--base <ref>] [--json]
       Run the gates of one level (default full); with --base, take the
@@ -121,6 +124,7 @@ export async function run(
     if (command === "add") return await add(rest, out);
     if (command === "ls") return await ls(rest, out);
     if (command === "show") return await show(rest, out);
+    if (command === "admin") return await admin(rest, out);
     const verbs = ["say", "approve", "reject", "pause", "resume", "retry", "close"] as const;
     const named = verbs.find((name) => name === command);
     if (named) return await verb(named, rest, out);

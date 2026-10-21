@@ -9,8 +9,10 @@ import { EventStore } from "./event-store.ts";
 import { loadFactory } from "./factory-config.ts";
 import { type Launcher, processLauncher } from "./launcher.ts";
 import { Reconciler } from "./reconcile.ts";
+import { defaultBranch } from "./repository.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
+import { taskBranch } from "./worktrees.ts";
 
 export interface DaemonOptions {
   home?: KozoHome;
@@ -112,6 +114,11 @@ export class Daemon {
       port,
       mode: factory.mode,
       commands,
+      async locateTask(ref) {
+        const repository = store.state.items[store.state.tasks[ref]?.item ?? ""]?.repository;
+        if (!repository) return null;
+        return { repository, branch: taskBranch(ref), base: await defaultBranch(repository) };
+      },
     });
     const server = serveApi(app, port);
     const reconciler = new Reconciler(store, runner, (line) => console.error(line));

@@ -97,6 +97,9 @@ describe("the daily commands", () => {
       waiting: 1,
     });
     expect((await kozo("approve", "r-0001")).code).toBe(2);
+    expect((await kozo("show", "K-1", "--diff")).code).toBe(2);
+    expect((await kozo("admin", "db-rebuild")).stdout).toBe("rebuilt kozo.db from the event logs");
+    expect((await kozo("ls", "items")).stdout).toContain("K-1");
     expect((await kozo("say", "K-1")).code).toBe(2);
 
     const stopped = await kozo("down");
