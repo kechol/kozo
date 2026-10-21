@@ -76,6 +76,20 @@ async function queued(path: string, delivered: number): Promise<Instruction[]> {
 }
 
 /**
+ * Whether a Bash result of the gates command ends with a passing KOZO_GATES line. kozo gates
+ * prints that line last, after every gate's own output, so a test that prints a passing line
+ * of its own cannot pose as the result.
+ */
+function passed(output: unknown, level: string): boolean {
+  const stdout =
+    typeof output === "string"
+      ? output
+      : String((output as { stdout?: unknown } | null)?.stdout ?? "");
+  const last = stdout.trimEnd().split("\n").at(-1) ?? "";
+  return last.startsWith(`KOZO_GATES: level=${level} status=pass `);
+}
+
+/**
  * Runs one session for a run: the guard and sandbox of its task, the agent tools, delivery of
  * queued instructions and stop-check. Every record, note and block goes to `emit`. The agent
  * runs its gates through Bash, inside its sandbox, rather than through a tool in this process,
@@ -156,9 +170,7 @@ export async function runSession(
           const command = (record.data.input as { command?: unknown } | null)?.command;
           if (command === spec.gates.command) gatesCall = record.data.call_id;
         } else if (record.type === "tool.result" && record.data.call_id === gatesCall) {
-          const passing = `KOZO_GATES: level=${spec.gates.level} status=pass`;
-          gatesPassed =
-            !record.data.is_error && JSON.stringify(record.data.output).includes(passing);
+          gatesPassed = !record.data.is_error && passed(record.data.output, spec.gates.level);
         }
       }
       emit({ record });

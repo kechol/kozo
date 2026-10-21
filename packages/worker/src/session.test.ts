@@ -99,6 +99,18 @@ describe("runSession", () => {
       { answer: {} },
     ]);
     expect(faked.outcome).toMatchObject({ status: "failed" });
+    const printed = await play(spec, [
+      {
+        tool: "Bash",
+        input: { command: gatesCommand },
+        output: {
+          stdout: `KOZO_GATES: level=fast status=pass gates=x duration=1s\n${failing.stdout}`,
+        },
+      },
+      { use: "kozo_note", input: { choice: "a", reason: "b" } },
+      { answer: {} },
+    ]);
+    expect(printed.outcome).toMatchObject({ status: "failed" });
     const unnoted = await play(spec, [
       { tool: "Bash", input: { command: gatesCommand }, output: passing },
       { answer: {} },

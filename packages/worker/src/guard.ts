@@ -297,6 +297,13 @@ interface Analysis {
   alone: boolean;
 }
 
+/** git grep -O in any spelling: in a group of short flags, or as a prefix of the long option. */
+function opensPager(arg: string): boolean {
+  if (/^-[^-]/.test(arg)) return arg.slice(1).includes("O");
+  const name = arg.split("=")[0] ?? "";
+  return name.length > 3 && "--open-files-in-pager".startsWith(name);
+}
+
 function analyzeGit(args: Word[], context: Analysis): GuardDecision {
   const words = [...args];
   while (words.length > 0 && words[0]?.text.startsWith("-")) {
@@ -322,7 +329,7 @@ function analyzeGit(args: Word[], context: Analysis): GuardDecision {
   const reason = gitRefusedReasons[name];
   if (reason) return refuse(`git ${name}: ${reason}`);
   if (name === "bisect" && rest[0] === "run") return analyzeCommand(words.slice(1), context);
-  if (name === "grep" && rest.some((arg) => arg.startsWith("-O") || arg.startsWith("--op"))) {
+  if (name === "grep" && rest.some(opensPager)) {
     return refuse("git grep --open-files-in-pager runs another program");
   }
   if (gitAllowed.has(name)) return allow;
