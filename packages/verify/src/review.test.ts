@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readdir } from "node:fs/promises";
 import { verdictFileSchema } from "@kozo/core";
 import { gitRepository, tempDirectory } from "@kozo/testing";
 import { parseAgentDefinition } from "./agent-definition.ts";
@@ -120,6 +121,7 @@ describe("writeReviewVerdict", () => {
       version: 1,
       review: record,
     });
+    expect(await readdir(dir.path)).toEqual(["verdict.json"]);
   });
 });
 
