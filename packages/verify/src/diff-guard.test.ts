@@ -212,3 +212,34 @@ describe("runDiffGuard", () => {
     expect(line).toBe("KOZO_DIFF_GUARD: status=error");
   });
 });
+
+describe("runDiffGuard on weakened tests", () => {
+  test("disabled tests, weakened assertions and changed gate scripts are violations", async () => {
+    const repo = await gitRepository();
+    await using _ = repo;
+    const base = await repo.commit({
+      [charterPath]: charter
+        .replace("existing_tests_protected: true", "existing_tests_protected: false")
+        .replace("max_changed_lines: 10", "max_changed_lines: 100"),
+      [constraintsPath]: constraints.replace('run: "true"', 'run: "pnpm test"'),
+      "package.json": JSON.stringify({ scripts: { test: "vitest run", dev: "next dev" } }),
+      "src/cart.test.ts": "test('total', () => {\n  expect(total()).toBe(3);\n});\n",
+    });
+    await repo.commit({
+      "package.json": JSON.stringify({ scripts: { test: "vitest run || true", dev: "next" } }),
+      "src/cart.test.ts": "test('total', () => {\n  expect(total()).toBeTruthy();\n});\n",
+      "src/new.test.ts": "test.only('new', () => {});\n",
+    });
+    const { result, log } = await guard(repo.path, base);
+    expect("violations" in result && result.violations).toEqual([
+      {
+        kind: "weakened-test",
+        path: "src/cart.test.ts",
+        reason: "strict matchers replaced by weak ones",
+      },
+      { kind: "disabled-test", path: "src/new.test.ts", line: 1, marker: "only" },
+      { kind: "gate-script", script: "test" },
+    ]);
+    expect(log).toContain('the package.json script "test" that a gate runs was changed');
+  });
+});
