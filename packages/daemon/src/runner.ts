@@ -491,8 +491,10 @@ export class Runner {
     // The diff's own code runs in prepare, the gates and prove, so they get no credentials.
     const environment = commandEnvironmentFrom(process.env);
     // Computed for every attempt, wherever it starts: the guard and the sandbox protect these.
-    const listed = (await git(repository.path, ["ls-tree", "-r", "--name-only", repository.tip]))
-      .split("\n")
+    const listed = (
+      await git(repository.path, ["ls-tree", "-r", "-z", "--name-only", repository.tip])
+    )
+      .split("\0")
       .filter(Boolean);
     const existingTests = charter.existing_tests_protected
       ? listed.filter(globMatcher(constraints.tests))
