@@ -8,6 +8,7 @@ import {
   type Charter,
   type Constraints,
   type GateLevel,
+  highestTask,
   type KozoHome,
   numberAfter,
   type Plan,
@@ -62,7 +63,13 @@ import { itemDirectory, readItemFile, requestText } from "./item-file.ts";
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { defaultBranch } from "./repository.ts";
 import { type Envelope, pumpSession, type SessionResult } from "./session-pump.ts";
-import { claimTask, releaseTask, taskBranch, worktreePath } from "./worktrees.ts";
+import {
+  claimTask,
+  releaseTask,
+  taskBranch,
+  triageCheckoutPath,
+  worktreePath,
+} from "./worktrees.ts";
 
 export interface RunnerDeps {
   launcher: Launcher;
@@ -256,10 +263,7 @@ export class Runner {
     if (item?.stage !== "triage" || item.hold) return;
     const repository = await this.repository(item.repository);
     const file = await readItemFile(this.home, itemRef);
-    const checkout = join(
-      this.home.worktrees,
-      `${repository.path.split("/").at(-1)}-${itemRef}-triage`,
-    );
+    const checkout = triageCheckoutPath(this.home, repository.path, itemRef);
     await rm(checkout, { recursive: true, force: true });
     await git(repository.path, ["worktree", "prune"]);
     await mkdir(this.home.worktrees, { recursive: true });
@@ -347,7 +351,7 @@ export class Runner {
         return;
       }
       const draft = planSchema.safeParse(
-        numberAfter({ version: 1, item: itemRef, ...answer.data.plan } as Plan, item.tasks.length),
+        numberAfter({ version: 1, item: itemRef, ...answer.data.plan } as Plan, highestTask(item)),
       );
       if (!draft.success) {
         await this.hold(
@@ -497,7 +501,7 @@ export class Runner {
     const { charter, constraints } = repository;
     const plan = item.plan;
     const worktree = worktreePath(this.home, repository.path, taskRef);
-    const branch = taskBranch(taskRef);
+    const branch = taskBranch(this.store.factoryId, taskRef);
     const level = gatesFor[plan.risk];
     const run = await this.startRun({ item: item.ref, task: taskRef }, "implement", repository.tip);
     const envelope: Envelope = { run_id: run, item: item.ref, task: taskRef };
@@ -556,6 +560,7 @@ export class Runner {
         case "claim": {
           await enter(node, "D");
           const claim = await claimTask(this.home, repository.path, taskRef, {
+            factory: this.store.factoryId,
             resume: current.runs.length > 1,
           });
           if (!claim.claimed) {
@@ -1226,7 +1231,7 @@ export class Runner {
       stat.trim(),
       "```",
       "",
-      `Merge it with: git merge --no-ff ${taskBranch(task.ref)}`,
+      `Merge it with: git merge --no-ff ${taskBranch(this.store.factoryId, task.ref)}`,
       "",
     ].join("\n");
     const path = handoffReportPath(this.home, itemRef, task.ref);
@@ -1267,7 +1272,10 @@ export class Runner {
       null,
       `merged into ${repository.branch}; the ${level} gates ${result.status === "pass" ? "passed" : "failed"} there`,
     );
-    await releaseTask(this.home, repository.path, taskRef, { deleteBranch: false });
+    await releaseTask(this.home, repository.path, taskRef, {
+      factory: this.store.factoryId,
+      deleteBranch: false,
+    });
     const owner = this.store.state.items[item.ref];
     if (!owner || owner.tasks.some((ref) => this.store.state.tasks[ref]?.stage !== "complete"))
       return;
@@ -1310,7 +1318,10 @@ export class Runner {
     const task = this.store.state.tasks[taskRef];
     const item = task ? this.store.state.items[task.item] : undefined;
     if (!item) return;
-    await releaseTask(this.home, item.repository, taskRef, { deleteBranch });
+    await releaseTask(this.home, item.repository, taskRef, {
+      factory: this.store.factoryId,
+      deleteBranch,
+    });
   }
 }
 

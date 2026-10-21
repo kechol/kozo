@@ -13,7 +13,7 @@ const failing = {
 async function suite() {
   const repo = await gitRepository();
   await repo.commit(suiteBase, "the suite shop");
-  await repo.git("switch", "--quiet", "-c", "kozo/K-1-t1");
+  await repo.git("switch", "--quiet", "-c", "kozo/k3x9q2/K-1-t1");
   const spec: WorkerSpec = {
     version: 1,
     run: "r-0001",

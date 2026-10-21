@@ -80,6 +80,8 @@ export interface RunInfo {
 }
 
 export interface FactoryState {
+  /** The factory's ID from `factory.created`, null only before kozod first starts. */
+  factoryId: string | null;
   paused: boolean;
   pausedReason: string | null;
   items: Record<string, ItemState>;
@@ -93,7 +95,15 @@ export interface FactoryState {
 export class StateError extends Error {}
 
 export function emptyState(): FactoryState {
-  return { paused: false, pausedReason: null, items: {}, tasks: {}, runs: {}, lastTs: null };
+  return {
+    factoryId: null,
+    paused: false,
+    pausedReason: null,
+    items: {},
+    tasks: {},
+    runs: {},
+    lastTs: null,
+  };
 }
 
 const closed: readonly Stage[] = ["complete", "cancelled"];
@@ -126,13 +136,19 @@ function allowed(edges: typeof itemEdges, from: Stage, to: Stage): boolean {
   return edges[from]?.includes(to) ?? false;
 }
 
+/** The highest task number of an item, 0 before it has tasks. */
+export function highestTask(item: ItemState): number {
+  return Math.max(0, ...item.tasks.map((ref) => Number(ref.slice(ref.lastIndexOf("/t") + 2))));
+}
+
 /**
- * The plan with its task IDs numbered after an item's `existing` tasks, as when an item comes
- * back from a post-merge defect with a new plan: t1 becomes t<existing + 1>, dependencies too.
+ * The plan with its task IDs numbered after an item's highest task number, as when an item
+ * comes back from a post-merge defect with a new plan: t1 becomes t<highest + 1>, dependencies
+ * too.
  */
-export function numberAfter(plan: Plan, existing: number): Plan {
-  if (existing === 0) return plan;
-  const renamed = (id: string) => `t${Number(id.slice(1)) + existing}`;
+export function numberAfter(plan: Plan, highest: number): Plan {
+  if (highest === 0) return plan;
+  const renamed = (id: string) => `t${Number(id.slice(1)) + highest}`;
   return {
     ...plan,
     tasks: plan.tasks.map((task) => ({
@@ -168,6 +184,11 @@ export function applyEvent(state: FactoryState, event: Event): void {
   const item = event.item === null ? undefined : state.items[event.item];
   const task = event.task === null ? undefined : state.tasks[event.task];
   switch (event.type) {
+    case "factory.created":
+      if (state.factoryId !== null)
+        throw new StateError(`the factory is ${state.factoryId} already`);
+      state.factoryId = event.data.factory_id;
+      return;
     case "factory.changed":
       state.paused = event.data.paused;
       state.pausedReason = event.data.paused ? event.data.reason : null;

@@ -52,6 +52,7 @@ const examples: Record<EventType, unknown> = {
     instructions_sha: "c".repeat(64),
   },
   "item.created": { repository: "~/src/app", title: "Low stock notice", source: "local" },
+  "factory.created": { factory_id: "k3x9q2" },
   "factory.changed": { paused: true, reason: "kozo pause" },
   "log.sealed": { run: "r-0193", lines: 58, last: "a".repeat(64) },
   "run.changed": { from: "running", to: "failed", reason: "max_turns" },
@@ -83,15 +84,19 @@ const examples: Record<EventType, unknown> = {
     failed: "unit",
   },
   "branch.merged": {
-    branch: "kozo/K-12-t1",
+    branch: "kozo/k3x9q2/K-12-t1",
     head: "9f3c2a1",
     into: "main",
     commit: "77ab301",
     committer: "Owner <owner@example.com>",
   },
-  "handoff.ready": { branch: "kozo/K-12-t1", head: "9f3c2a1", report: "items/K-12/handoff-t1.md" },
+  "handoff.ready": {
+    branch: "kozo/k3x9q2/K-12-t1",
+    head: "9f3c2a1",
+    report: "items/K-12/handoff-t1.md",
+  },
   "review.verdict": { verdict: "accept", summary: "The change does what was asked." },
-  "external.write": { target: "local", action: "branch", subject: "kozo/K-12-t1" },
+  "external.write": { target: "local", action: "branch", subject: "kozo/k3x9q2/K-12-t1" },
   "cost.tick": { usd: 0.42, in: 12000, out: 800, cache_read: 9000 },
 };
 
@@ -108,7 +113,7 @@ describe("parseEvent", () => {
   test("parses an example of every event type", () => {
     for (const [type, data] of Object.entries(examples)) {
       const overrides =
-        type === "factory.changed"
+        type === "factory.changed" || type === "factory.created"
           ? { item: null, task: null }
           : type === "log.sealed"
             ? { run_id: null }

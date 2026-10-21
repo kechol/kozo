@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { type KozoHome, parseReference } from "@kozo/core";
@@ -11,16 +12,30 @@ function taskParts(task: string) {
   return { item: repo === null ? `K-${number}` : String(number), task: reference.task };
 }
 
-/** The branch that holds a task's diff. */
-export function taskBranch(task: string): string {
+/** The branch that holds a task's diff, under the factory's own ID. */
+export function taskBranch(factory: string, task: string): string {
   const parts = taskParts(task);
-  return `kozo/${parts.item}-t${parts.task}`;
+  return `kozo/${factory}/${parts.item}-t${parts.task}`;
 }
 
-/** The worktree directory of a task; the repository's name keeps GitHub-mode numbers apart. */
+/**
+ * The name a repository's checkouts start with: its directory name, then a hash of its path, so
+ * that two repositories with one name and the same GitHub-mode numbers stay apart.
+ */
+function repositoryPrefix(repository: string): string {
+  const hash = createHash("sha256").update(repository).digest("hex").slice(0, 8);
+  return `${basename(repository)}-${hash}`;
+}
+
+/** The worktree directory of a task. */
 export function worktreePath(home: KozoHome, repository: string, task: string): string {
   const parts = taskParts(task);
-  return join(home.worktrees, `${basename(repository)}-${parts.item}-t${parts.task}`);
+  return join(home.worktrees, `${repositoryPrefix(repository)}-${parts.item}-t${parts.task}`);
+}
+
+/** The read-only checkout in which triage investigates an item. */
+export function triageCheckoutPath(home: KozoHome, repository: string, item: string): string {
+  return join(home.worktrees, `${repositoryPrefix(repository)}-${item}-triage`);
 }
 
 export type Claim =
@@ -54,9 +69,9 @@ export async function claimTask(
   home: KozoHome,
   repository: string,
   task: string,
-  { resume = false } = {},
+  { factory, resume = false }: { factory: string; resume?: boolean },
 ): Promise<Claim> {
-  const branch = taskBranch(task);
+  const branch = taskBranch(factory, task);
   const worktree = worktreePath(home, repository, task);
   const tip = (
     await git(repository, ["rev-parse", `refs/heads/${await defaultBranch(repository)}`])
@@ -85,14 +100,15 @@ export async function releaseTask(
   home: KozoHome,
   repository: string,
   task: string,
-  { deleteBranch }: { deleteBranch: boolean },
+  { factory, deleteBranch }: { factory: string; deleteBranch: boolean },
 ) {
+  const branch = taskBranch(factory, task);
   const worktree = worktreePath(home, repository, task);
   if (await exists(worktree)) {
     await git(repository, ["worktree", "remove", "--force", worktree]);
   }
   await git(repository, ["worktree", "prune"]);
-  if (deleteBranch && (await branchCommit(repository, taskBranch(task))) !== null) {
-    await git(repository, ["branch", "-D", taskBranch(task)]);
+  if (deleteBranch && (await branchCommit(repository, branch)) !== null) {
+    await git(repository, ["branch", "-D", branch]);
   }
 }

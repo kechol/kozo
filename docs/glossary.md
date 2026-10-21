@@ -41,6 +41,7 @@
 | control plane | The plane, run by kozod, that routes stages, checks plans and the Charter, claims tasks, and applies backpressure and budgets. | `packages/daemon` | - | - |
 | dashboard | The local web UI with the inbox, the board and the detail view, which holds no state and calls only the local API. | `packages/dashboard` | console, web app | - |
 | execution plane | The plane of workers that execute agent nodes inside worktrees. | `packages/worker` | - | - |
+| factory ID | The six random lowercase letters and digits that kozod draws at its first start and puts in its branch names, so that two factories or a recreated home never share a branch. | `factory_id`, `factory.created` | - | - |
 | kozo | The whole personal software factory made of kozod, the CLI, the dashboard, the workers and the verification commands. | - | - | - |
 | kozod | The resident process that performs every state write and serves the local API. | `kozod`, `packages/daemon` | backend, server | - |
 | local API | The REST and SSE interface that kozod serves on `127.0.0.1:7420` for the CLI and the dashboard. | `/api/*` | - | - |
@@ -88,9 +89,9 @@
 | run | One agent attempt in a new session, identified as `r-<nnnn>`. | `run_id` | attempt, job, session | - |
 | run report | The JSON that the worker writes at the end of a run in the schema that the brief specifies. | `report.json` | - | - |
 | run state | The lifecycle state of a run: queued, running, paused, succeeded, failed, stopped or lost. | `run.*` | - | - |
-| task branch | The branch that holds one task's diff, whose creation claims the task. | `kozo/<item>-t<n>` | - | - |
+| task branch | The branch that holds one task's diff under the factory ID, whose creation claims the task. | `kozo/<factory ID>/<item>-t<n>` | - | - |
 | thread | The runs and instructions that belong to one task, with at most one running run at a time. | task reference | conversation | - |
-| worktree | The git worktree that kozod creates for one task from the latest default branch. | `~/.kozo/worktrees/<task>` | checkout, workspace | - |
+| worktree | The git worktree that kozod creates for one task from the latest default branch. | `~/.kozo/worktrees/<repository>-<path hash>-<item>-t<n>` | checkout, workspace | - |
 
 ## Verification
 

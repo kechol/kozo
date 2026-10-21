@@ -119,7 +119,11 @@ export class Daemon {
       async locateTask(ref) {
         const repository = store.state.items[store.state.tasks[ref]?.item ?? ""]?.repository;
         if (!repository) return null;
-        return { repository, branch: taskBranch(ref), base: await defaultBranch(repository) };
+        return {
+          repository,
+          branch: taskBranch(store.factoryId, ref),
+          base: await defaultBranch(repository),
+        };
       },
     });
     const server = serveApi(app, port);

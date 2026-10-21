@@ -112,7 +112,7 @@ export class Reconciler {
     const item = this.store.state.items[task.item];
     if (!item) return;
     const repository = item.repository;
-    const branch = taskBranch(task.ref);
+    const branch = taskBranch(this.store.factoryId, task.ref);
     const target = await defaultBranch(repository);
     const tip = await branchTip(repository, branch);
     if (tip === null) {

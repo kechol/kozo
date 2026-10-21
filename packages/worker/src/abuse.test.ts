@@ -44,7 +44,7 @@ describe("abuse", () => {
       await mkdir(home.worktrees, { recursive: true });
       await Bun.write(home.apiToken, `${"d".repeat(64)}\n`);
       const worktree = join(home.worktrees, "shop-K-1-t1");
-      await repo.git("worktree", "add", "--quiet", "-b", "kozo/K-1-t1", worktree, "main");
+      await repo.git("worktree", "add", "--quiet", "-b", "kozo/k3x9q2/K-1-t1", worktree, "main");
       const refsBefore = await repo.git("for-each-ref", "--format=%(refname) %(objectname)");
       const policy = {
         worktree,
@@ -81,7 +81,7 @@ describe("abuse", () => {
         signal: new AbortController().signal,
         env: factoryGitEnvironment,
         guard: (tool, input) => guardToolCall(tool, input, policy),
-        sandbox: await taskSandbox(home, worktree, "kozo/K-1-t1", {
+        sandbox: await taskSandbox(home, worktree, "kozo/k3x9q2/K-1-t1", {
           writable: true,
           protectedPaths: [".kozo/**"],
         }),

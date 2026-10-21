@@ -60,6 +60,7 @@ describe("pumpSession", () => {
       )
       .all();
     expect(types).toEqual([
+      { type: "factory.created", run_id: null },
       { type: "item.created", run_id: null },
       { type: "run.started", run_id: "r-0001" },
       { type: "agent.message", run_id: "r-0001" },

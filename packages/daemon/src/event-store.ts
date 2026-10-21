@@ -39,6 +39,14 @@ export type NewEvent = {
 
 export type Listener = (event: Event, id: number) => void;
 
+/** Six random lowercase letters and digits. */
+function newFactoryId(): string {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  return Array.from(crypto.getRandomValues(new Uint8Array(6)), (byte) => alphabet[byte % 36]).join(
+    "",
+  );
+}
+
 /** A log or state problem found while opening a home; kozod does not start on one. */
 export class EventLogError extends Error {}
 
@@ -107,11 +115,20 @@ export class EventStore {
     for (const run of Object.values(state.runs)) {
       if (isRunOver(run.state) && !run.sealed) await store.serial(() => store.seal(run.ref));
     }
+    if (state.factoryId === null) {
+      await store.append({ type: "factory.created", data: { factory_id: newFactoryId() } });
+    }
     return store;
   }
 
   get state(): Readonly<FactoryState> {
     return this.current;
+  }
+
+  /** The factory's ID, which every open store has. */
+  get factoryId(): string {
+    if (this.current.factoryId === null) throw new EventLogError("the factory has no ID");
+    return this.current.factoryId;
   }
 
   get db() {

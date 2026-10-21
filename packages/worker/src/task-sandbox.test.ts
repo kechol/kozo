@@ -21,7 +21,7 @@ async function taskWorktree(outsideTemp = false) {
   const home = kozoHome(dir.path);
   await mkdir(home.worktrees, { recursive: true });
   const worktree = join(home.worktrees, "shop-K-1-t1");
-  await repo.git("worktree", "add", "--quiet", "-b", "kozo/K-1-t1", worktree, "main");
+  await repo.git("worktree", "add", "--quiet", "-b", "kozo/k3x9q2/K-1-t1", worktree, "main");
   await Bun.write(home.apiToken, "secret-token-value\n");
   return {
     repo,
@@ -40,7 +40,7 @@ describe("taskSandbox", () => {
     await using task = await taskWorktree();
     await task.repo.git("branch", "human-work", "main");
     await Bun.write(join(task.worktree, "src", "cart.test.ts"), "test\n");
-    const paths = await taskSandbox(task.home, task.worktree, "kozo/K-1-t1", {
+    const paths = await taskSandbox(task.home, task.worktree, "kozo/k3x9q2/K-1-t1", {
       writable: true,
       protectedPaths: [".kozo/**", "src/*.test.ts"],
       existingTests: ["src/cart.test.ts"],
@@ -57,10 +57,14 @@ describe("taskSandbox", () => {
     expect(paths.denyWrite).toContain(join(task.worktree, ".git"));
     expect(paths.denyWrite).toContain(join(common, "refs", "heads", "main"));
     expect(paths.denyWrite).toContain(join(common, "refs", "heads", "human-work"));
-    expect(paths.denyWrite).not.toContain(join(common, "refs", "heads", "kozo", "K-1-t1"));
+    expect(paths.denyWrite).not.toContain(
+      join(common, "refs", "heads", "kozo", "k3x9q2", "K-1-t1"),
+    );
     expect(paths.denyWrite).toContain(join(task.worktree, ".kozo"));
     expect(paths.denyWrite).toContain(join(task.worktree, "src", "cart.test.ts"));
-    const reading = await taskSandbox(task.home, task.worktree, "kozo/K-1-t1", { writable: false });
+    const reading = await taskSandbox(task.home, task.worktree, "kozo/k3x9q2/K-1-t1", {
+      writable: false,
+    });
     expect(reading.allowWrite).toEqual([]);
     expect(reading.denyWrite).toContain(task.worktree);
   });
@@ -98,10 +102,12 @@ describe("taskSandbox", () => {
         signal: new AbortController().signal,
         env: factoryGitEnvironment,
         guard: async () => ({ allow: true }),
-        sandbox: await taskSandbox(task.home, task.worktree, "kozo/K-1-t1", { writable: true }),
+        sandbox: await taskSandbox(task.home, task.worktree, "kozo/k3x9q2/K-1-t1", {
+          writable: true,
+        }),
       });
       expect(outcome.status).toBe("answered");
-      expect(await task.repo.git("log", "-1", "--format=%s", "kozo/K-1-t1")).toBe("fix");
+      expect(await task.repo.git("log", "-1", "--format=%s", "kozo/k3x9q2/K-1-t1")).toBe("fix");
       expect(await task.repo.git("rev-parse", "main")).toBe(task.main);
       expect(await task.repo.git("config", "--get", "core.hooksPath").catch(() => "")).toBe("");
       expect(JSON.stringify(records)).not.toContain("secret-token-value");

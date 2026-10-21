@@ -182,9 +182,9 @@ describe("the minimal path", () => {
     expect(implementRequest?.prompt).toContain(
       "GATES       Run `kozo gates --level full --base main` with Bash",
     );
-    expect(await env.repo.git("log", "-1", "--format=%s %an", "kozo/K-1-t1")).toBe(
-      "feat: say only N left when stock is low kozo test",
-    );
+    expect(
+      await env.repo.git("log", "-1", "--format=%s %an", `kozo/${env.store.factoryId}/K-1-t1`),
+    ).toBe("feat: say only N left when stock is low kozo test");
     const runs = Object.values(env.store.state.runs).map((run) => [
       run.agent,
       run.state,
@@ -484,9 +484,9 @@ describe("the minimal path", () => {
       "--quiet",
       "-m",
       "merge the low stock notice",
-      "kozo/K-1-t1",
+      `kozo/${env.store.factoryId}/K-1-t1`,
     );
-    const tip = (await env.repo.git("rev-parse", "kozo/K-1-t1")).trim();
+    const tip = (await env.repo.git("rev-parse", `kozo/${env.store.factoryId}/K-1-t1`)).trim();
     const mergeCommit = (await env.repo.git("rev-parse", "HEAD")).trim();
     await env.reconciler.reconcile();
     await env.scheduler.idle();
@@ -499,14 +499,19 @@ describe("the minimal path", () => {
         .all(type)
         .map((row) => JSON.parse(row.line));
     expect(events("handoff.ready").at(-1)?.data).toMatchObject({
-      branch: "kozo/K-1-t1",
+      branch: `kozo/${env.store.factoryId}/K-1-t1`,
       head: tip,
       report: "items/K-1/handoff-t1.md",
     });
     expect(events("branch.merged")).toMatchObject([
       {
         task,
-        data: { branch: "kozo/K-1-t1", head: tip, into: "main", commit: mergeCommit },
+        data: {
+          branch: `kozo/${env.store.factoryId}/K-1-t1`,
+          head: tip,
+          into: "main",
+          commit: mergeCommit,
+        },
       },
     ]);
     expect(events("branch.merged")[0]?.data.committer).toEndWith("@example.com>");
@@ -521,7 +526,7 @@ describe("the minimal path", () => {
     );
     const { task } = await toHandoff(env);
     await env.repo.commit({ "NOTES.txt": "unrelated\n" }, "an unrelated change");
-    await env.repo.git("merge", "--squash", "--quiet", "kozo/K-1-t1");
+    await env.repo.git("merge", "--squash", "--quiet", `kozo/${env.store.factoryId}/K-1-t1`);
     await env.repo.git("commit", "--quiet", "-m", "the low stock notice, squashed");
     const squashed = (await env.repo.git("rev-parse", "HEAD")).trim();
     await env.repo.commit({ "LATER.txt": "later\n" }, "a later change");
@@ -539,7 +544,14 @@ describe("the minimal path", () => {
     );
     const { ref, task } = await toHandoff(env);
     await env.control.pauseFactory();
-    await env.repo.git("merge", "--no-ff", "--quiet", "-m", "merge", "kozo/K-1-t1");
+    await env.repo.git(
+      "merge",
+      "--no-ff",
+      "--quiet",
+      "-m",
+      "merge",
+      `kozo/${env.store.factoryId}/K-1-t1`,
+    );
     await env.repo.commit({ "src/debug.ts": "console.log('left over');\n" }, "debug");
     await env.reconciler.reconcile();
     await env.scheduler.idle();
@@ -587,12 +599,12 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[task]?.stage).toBe("handoff");
 
     await env.repo.git("worktree", "remove", "--force", worktree);
-    await env.repo.git("branch", "-D", "kozo/K-1-t1");
+    await env.repo.git("branch", "-D", `kozo/${env.store.factoryId}/K-1-t1`);
     await env.reconciler.reconcile();
     await env.scheduler.idle();
     expect(env.store.state.tasks[task]?.hold).toMatchObject({
       kind: "attention",
-      reason: "kozo/K-1-t1 was deleted without a merge",
+      reason: `kozo/${env.store.factoryId}/K-1-t1 was deleted without a merge`,
     });
   }, 240_000);
 

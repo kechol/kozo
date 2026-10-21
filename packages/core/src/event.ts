@@ -20,6 +20,7 @@ const costSchema = z.strictObject({ usd: amount, in: tokens, out: tokens, cache_
 const target = z.enum(["item", "task"]);
 const actor = z.enum(["human", "kozod"]);
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/);
+export const factoryIdSchema = z.string().regex(/^[a-z0-9]{6}$/);
 
 /**
  * What a note is: a human's answer, instruction, approval text or rejection, or the output of
@@ -100,6 +101,8 @@ export const eventSchema = z
         source: z.enum(["local", "github", "automation"]),
       }),
     ),
+    /** The factory's ID, drawn once at its first start and written into branch names. */
+    event("factory.created", z.strictObject({ factory_id: factoryIdSchema })),
     event("factory.changed", z.strictObject({ paused: z.boolean(), reason: text })),
     /** The run's log as it ended; nothing is appended to it afterwards. */
     event(
@@ -199,7 +202,7 @@ export const eventSchema = z
         message: "A seal goes to kozod's own log",
       });
     }
-    const factoryWide = line.type === "factory.changed";
+    const factoryWide = line.type === "factory.changed" || line.type === "factory.created";
     if (factoryWide !== (line.item === null)) {
       context.addIssue({
         code: "custom",

@@ -5,9 +5,12 @@ import type { Event } from "./event.ts";
 import type { Plan } from "./plan.ts";
 import {
   afterReview,
+  applyEvent,
   autonomyLevel,
   expiredApprovals,
+  highestTask,
   itemStage,
+  numberAfter,
   planNeeded,
   replay,
   StateError,
@@ -154,6 +157,22 @@ describe("replay", () => {
         ),
       ]),
     ).toThrow("task K-1/t9 does not exist");
+  });
+
+  test("a factory is created once, and new tasks are numbered after the highest", () => {
+    const write = eventWriter();
+    const state = replay([write("factory.created", { factory_id: "k3x9q2" }), ...planned(write)]);
+    expect(state.factoryId).toBe("k3x9q2");
+    expect(() => applyEvent(state, write("factory.created", { factory_id: "a1b2c3" }))).toThrow(
+      "the factory is k3x9q2 already",
+    );
+    const item = state.items["K-1"];
+    if (!item) throw new Error("expected the item");
+    expect(highestTask({ ...item, tasks: ["K-1/t1", "K-1/t3"] })).toBe(3);
+    expect(numberAfter(plan(2), 3).tasks.map((task) => [task.id, task.depends_on])).toEqual([
+      ["t4", []],
+      ["t5", ["t4"]],
+    ]);
   });
 
   test("a sealed run takes no more events", () => {

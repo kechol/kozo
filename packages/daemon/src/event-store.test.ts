@@ -46,11 +46,14 @@ describe("EventStore", () => {
     });
     const kozod = await lines(home.eventsLog);
     const run = await lines(join(home.runs, "r-0001", "events.jsonl"));
-    expect(kozod.map((event) => event.seq)).toEqual([0, 1]);
+    expect(kozod.map((event) => event.seq)).toEqual([0, 1, 2]);
+    expect(kozod[0]).toMatchObject({ type: "factory.created", item: null });
+    expect(kozod[0].data.factory_id).toMatch(/^[a-z0-9]{6}$/);
+    expect(store.factoryId).toBe(kozod[0].data.factory_id);
     expect(run.map((event) => [event.seq, event.type])).toEqual([[0, "run.started"]]);
     const stamps = [...kozod, ...run].map((event) => event.ts);
     expect([...stamps].sort()).toEqual(stamps);
-    expect(new Set(stamps).size).toBe(3);
+    expect(new Set(stamps).size).toBe(4);
     expect(store.state.items["K-1"]?.stage).toBe("triage");
     store.close();
   });
@@ -68,14 +71,14 @@ describe("EventStore", () => {
       }),
     ).rejects.toThrow(StateError);
     await expect(store.append({ ...created, item: "nope" } as never)).rejects.toThrow();
-    expect(await lines(home.eventsLog)).toHaveLength(1);
+    expect(await lines(home.eventsLog)).toHaveLength(2);
     expect(store.state.items["K-1"]?.stage).toBe("intake");
     await store.append({
       type: "stage.changed",
       item: "K-1",
       data: { target: "item", from: "intake", to: "triage", by: "kozod", reason: "test" },
     });
-    expect((await lines(home.eventsLog)).map((event) => event.seq)).toEqual([0, 1]);
+    expect((await lines(home.eventsLog)).map((event) => event.seq)).toEqual([0, 1, 2]);
     store.close();
   });
 
@@ -101,9 +104,9 @@ describe("EventStore", () => {
       { ref: "r-0003", agent: "review", state: "succeeded" },
     ]);
     const count = db.query<{ n: number }, []>("select count(*) as n from events").get();
-    expect(count?.n).toBe(32);
+    expect(count?.n).toBe(33);
     const types = db.query<{ type: string }, []>("select type from events order by id").all();
-    expect(types[0]?.type).toBe("item.created");
+    expect(types[0]?.type).toBe("factory.created");
     expect(types.at(-1)?.type).toBe("stage.changed");
 
     await store.append({
@@ -119,7 +122,7 @@ describe("EventStore", () => {
     });
     await reopened.rebuildIndex();
     expect(reopened.db.query<{ n: number }, []>("select count(*) as n from events").get()?.n).toBe(
-      33,
+      34,
     );
     reopened.close();
   });
