@@ -1,14 +1,39 @@
 import { mkdir, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { apiPort, type KozoHome, kozoHome } from "@kozo/core";
-import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
+import { claudeJudge, claudeVerifier } from "@kozo/verify";
+import { type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
 import { ControlPlane } from "./control-plane.ts";
 import { EventStore } from "./event-store.ts";
 import { loadFactory } from "./factory-config.ts";
+import { type Launcher, processLauncher } from "./launcher.ts";
+import { Runner } from "./runner.ts";
+import { Scheduler } from "./scheduler.ts";
 
 export interface DaemonOptions {
   home?: KozoHome;
   port?: number;
+  /** How agent sessions start; tests pass the fake agent in process. */
+  launcher?: Launcher;
+  /** How often the scheduler looks for work to start, in milliseconds. */
+  tickMs?: number;
+}
+
+// A compiled kozod runs alone; under bun the entry points are files beside this one.
+const compiled = !process.execPath.endsWith("/bun");
+
+/** The worker command: kozod's own executable in worker mode. */
+function kozodCommand(): string[] {
+  return compiled ? [process.execPath] : [process.execPath, join(import.meta.dir, "main.ts")];
+}
+
+/** The kozo CLI as the agent runs it in its sandbox, for `kozo gates`. */
+function kozoCommand(): string {
+  if (!compiled)
+    return `${process.execPath} ${join(import.meta.dir, "..", "..", "cli", "src", "main.ts")}`;
+  const sibling = join(dirname(process.execPath), "kozo");
+  return Bun.file(sibling).size > 0 ? sibling : (Bun.which("kozo") ?? "kozo");
 }
 
 function alive(pid: number): boolean {
@@ -32,10 +57,6 @@ async function claimHome(home: KozoHome) {
   await Bun.write(home.pidFile, `${process.pid}\n`);
 }
 
-const notYet = (what: string) => async (): Promise<never> => {
-  throw new CommandError(501, `${what} is not available yet`);
-};
-
 /** A running kozod: the record plane, the commands and the local API around them. */
 export class Daemon {
   private constructor(
@@ -43,22 +64,42 @@ export class Daemon {
     readonly store: EventStore,
     readonly port: number,
     private readonly server: ReturnType<typeof serveApi>,
+    readonly scheduler: Scheduler,
+    private readonly timer: ReturnType<typeof setInterval>,
   ) {}
 
   static async start({
     home = kozoHome(),
     port = Number(process.env.KOZO_PORT ?? apiPort),
+    launcher = processLauncher(kozodCommand()),
+    tickMs = 2000,
   }: DaemonOptions = {}): Promise<Daemon> {
     await mkdir(home.root, { recursive: true, mode: 0o700 });
     const factory = await loadFactory(home);
     await claimHome(home);
     const store = await EventStore.open(home);
-    const control = new ControlPlane(home, store, factory);
+    const claude = process.env.KOZO_CLAUDE ?? Bun.which("claude") ?? "claude";
+    const runner = new Runner(home, store, {
+      launcher,
+      judge: claudeJudge(claude),
+      verifier: claudeVerifier(claude),
+      kozoCommand: kozoCommand(),
+      model: factory.agent_defaults.model,
+    });
+    const control = new ControlPlane(home, store, factory, runner);
+    const scheduler = new Scheduler(store, runner, factory, (line) => console.error(line));
+    const ticking =
+      <A extends unknown[], R>(command: (...args: A) => Promise<R>) =>
+      async (...args: A) => {
+        const result = await command(...args);
+        scheduler.tick();
+        return result;
+      };
     const commands: Commands = {
-      addItem: (body) => control.addItem(body),
-      act: notYet("this verb"),
-      pauseFactory: notYet("pausing the factory"),
-      resumeFactory: notYet("resuming the factory"),
+      addItem: ticking((body) => control.addItem(body)),
+      act: ticking((ref, reference, verb, body) => control.act(ref, reference, verb, body)),
+      pauseFactory: () => control.pauseFactory(),
+      resumeFactory: ticking(() => control.resumeFactory()),
       rebuildIndex: async () => {
         await store.rebuildIndex();
         return { message: "rebuilt kozo.db from the event logs" };
@@ -71,10 +112,14 @@ export class Daemon {
       mode: factory.mode,
       commands,
     });
-    return new Daemon(home, store, port, serveApi(app, port));
+    const server = serveApi(app, port);
+    const timer = setInterval(() => scheduler.tick(), tickMs);
+    scheduler.tick();
+    return new Daemon(home, store, port, server, scheduler, timer);
   }
 
   async stop() {
+    clearInterval(this.timer);
     await this.server.stop(true);
     this.store.close();
     await rm(this.home.pidFile, { force: true });

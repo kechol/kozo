@@ -18,49 +18,68 @@ export const planTaskSchema = z.strictObject({
 });
 export type PlanTask = z.infer<typeof planTaskSchema>;
 
-// Only the plan's own shape is checked here; the split rules against the Charter belong to kozod.
-export const planSchema = z
-  .strictObject({
-    version: z.literal(1),
-    item: itemReferenceSchema,
-    class: workClassSchema,
-    risk: riskTierSchema,
-    approach: text,
-    done_when: conditions,
-    tasks: z.array(planTaskSchema).nonempty(),
-  })
-  .superRefine((plan, context) => {
-    const ids = new Set<string>();
-    plan.tasks.forEach((task, index) => {
-      if (ids.has(task.id)) {
+const draftFields = {
+  class: workClassSchema,
+  risk: riskTierSchema,
+  approach: text,
+  done_when: conditions,
+  tasks: z.array(planTaskSchema).nonempty(),
+};
+
+/** Task IDs are unique, and a task depends only on other tasks of the same plan. */
+function checkTasks(plan: { tasks: PlanTask[] }, context: z.RefinementCtx) {
+  const ids = new Set<string>();
+  plan.tasks.forEach((task, index) => {
+    if (ids.has(task.id)) {
+      context.addIssue({
+        code: "custom",
+        path: ["tasks", index, "id"],
+        message: `Task ${task.id} is listed twice`,
+      });
+    }
+    ids.add(task.id);
+  });
+  plan.tasks.forEach((task, index) => {
+    task.depends_on.forEach((dependency, position) => {
+      const message =
+        dependency === task.id
+          ? "A task cannot depend on itself"
+          : ids.has(dependency)
+            ? null
+            : `Task ${dependency} is not in the plan`;
+      if (message) {
         context.addIssue({
           code: "custom",
-          path: ["tasks", index, "id"],
-          message: `Task ${task.id} is listed twice`,
+          path: ["tasks", index, "depends_on", position],
+          message,
         });
       }
-      ids.add(task.id);
-    });
-    plan.tasks.forEach((task, index) => {
-      task.depends_on.forEach((dependency, position) => {
-        const message =
-          dependency === task.id
-            ? "A task cannot depend on itself"
-            : ids.has(dependency)
-              ? null
-              : `Task ${dependency} is not in the plan`;
-        if (message) {
-          context.addIssue({
-            code: "custom",
-            path: ["tasks", index, "depends_on", position],
-            message,
-          });
-        }
-      });
     });
   });
+}
+
+// Only the plan's own shape is checked here; the split rules against the Charter belong to kozod.
+export const planSchema = z
+  .strictObject({ version: z.literal(1), item: itemReferenceSchema, ...draftFields })
+  .superRefine(checkTasks);
 export type Plan = z.infer<typeof planSchema>;
 
 export function parsePlan(text: string): ParseResult<Plan> {
   return parseYamlDocument(planSchema, text);
 }
+
+/** The plan a triage agent drafts; kozod adds the version and the item. */
+export const planDraftSchema = z.strictObject(draftFields).superRefine(checkTasks);
+export type PlanDraft = z.infer<typeof planDraftSchema>;
+
+/** What a triage session answers: a plan draft, or the question that blocks one. */
+export const triageAnswerSchema = z.discriminatedUnion("outcome", [
+  z.strictObject({ outcome: z.literal("plan"), plan: planDraftSchema }),
+  z.strictObject({ outcome: z.literal("question"), question: z.string().min(1) }),
+]);
+export type TriageAnswer = z.infer<typeof triageAnswerSchema>;
+
+// Draft-07 is the JSON Schema draft that Claude Code's structured output reads.
+export const triageAnswerJsonSchema = z.toJSONSchema(triageAnswerSchema, {
+  target: "draft-7",
+}) as Record<string, unknown>;

@@ -46,3 +46,44 @@ export const briefSchema = z.strictObject({
   forbidden: list,
 });
 export type Brief = z.infer<typeof briefSchema>;
+
+/** Keeps request text from closing the tag it is wrapped in and posing as the brief. */
+export function wrapRequest(body: string): string {
+  return `<request trust="untrusted">\n${body.replace(/<\/(request)/gi, "<\\/$1")}\n</request>`;
+}
+
+const bullets = (items: readonly string[], indent = "            ") =>
+  items.map((item, index) => `${index === 0 ? "" : indent}- ${item}`).join("\n");
+
+/**
+ * The brief as the agent reads it: every field under its fixed label, the request wrapped as
+ * untrusted data, the exact gates command and the run report's schema.
+ */
+export function renderBrief(
+  brief: Brief,
+  { gatesCommand, reportSchema }: { gatesCommand: string; reportSchema: unknown },
+): string {
+  const { item, limits, context } = brief;
+  const contextLines = [
+    ...context.files.map((file) => `file: ${file}`),
+    ...context.decisions.map((decision) => `earlier decision: ${decision}`),
+    ...context.rules.map((rule) => `rule: ${rule}`),
+  ];
+  return [
+    `GOAL        ${brief.goal}`,
+    `DONE_WHEN   ${bullets(brief.done_when)}`,
+    `ITEM        ${item.goal}`,
+    `            This is ${item.task}, task ${item.position} of ${item.of}.`,
+    ...item.prior_diffs.map((diff) => `            Earlier task: ${diff}`),
+    `BLUEPRINT   ${brief.blueprint.class}: ${brief.blueprint.nodes.join(" → ")}`,
+    `SCOPE       ${bullets(brief.scope)}`,
+    `DO_NOT_ACT  ${bullets(brief.do_not_act)}`,
+    `CONTEXT     ${contextLines.length > 0 ? bullets(contextLines) : "- Read AGENTS.md first."}`,
+    `REQUEST     ${wrapRequest(brief.request)}`,
+    `GATES       Run \`${gatesCommand}\` with Bash; the ${brief.gates} gates must pass.`,
+    `LIMITS      ${limits.max_changed_lines} changed lines, ${limits.max_files} files, ${limits.max_turns} turns, ${limits.max_minutes} minutes, ${limits.max_cost_usd} USD`,
+    `FORBIDDEN   ${bullets(brief.forbidden)}`,
+    `REPORT      Finish by answering with the run report, which must match this JSON Schema:`,
+    JSON.stringify(reportSchema),
+  ].join("\n");
+}

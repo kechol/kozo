@@ -88,19 +88,21 @@ export function isClosed(stage: Stage): boolean {
   return closed.includes(stage);
 }
 
+// Complete is reachable from every open stage because a human may close work that needed no
+// change; kozod itself completes a task only from Handoff.
 const itemEdges: Partial<Record<Stage, readonly Stage[]>> = {
-  intake: ["triage"],
-  triage: ["planning"],
+  intake: ["triage", "complete"],
+  triage: ["planning", "complete"],
   // A rejected plan is drafted again in Triage.
-  planning: ["triage"],
+  planning: ["triage", "complete"],
   building: ["complete"],
   // An item whose DONE_WHEN fails after the merge goes back to Triage.
   complete: ["triage"],
 };
 
 const taskEdges: Partial<Record<Stage, readonly Stage[]>> = {
-  building: ["reviewing"],
-  reviewing: ["building", "handoff"],
+  building: ["reviewing", "complete"],
+  reviewing: ["building", "handoff", "complete"],
   handoff: ["building", "complete"],
 };
 
