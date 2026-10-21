@@ -33,6 +33,7 @@ Answer with the structured output only:
 - `result`: `pass` when every condition was observed to hold, `fail` when at least one was
   observed not to hold, and `blocked` when you could not get far enough to observe them.
 - `summary`: one to three sentences naming the deciding observations.
-- `conditions`: one entry per DONE_WHEN condition, in order, with the condition's text, whether
-  it was met, what you observed, and the evidence files as paths relative to the repository root.
-- `cleanedUp`: whether the clean-up steps ran.
+- `conditions`: one entry per DONE_WHEN condition, in order, with the condition's text copied
+  exactly, whether it was met, what you observed, and the evidence files as paths relative to
+  the repository root. A condition you mark as met needs at least one evidence file.
+- `cleanedUp`: whether the clean-up steps ran. A `pass` needs them to have run.

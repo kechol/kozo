@@ -81,8 +81,25 @@ async function verify(options: VerifyOptions): Promise<VerifyResult> {
       `the verify answer covers ${conditions.length} conditions, not the ${options.doneWhen.length} given`,
     );
   }
+  const reordered = conditions.findIndex(
+    (condition, index) => condition.condition.trim() !== options.doneWhen[index]?.trim(),
+  );
+  if (reordered !== -1) {
+    throw new SessionError(
+      `the verify answer's condition ${reordered + 1} is not DONE_WHEN condition ${reordered + 1}`,
+    );
+  }
   if (result === "pass" && conditions.some((condition) => !condition.met)) {
     throw new SessionError("the verify answer passed with a condition that was not met");
+  }
+  const unproven = conditions.findIndex(
+    (condition) => condition.met && condition.evidence.length === 0,
+  );
+  if (unproven !== -1) {
+    throw new SessionError(`the verify answer met condition ${unproven + 1} without evidence`);
+  }
+  if (result === "pass" && !judgment.cleanedUp) {
+    throw new SessionError("the verify answer passed without cleaning up after the app");
   }
   for (const path of conditions.flatMap((condition) => condition.evidence)) {
     await resolveEvidence(cwd, path);

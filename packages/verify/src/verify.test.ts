@@ -106,6 +106,32 @@ describe("runVerify", () => {
     }
   });
 
+  test("an answer that strays from DONE_WHEN, lacks evidence or leaves the app running is refused", async () => {
+    const evidence = { ".output/verify/01-notice.png": "png" };
+    const condition = pass.conditions[0];
+    for (const [output, message] of [
+      [
+        { ...pass, conditions: [{ ...condition, condition: "shows a notice" }] },
+        "is not DONE_WHEN condition 1",
+      ],
+      [
+        { ...pass, conditions: [{ ...condition, evidence: [] }] },
+        "met condition 1 without evidence",
+      ],
+      [{ ...pass, cleanedUp: false }, "without cleaning up"],
+    ] as const) {
+      const { repo, base } = await repository();
+      await using _ = repo;
+      const { result, log } = await verify(
+        repo.path,
+        base,
+        fakeVerifier(output, evidence).verifier,
+      );
+      expect(result.status).toBe("error");
+      expect(log).toContain(message);
+    }
+  });
+
   test("evidence that leads outside the worktree is refused", async () => {
     const { repo, base } = await repository();
     await using _ = repo;
