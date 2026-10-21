@@ -38,8 +38,10 @@ const examples: Record<EventType, unknown> = {
     model: "claude-sonnet-5-5",
     mode: "local",
     charter_commit: "4f2a9c1",
-    factory_commit: "b81e0d3",
+    factory_commit: null,
   },
+  "item.created": { repository: "~/src/app", title: "Low stock notice", source: "local" },
+  "factory.changed": { paused: true, reason: "kozo pause" },
   "run.changed": { from: "running", to: "failed", reason: "max_turns" },
   "stage.changed": { target: "task", from: "building", to: "reviewing" },
   "hold.set": { target: "item", hold: "approval", reason: "plan approval" },
@@ -71,7 +73,8 @@ function issuesOf(text: string) {
 describe("parseEvent", () => {
   test("parses an example of every event type", () => {
     for (const [type, data] of Object.entries(examples)) {
-      const result = parseEvent(line(type, data));
+      const overrides = type === "factory.changed" ? { item: null, task: null } : {};
+      const result = parseEvent(line(type, data, overrides));
       expect({ type, ok: result.ok }).toEqual({ type, ok: true });
     }
   });
@@ -98,6 +101,22 @@ describe("parseEvent", () => {
       "task: The task is not of this item",
     ]);
     expect(parseEvent(line("checkpoint", { head: null }, { task: null })).ok).toBe(true);
+  });
+
+  test("events outside a run and factory-wide events", () => {
+    expect(parseEvent(line("hold.set", examples["hold.set"], { run_id: null })).ok).toBe(true);
+    expect(issuesOf(line("run.changed", examples["run.changed"], { run_id: null }))).toEqual([
+      "run_id: run.changed needs a run",
+    ]);
+    expect(
+      issuesOf(line("hold.set", examples["hold.set"], { run_id: null, parent_run: "r-0001" })),
+    ).toEqual(["parent_run: Only a run has a parent"]);
+    expect(issuesOf(line("factory.changed", examples["factory.changed"]))).toEqual([
+      "item: A factory event has no item",
+    ]);
+    expect(issuesOf(line("hold.set", examples["hold.set"], { item: null, task: null }))).toEqual([
+      "item: hold.set needs an item",
+    ]);
   });
 
   test("a tool result keeps either its output or a path to it", () => {

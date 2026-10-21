@@ -23,11 +23,13 @@ const actor = z.enum(["human", "kozod"]);
 const envelope = {
   v: z.literal(1),
   ts: z.iso.datetime(),
-  run_id: runReferenceSchema,
+  /** Null for events outside any run, which kozod keeps in its own log. */
+  run_id: runReferenceSchema.nullable(),
   parent_run: runReferenceSchema.nullable(),
-  item: itemReferenceSchema,
+  /** Null for factory-wide events. */
+  item: itemReferenceSchema.nullable(),
   task: taskReferenceSchema.nullable(),
-  /** The line's position in its run's log, counted from 0 without gaps. */
+  /** The line's position in its log, counted from 0 without gaps. */
   seq: z.int().nonnegative(),
   node: text.nullable(),
   /** What this event added to the run's cost; `cost.tick` carries the running total. */
@@ -47,13 +49,24 @@ export const eventSchema = z
         mode: z.enum(["local", "github"]),
         /** The default-branch commit whose Charter the run follows. */
         charter_commit: text,
-        factory_commit: text,
+        /** Null while kozod runs on its built-in factory defaults. */
+        factory_commit: text.nullable(),
       }),
     ),
     event(
       "run.changed",
       z.strictObject({ from: runStateSchema, to: runStateSchema, reason: text.optional() }),
     ),
+    event(
+      "item.created",
+      z.strictObject({
+        /** The registered repository the item is for, by its path in `factory.yml`. */
+        repository: text,
+        title: text,
+        source: z.enum(["local", "github", "automation"]),
+      }),
+    ),
+    event("factory.changed", z.strictObject({ paused: z.boolean(), reason: text })),
     event(
       "stage.changed",
       z.strictObject({ target, from: stageSchema.nullable(), to: stageSchema }),
@@ -110,6 +123,24 @@ export const eventSchema = z
     const task = line.task === null ? null : parseReference(line.task);
     if (task?.kind === "task" && formatItemReference(task.item) !== line.item) {
       context.addIssue({ code: "custom", path: ["task"], message: "The task is not of this item" });
+    }
+    if (line.parent_run !== null && line.run_id === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["parent_run"],
+        message: "Only a run has a parent",
+      });
+    }
+    if (line.type.startsWith("run.") && line.run_id === null) {
+      context.addIssue({ code: "custom", path: ["run_id"], message: `${line.type} needs a run` });
+    }
+    const factoryWide = line.type === "factory.changed";
+    if (factoryWide !== (line.item === null)) {
+      context.addIssue({
+        code: "custom",
+        path: ["item"],
+        message: factoryWide ? "A factory event has no item" : `${line.type} needs an item`,
+      });
     }
   });
 export type Event = z.infer<typeof eventSchema>;
