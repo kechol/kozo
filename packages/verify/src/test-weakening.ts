@@ -19,12 +19,43 @@ const markers: [string, RegExp][] = [
   ["rust ignore", /#\[ignore\b/],
 ];
 
-const assertion = /\bexpect(?:\.soft)?\s*\(|\bassert(?:\.\w+)?\s*\(|\bexpectTypeOf\s*\(/g;
-const hasAssertion = new RegExp(assertion.source);
-const strictMatcher =
-  /\.(?:toBe|toEqual|toStrictEqual|toMatchObject|toHaveLength|toHaveProperty|toContain|toContainEqual|toThrow|toMatch|toHaveBeenCalledWith|toHaveBeenCalledTimes|toHaveText|toHaveURL|toHaveCount|toHaveValue)\s*\(|\bassert\.(?:equal|strictEqual|deepEqual|deepStrictEqual|throws|rejects|match)\s*\(/g;
-const weakMatcher =
-  /\.(?:toBeTruthy|toBeFalsy|toBeDefined)\s*\(|\.not\.toThrow\s*\(|\bexpect\.(?:anything|any)\s*\(|\bassert(?:\.ok)?\s*\(/g;
+const pattern = (...parts: RegExp[]) => new RegExp(parts.map((part) => part.source).join("|"), "g");
+
+// Lines are matched one at a time, so ^ is the start of a line.
+const assertion = pattern(
+  /\bexpect(?:\.soft)?\s*\(/,
+  /\bexpectTypeOf\s*\(/,
+  /\bassert(?:\.\w+)?\s*\(/,
+  // pytest and unittest
+  /^\s*assert\s+[^(\s]/,
+  /\bself\.assert\w+\s*\(/,
+  /\bpytest\.raises\s*\(/,
+  // Go's testing package and testify
+  /\bt\.(?:Error|Errorf|Fatal|Fatalf)\s*\(/,
+  /\brequire\.\w+\s*\(/,
+  // Rust
+  /\b(?:debug_)?assert(?:_eq|_ne)?!\s*\(/,
+);
+const hasAssertion = new RegExp(assertion.source, "m");
+const strictMatcher = pattern(
+  /\.(?:toBe|toEqual|toStrictEqual|toMatchObject|toHaveLength|toHaveProperty|toContain|toContainEqual|toThrow|toMatch|toHaveBeenCalledWith|toHaveBeenCalledTimes|toHaveText|toHaveURL|toHaveCount|toHaveValue)\s*\(/,
+  /\bassert\.(?:equal|strictEqual|deepEqual|deepStrictEqual|throws|rejects|match)\s*\(/,
+  /^\s*assert\s+.*(?:==|!=|<=|>=|<|>|\bnot in\b|\bin\b|\bis\b)/,
+  /\bself\.assert(?:Equal|NotEqual|In|NotIn|Is|IsNot|Raises|Regex|CountEqual|DictEqual|ListEqual|AlmostEqual|Greater|Less)\w*\s*\(/,
+  /\bpytest\.raises\s*\(/,
+  /\b(?:assert|require)\.(?:Equal|EqualValues|Exactly|Contains|Len|ErrorIs|ErrorContains|Panics|Regexp)\w*\s*\(/,
+  /\bassert_(?:eq|ne)!\s*\(/,
+);
+const weakMatcher = pattern(
+  /\.(?:toBeTruthy|toBeFalsy|toBeDefined)\s*\(/,
+  /\.not\.(?:toThrow|toBeNull|toBeUndefined|toBeNaN)\s*\(/,
+  /\bexpect\.(?:anything|any)\s*\(/,
+  /\bassert(?:\.ok)?\s*\(/,
+  /^\s*assert\s+(?!.*(?:==|!=|<=|>=|<|>|\bin\b|\bis\b))\S/,
+  /\bself\.assert(?:True|False|IsNotNone|IsNone)\s*\(/,
+  /\b(?:assert|require)\.(?:True|False|NotNil|Nil|NotEmpty|NoError)\s*\(/,
+  /\bassert!\s*\(/,
+);
 const control = /^\s*(?:if\s*\(|try\s*\{|\}?\s*catch\b|\}?\s*else\b)/;
 // Returning nothing, or a constant, ends a test before the assertions after it; returning a
 // computed value is ordinary helper code and is left to review.

@@ -296,3 +296,76 @@ describe("changedGateScripts", () => {
     );
   });
 });
+
+describe("findTestWeakening in other languages", () => {
+  const modified = (path: string, removed: string[], addedTexts: string[]) =>
+    findTestWeakening([
+      { path, change: "modified", lines: { removed, added: added(...addedTexts) } },
+    ]).map((found) => (found.kind === "weakened-test" ? found.reason : found.marker));
+
+  test("removing an assertion counts in pytest, unittest, Go and Rust", () => {
+    expect(modified("test_cart.py", ["    assert total(cart) == 600"], [])).toEqual([
+      "1 assertions removed, 0 added",
+    ]);
+    expect(modified("test_cart.py", ["        self.assertEqual(total(cart), 600)"], [])).toEqual([
+      "1 assertions removed, 0 added",
+    ]);
+    expect(modified("cart_test.go", ['		t.Errorf("total = %d", got)'], [])).toEqual([
+      "1 assertions removed, 0 added",
+    ]);
+    expect(modified("cart_test.go", ["	require.Equal(t, 600, got)"], [])).toEqual([
+      "1 assertions removed, 0 added",
+    ]);
+    expect(modified("cart.rs", ["    assert_eq!(total(&cart), 600);"], [])).toEqual([
+      "1 assertions removed, 0 added",
+    ]);
+  });
+
+  test("an equality replaced by a truthiness or not-null check is a weakened test", () => {
+    const weakened = "strict matchers replaced by weak ones";
+    expect(
+      modified(
+        "cart.test.ts",
+        ["  expect(label).toBe('Sold out');"],
+        ["  expect(label).not.toBeNull();"],
+      ),
+    ).toEqual([weakened]);
+    expect(
+      modified("test_cart.py", ["    assert total(cart) == 600"], ["    assert total(cart)"]),
+    ).toEqual([weakened]);
+    expect(
+      modified(
+        "test_cart.py",
+        ["        self.assertEqual(total(cart), 600)"],
+        ["        self.assertTrue(total(cart))"],
+      ),
+    ).toEqual([weakened]);
+    expect(
+      modified("cart_test.go", ["	assert.Equal(t, 600, got)"], ["	assert.NotNil(t, got)"]),
+    ).toEqual([weakened]);
+    expect(
+      modified(
+        "cart.rs",
+        ["    assert_eq!(total(&cart), 600);"],
+        ["    assert!(total(&cart) > 0);"],
+      ),
+    ).toEqual([weakened]);
+  });
+
+  test("an equality kept as an equality is not a weakened test", () => {
+    expect(
+      modified(
+        "test_cart.py",
+        ["    assert total(cart) == 600"],
+        ["    assert total(cart) == 650"],
+      ),
+    ).toEqual([]);
+    expect(
+      modified(
+        "cart.rs",
+        ["    assert_eq!(total(&cart), 600);"],
+        ["    assert_eq!(total(&cart), 650);"],
+      ),
+    ).toEqual([]);
+  });
+});
