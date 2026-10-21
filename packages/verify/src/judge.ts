@@ -51,7 +51,7 @@ export function parseAnswer<T>(schema: z.ZodType<T>, name: string, output: unkno
 }
 
 // What claude needs to run and to sign in. Everything else, GitHub tokens and cloud credentials
-// included, stays out of the session and of the shell it starts.
+// included, stays out of the session; a verify session's shell loses the sign-in variables too.
 const sessionEnvironment = [
   "PATH",
   "HOME",
@@ -94,16 +94,22 @@ const credentialPaths = [
   ".aws",
   ".gnupg",
   ".config/gh",
+  ".config/gcloud",
+  ".kube",
+  ".docker",
+  ".npmrc",
+  ".pypirc",
   ".git-credentials",
   ".netrc",
   ".claude",
+  "Library/Keychains",
 ];
 
 /**
  * A verifier that runs the user's own `claude` in the worktree with the shell as its only tool.
  * Shell commands run in Claude Code's sandbox: writes stay inside the worktree, the network
- * reaches only this machine, and the credential files above cannot be read. A sandbox that
- * cannot start fails the session.
+ * reaches only this machine, and neither the credential files above nor the sign-in variables
+ * can be read. A sandbox that cannot start fails the session.
  */
 export function claudeVerifier(executable: string): Verifier {
   return {
@@ -113,6 +119,9 @@ export function claudeVerifier(executable: string): Verifier {
         tools: verifyTools,
         maxTurns: 80,
         permissionMode: "dontAsk",
+        // Claude Code removes its own sign-in variables from the environment of the shell, where
+        // the app under test, built from the diff, could otherwise read them.
+        env: { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1" },
         sandbox: {
           enabled: true,
           failIfUnavailable: true,
@@ -137,13 +146,22 @@ export function claudeVerifier(executable: string): Verifier {
 async function runSession(
   executable: string,
   request: SessionRequest,
-  session: Pick<Options, "cwd" | "maxTurns" | "permissionMode" | "sandbox"> & { tools: string[] },
+  {
+    env: extra,
+    ...session
+  }: Pick<Options, "cwd" | "maxTurns" | "permissionMode" | "sandbox"> & {
+    tools: string[];
+    env?: Record<string, string>;
+  },
 ): Promise<SessionAnswer> {
-  const env = Object.fromEntries(
-    sessionEnvironment
-      .filter((name) => process.env[name] !== undefined)
-      .map((name) => [name, process.env[name]]),
-  );
+  const env = {
+    ...Object.fromEntries(
+      sessionEnvironment
+        .filter((name) => process.env[name] !== undefined)
+        .map((name) => [name, process.env[name]]),
+    ),
+    ...extra,
+  };
   try {
     let answer: SessionAnswer | undefined;
     for await (const message of query({
