@@ -5,7 +5,8 @@
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
-    "@kozo/core": "workspace:*"
+    "@kozo/core": "workspace:*",
+    "hono": "4.13.13"
   },
   "devDependencies": {
     "@kozo/testing": "workspace:*"

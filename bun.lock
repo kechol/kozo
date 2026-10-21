@@ -38,6 +38,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@kozo/core": "workspace:*",
+        "hono": "4.13.13",
       },
       "devDependencies": {
         "@kozo/testing": "workspace:*",

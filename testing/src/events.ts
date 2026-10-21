@@ -1,7 +1,7 @@
 import type { Event, EventType } from "@kozo/core";
 
 type Data<T extends EventType> = Extract<Event, { type: T }>["data"];
-type Envelope = Partial<Pick<Event, "run_id" | "parent_run" | "item" | "task" | "node">>;
+type Envelope = Partial<Pick<Event, "run_id" | "parent_run" | "item" | "task" | "node" | "cost">>;
 
 /**
  * Builds events as kozod would write them: strictly increasing `ts`, one millisecond apart,
@@ -25,7 +25,7 @@ export function eventWriter(start = "2026-10-21T09:00:00.000Z") {
       task: envelope.task ?? null,
       seq,
       node: envelope.node ?? null,
-      cost: { usd: 0, in: 0, out: 0, cache_read: 0 },
+      cost: envelope.cost ?? { usd: 0, in: 0, out: 0, cache_read: 0 },
       type,
       data,
     } as Event;
