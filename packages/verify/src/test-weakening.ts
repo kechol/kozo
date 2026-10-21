@@ -236,3 +236,46 @@ export function changedGateScripts(
   const names = [...reached].flatMap((name) => [name, `pre${name}`, `post${name}`]);
   return [...new Set(names)].filter((name) => baseScripts[name] !== headScripts[name]).sort();
 }
+
+// The files that a task runner reads its tasks from when a gate calls it.
+const runnerFiles: Record<string, readonly string[]> = {
+  make: ["Makefile", "makefile", "GNUmakefile"],
+  just: ["justfile", "Justfile", ".justfile"],
+  task: ["Taskfile.yml", "Taskfile.yaml", "Taskfile.dist.yml", "Taskfile.dist.yaml"],
+  rake: ["Rakefile", "rakefile"],
+  tox: ["tox.ini"],
+  nox: ["noxfile.py"],
+};
+
+const scriptLike = /\.(?:sh|bash|zsh|py|rb|pl|js|mjs|cjs|ts|mts|php|lua)$/;
+
+/**
+ * The files whose content decides what a gate command does, mapped to that command: the files
+ * it names, such as `scripts/lint.sh`, and the task files its runner reads, such as the
+ * Makefile of `make test` or of `make -C sub test`.
+ */
+export function gateFiles(gateCommands: readonly string[]): Map<string, string> {
+  const files = new Map<string, string>();
+  for (const command of gateCommands) {
+    const words = command
+      .split(/[\s;&|()]+/)
+      .map((word) => word.replace(/^['"]|['"]$/g, ""))
+      .filter(Boolean);
+    words.forEach((word, index) => {
+      const path = word.replace(/^\.\//, "");
+      if (
+        !path.startsWith("-") &&
+        !path.includes("=") &&
+        (path.includes("/") || scriptLike.test(path))
+      ) {
+        files.set(path, command);
+      }
+      const names = runnerFiles[word.split("/").at(-1) ?? ""];
+      if (!names) return;
+      const directory =
+        words[index + 1] === "-C" ? `${words[index + 2]?.replace(/\/+$/, "")}/` : "";
+      for (const name of names) files.set(`${directory}${name}`, command);
+    });
+  }
+  return files;
+}

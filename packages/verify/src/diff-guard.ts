@@ -10,7 +10,12 @@ import {
 } from "./changes.ts";
 import { guarded } from "./command.ts";
 import { GitError, git, showFile } from "./git.ts";
-import { changedGateScripts, findTestWeakening, type TestWeakening } from "./test-weakening.ts";
+import {
+  changedGateScripts,
+  findTestWeakening,
+  gateFiles,
+  type TestWeakening,
+} from "./test-weakening.ts";
 import { parseChangedLines } from "./unified-diff.ts";
 
 export type { ChangedFile };
@@ -22,7 +27,8 @@ export type Violation =
   | { kind: "protected-path"; path: string; pattern: string }
   | { kind: "existing-test"; path: string; change: "modified" | "deleted" }
   | TestWeakening
-  | { kind: "gate-script"; path: string; script: string };
+  | { kind: "gate-script"; path: string; script: string }
+  | { kind: "gate-file"; path: string; command: string };
 
 export type DiffGuardResult =
   | {
@@ -114,6 +120,11 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
     }),
   );
   violations.push(...scriptChanges.flat());
+  const runByGates = gateFiles(gateCommands);
+  for (const file of files) {
+    const command = runByGates.get(file.path);
+    if (command) violations.push({ kind: "gate-file", path: file.path, command });
+  }
 
   for (const violation of violations) log(`kozo: ${describe(violation)}\n`);
   const status = violations.length === 0 ? "pass" : "fail";
@@ -154,6 +165,8 @@ function describe(violation: Violation): string {
       return `${violation.path} weakens its tests: ${violation.reason}`;
     case "gate-script":
       return `the script "${violation.script}" in ${violation.path}, which a gate runs, was changed`;
+    case "gate-file":
+      return `${violation.path}, which the gate "${violation.command}" runs, was changed`;
   }
 }
 

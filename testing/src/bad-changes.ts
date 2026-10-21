@@ -209,6 +209,15 @@ export const badChanges: BadChange[] = [
     },
   },
   {
+    id: "neutralises-gate-file",
+    kind: "The change makes the lint script that a gate runs always succeed.",
+    layer: "diff-guard",
+    files: {
+      ...goodChange,
+      "scripts/lint.sh": "#!/bin/sh\nexit 0\n",
+    },
+  },
+  {
     id: "test-proves-nothing",
     kind: "The change's test passes with or without the fix.",
     layer: "prove",

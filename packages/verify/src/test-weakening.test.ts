@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { changedGateScripts, findTestWeakening } from "./test-weakening.ts";
+import { changedGateScripts, findTestWeakening, gateFiles } from "./test-weakening.ts";
 import { parseChangedLines } from "./unified-diff.ts";
 
 const added = (...texts: string[]) => texts.map((text, index) => ({ line: index + 1, text }));
@@ -367,5 +367,29 @@ describe("findTestWeakening in other languages", () => {
         ["    assert_eq!(total(&cart), 650);"],
       ),
     ).toEqual([]);
+  });
+});
+
+describe("gateFiles", () => {
+  test("names the files a gate command runs and the task files its runner reads", () => {
+    const files = gateFiles([
+      "sh scripts/lint.sh",
+      "./check.py --strict",
+      "make -C web test",
+      "just ci",
+      "bun run test",
+      "NODE_ENV=test bunx vitest run",
+    ]);
+    expect([...files.keys()].sort()).toEqual([
+      ".justfile",
+      "Justfile",
+      "check.py",
+      "justfile",
+      "scripts/lint.sh",
+      "web/GNUmakefile",
+      "web/Makefile",
+      "web/makefile",
+    ]);
+    expect(files.get("scripts/lint.sh")).toBe("sh scripts/lint.sh");
   });
 });
