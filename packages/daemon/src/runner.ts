@@ -890,21 +890,37 @@ export class Runner {
             await exit(node, true, "skipped for the low risk tier");
             break;
           }
-          const child = await this.startRun(
-            { item: item.ref, task: taskRef, parent_run: run },
-            "verify",
-            repository.tip,
-          );
-          const verify = await runVerify({
-            cwd: worktree,
-            base: repository.branch,
-            goal: current.goal,
-            doneWhen: current.done_when,
-            verifier: this.deps.verifier,
-            model: this.deps.model,
-            maxCostUsd: charter.limits.max_cost_usd,
-            log: (text) => void log(text),
-          });
+          // A session whose answer kozod refuses, such as one naming evidence it did not keep,
+          // gets one more attempt in a new session before a human has to look.
+          let child = "";
+          let verify: Awaited<ReturnType<typeof runVerify>> = {
+            status: "error",
+            message: "not run",
+          };
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            if (child)
+              await this.endRun(
+                child,
+                "failed",
+                verify.status === "error" ? verify.message : undefined,
+              );
+            child = await this.startRun(
+              { item: item.ref, task: taskRef, parent_run: run },
+              "verify",
+              repository.tip,
+            );
+            verify = await runVerify({
+              cwd: worktree,
+              base: repository.branch,
+              goal: current.goal,
+              doneWhen: current.done_when,
+              verifier: this.deps.verifier,
+              model: this.deps.model,
+              maxCostUsd: charter.limits.max_cost_usd,
+              log: (text) => void log(text),
+            });
+            if (verify.status !== "error") break;
+          }
           if (verify.status === "MISCONFIGURED") {
             await this.endRun(child, "succeeded", "no verify-app.md");
             await exit(node, true, "skipped: the repository has no verify-app.md");
