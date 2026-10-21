@@ -2,5 +2,7 @@ export * from "./claude-agent.ts";
 export * from "./coding-agent.ts";
 export * from "./git-environment.ts";
 export * from "./guard.ts";
+export * from "./session.ts";
 export * from "./shell.ts";
 export * from "./task-sandbox.ts";
+export * from "./worker-main.ts";

@@ -1,3 +1,4 @@
+import { workerMain } from "@kozo/worker";
 import pkg from "../package.json" with { type: "json" };
 import { Daemon } from "./daemon.ts";
 
@@ -13,7 +14,8 @@ const USAGE = `Usage: kozod [options]
 Runs kozod in the foreground until it receives SIGINT or SIGTERM.
 
 Options:
-  --version  Print the version`;
+  --version        Print the version
+  --worker <spec>  Run one agent session for kozod (internal)`;
 
 /** Starts kozod and resolves once it has stopped again. */
 async function serve(out: Output): Promise<number> {
@@ -36,6 +38,7 @@ async function serve(out: Output): Promise<number> {
 export async function run(args: readonly string[], out: Output): Promise<number> {
   const [option] = args;
   if (option === undefined) return await serve(out);
+  if (option === "--worker" && args[1]) return await workerMain(args[1], out.stdout);
   if (option === "--version") {
     out.stdout(`kozod ${pkg.version}`);
     return ExitCode.success;

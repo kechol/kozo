@@ -6,7 +6,10 @@ import { testGitEnvironment } from "./git-repository.ts";
 /** One step of a fake agent's script. */
 export type FakeStep =
   | { say: string }
+  /** A built-in tool call, put to the request's guard first; its output is scripted. */
   | { tool: string; input: unknown; output: unknown; error?: boolean }
+  /** A call of one of the request's in-process tools, which really runs. */
+  | { use: string; input?: Record<string, unknown> }
   /** Writes files in the worktree; null deletes one. */
   | { write: Record<string, string | null> }
   /** Commits everything in the worktree. */
@@ -46,7 +49,9 @@ const stopped = (signal: AbortSignal) =>
 
 /**
  * A CodingAgent that plays a script instead of calling a model. Each step is one turn; the
- * session ends at the first answer or failure, or as stopped once kozod aborts it.
+ * session ends at the first answer or failure, or as stopped once kozod aborts it. Built-in
+ * tool calls go through the request's guard and an answer through its stop-check, as with a
+ * real session, but a script cannot react: a stop-check objection fails the session.
  */
 export function fakeAgent(script: FakeScript): FakeAgent {
   const requests: AgentRequest[] = [];
@@ -66,13 +71,30 @@ export function fakeAgent(script: FakeScript): FakeAgent {
         } else if ("tool" in step) {
           calls += 1;
           const call_id = `fake-${calls}`;
+          const decision = await request.guard(step.tool, step.input);
           request.record({
             type: "tool.call",
             data: { call_id, tool: step.tool, input: step.input },
           });
           request.record({
             type: "tool.result",
-            data: { call_id, is_error: step.error ?? false, output: step.output },
+            data: decision.allow
+              ? { call_id, is_error: step.error ?? false, output: step.output }
+              : { call_id, is_error: true, output: `refused: ${decision.reason}` },
+          });
+        } else if ("use" in step) {
+          calls += 1;
+          const call_id = `fake-${calls}`;
+          const tool = request.tools?.find((candidate) => candidate.name === step.use);
+          const input = step.input ?? {};
+          request.record({
+            type: "tool.call",
+            data: { call_id, tool: `mcp__kozo__${step.use}`, input },
+          });
+          const output = tool ? await tool.run(input) : `no tool ${step.use}`;
+          request.record({
+            type: "tool.result",
+            data: { call_id, is_error: tool === undefined, output },
           });
         } else if ("write" in step) {
           for (const [name, content] of Object.entries(step.write)) {
@@ -110,6 +132,10 @@ export function fakeAgent(script: FakeScript): FakeAgent {
           await stopped(request.signal);
           return { status: "stopped", costUsd, turns };
         } else if ("answer" in step) {
+          const objection = (await request.beforeStop?.()) ?? null;
+          if (objection !== null) {
+            return { status: "failed", reason: `stop-check: ${objection}`, costUsd, turns };
+          }
           return { status: "answered", output: step.answer, costUsd, turns };
         } else {
           return { status: "failed", reason: step.fail, costUsd, turns };
