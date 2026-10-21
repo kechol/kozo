@@ -185,6 +185,9 @@ export function applyEvent(state: FactoryState, event: Event): void {
         throw new StateError(`${subject.ref} is already held by ${subject.hold.kind}`);
       }
       if (isClosed(subject.stage)) throw new StateError(`${subject.ref} is ${subject.stage}`);
+      if (!holdTargets[event.data.hold].includes(event.data.target)) {
+        throw new StateError(`a ${event.data.target} cannot be held by ${event.data.hold}`);
+      }
       subject.hold = { kind: event.data.hold, reason: event.data.reason, since: event.ts };
       subject.updatedAt = event.ts;
       return;
@@ -290,6 +293,16 @@ export function applyEvent(state: FactoryState, event: Event): void {
   }
 }
 
+// Attention is a task's hold, and also what an item's approval turns into once it expires.
+const holdTargets: Record<HoldKind, readonly ("item" | "task")[]> = {
+  approval: ["item"],
+  question: ["item", "task"],
+  attention: ["item", "task"],
+  dependency: ["item", "task"],
+  capacity: ["task"],
+  paused: ["item", "task"],
+};
+
 const runEdges: Partial<Record<RunState, readonly RunState[]>> = {
   running: ["paused", "succeeded", "failed", "stopped", "lost"],
   paused: ["running", "stopped"],
@@ -349,4 +362,26 @@ export function replay(events: Iterable<Event>): FactoryState {
   const state = emptyState();
   for (const event of events) applyEvent(state, event);
   return state;
+}
+
+export const approvalExpiryDays = 7;
+
+/** The items whose approval hold has waited `approvalExpiryDays` or longer at `now`. */
+export function expiredApprovals(state: FactoryState, now: Date): ItemState[] {
+  const limit = now.getTime() - approvalExpiryDays * 24 * 60 * 60 * 1000;
+  return Object.values(state.items).filter(
+    (item) => item.hold?.kind === "approval" && Date.parse(item.hold.since) <= limit,
+  );
+}
+
+/** Why a task may not start a run now, or null when it may. */
+export function startBlocker(state: FactoryState, task: TaskState): string | null {
+  if (state.paused) return `the factory is paused: ${state.pausedReason}`;
+  const item = state.items[task.item];
+  if (item?.hold) return `${item.ref} is held by ${item.hold.kind}`;
+  if (task.hold) return `${task.ref} is held by ${task.hold.kind}`;
+  if (isClosed(task.stage)) return `${task.ref} is ${task.stage}`;
+  const open = task.depends_on.filter((ref) => state.tasks[ref]?.stage !== "complete");
+  if (open.length > 0) return `${task.ref} waits for ${open.join(", ")}`;
+  return null;
 }
