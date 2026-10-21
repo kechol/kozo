@@ -152,7 +152,8 @@ describe("runSession", () => {
   test("queued instructions are delivered once each", async () => {
     const { repo, spec } = await suite();
     await using _ = repo;
-    await Bun.write(spec.queue, `${JSON.stringify({ text: "Keep zero as Sold out." })}\n`);
+    const line = (text: string) => JSON.stringify({ v: 1, ts: new Date().toISOString(), text });
+    await Bun.write(spec.queue, `${line("Keep zero as Sold out.")}\n`);
     const pending = play({ ...spec, gates: null, requireNote: false }, [
       { awaitInstruction: true },
       { awaitInstruction: true },
@@ -161,7 +162,7 @@ describe("runSession", () => {
     await Bun.sleep(100);
     await Bun.write(
       spec.queue,
-      `${JSON.stringify({ text: "Keep zero as Sold out." })}\n${JSON.stringify({ text: "And 1 says Only 1 left." })}\n`,
+      `${line("Keep zero as Sold out.")}\n${line("And 1 says Only 1 left.")}\n`,
     );
     const { messages } = await pending;
     const delivered = messages.flatMap((message) =>

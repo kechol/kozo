@@ -55,7 +55,7 @@ import triageDefinition from "../../../templates/factory/agents/triage/agent.md"
   type: "text",
 };
 import type { EventStore, NewEvent } from "./event-store.ts";
-import { addHumanNote, humanNotes, ownersWords } from "./instructions.ts";
+import { notesAbout, ownersWords } from "./instructions.ts";
 import { itemDirectory, readItemFile } from "./item-file.ts";
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { defaultBranch } from "./repository.ts";
@@ -268,7 +268,7 @@ export class Runner {
     const envelope: Envelope = { run_id: run, item: itemRef, task: null };
     try {
       const { limits } = repository.charter;
-      const notes = await humanNotes(this.home, itemRef, [itemRef]);
+      const notes = notesAbout(this.store.state, itemRef, [itemRef]);
       const prompt = [
         `ITEM        ${itemRef} in ${repository.path}, default branch ${repository.branch}`,
         `LIMITS      a task changes at most ${limits.max_changed_lines} lines in ${limits.max_files} files; an item has at most ${limits.max_tasks_per_item} tasks`,
@@ -628,7 +628,7 @@ export class Runner {
               decisions: earlier.slice(-20),
               rules: [
                 "Read AGENTS.md before you change anything.",
-                ...ownersWords(await humanNotes(this.home, item.ref, [item.ref, taskRef])).map(
+                ...ownersWords(notesAbout(this.store.state, item.ref, [item.ref, taskRef])).map(
                   (note) => `The owner said (${note.kind}): ${note.text}`,
                 ),
                 ...(failure
@@ -833,9 +833,9 @@ export class Runner {
             base: repository.branch,
             goal: current.goal,
             doneWhen: current.done_when,
-            ownerNotes: ownersWords(await humanNotes(this.home, item.ref, [item.ref, taskRef])).map(
-              (note) => note.text,
-            ),
+            ownerNotes: ownersWords(
+              notesAbout(this.store.state, item.ref, [item.ref, taskRef]),
+            ).map((note) => note.text),
             judge: this.deps.judge,
             model: this.deps.model,
             maxCostUsd: charter.limits.max_cost_usd,
@@ -926,7 +926,7 @@ export class Runner {
               goal: current.goal,
               doneWhen: current.done_when,
               ownerNotes: ownersWords(
-                await humanNotes(this.home, item.ref, [item.ref, taskRef]),
+                notesAbout(this.store.state, item.ref, [item.ref, taskRef]),
               ).map((note) => note.text),
               verifier: this.deps.verifier,
               model: this.deps.model,
@@ -1240,10 +1240,13 @@ export class Runner {
       data: { target: "item", from: owner.stage, to: "complete" },
     });
     if (result.status !== "pass") {
-      await addHumanNote(this.home, item.ref, {
-        target: item.ref,
-        kind: "check",
-        text: `After the merge, the ${level} gates on ${repository.branch} failed, so DONE_WHEN is not met:\n${tail(output)}`,
+      await this.store.append({
+        type: "note.added",
+        item: item.ref,
+        data: {
+          kind: "check",
+          text: `After the merge, the ${level} gates on ${repository.branch} failed, so DONE_WHEN is not met:\n${tail(output)}`,
+        },
       });
       await this.store.append({
         type: "stage.changed",

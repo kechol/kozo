@@ -94,6 +94,33 @@ describe("replay", () => {
     expect(state.runs["r-0001"]?.endedAt).not.toBeNull();
   });
 
+  test("notes are kept on their item, about the item or one of its tasks", () => {
+    const write = eventWriter();
+    const state = replay([
+      ...planned(write),
+      write("note.added", { kind: "approval", text: "Go." }, { item: "K-1" }),
+      write(
+        "note.added",
+        { kind: "instruction", text: "Keep 0." },
+        { item: "K-1", task: "K-1/t1" },
+      ),
+    ]);
+    expect(state.items["K-1"]?.notes).toMatchObject([
+      { target: "K-1", kind: "approval", text: "Go." },
+      { target: "K-1/t1", kind: "instruction", text: "Keep 0." },
+    ]);
+    expect(() =>
+      replay([
+        ...planned(eventWriter()),
+        eventWriter("2026-10-22T00:00:00.000Z")(
+          "note.added",
+          { kind: "answer", text: "x" },
+          { item: "K-1", task: "K-1/t9" },
+        ),
+      ]),
+    ).toThrow("task K-1/t9 does not exist");
+  });
+
   test("a sealed run takes no more events", () => {
     const write = eventWriter();
     const run = { item: "K-1", task: "K-1/t1", run_id: "r-0001" };

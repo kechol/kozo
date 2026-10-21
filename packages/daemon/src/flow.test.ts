@@ -486,9 +486,11 @@ describe("the minimal path", () => {
     await env.scheduler.idle();
     expect(env.store.state.tasks[task]?.stage).toBe("complete");
     expect(env.store.state.items[ref]).toMatchObject({ stage: "triage", hold: null });
-    const notes = await Bun.file(join(env.home.items, ref, "notes.jsonl")).text();
-    expect(notes).toContain("DONE_WHEN is not met");
-    expect(JSON.parse(notes.trim().split("\n").at(-1) ?? "{}").kind).toBe("check");
+    expect(env.store.state.items[ref]?.notes.at(-1)).toMatchObject({
+      target: ref,
+      kind: "check",
+      text: expect.stringContaining("DONE_WHEN is not met"),
+    });
   }, 180_000);
 
   test("a branch deleted unmerged needs attention, and a human's commit sends the task back to Reviewing", async () => {
@@ -620,8 +622,9 @@ describe("the minimal path", () => {
       )
       .get();
     expect(delivered?.n).toBe(1);
-    const notes = await Bun.file(join(env.home.items, ref, "notes.jsonl")).text();
-    expect(notes).toContain("Keep 0 as Sold out.");
+    expect(env.store.state.items[ref]?.notes).toMatchObject([
+      { target: task, kind: "instruction", text: "Keep 0 as Sold out." },
+    ]);
     expect(env.store.state.tasks[task]?.stage).toBe("handoff");
   }, 120_000);
 

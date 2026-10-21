@@ -21,6 +21,13 @@ const target = z.enum(["item", "task"]);
 const actor = z.enum(["human", "kozod"]);
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/);
 
+/**
+ * What a note is: a human's answer, instruction, approval text or rejection, or the output of
+ * kozod's failed check at Complete, which the diff's code can shape.
+ */
+export const noteKindSchema = z.enum(["answer", "instruction", "approval", "rejection", "check"]);
+export type NoteKind = z.infer<typeof noteKindSchema>;
+
 const envelope = {
   v: z.literal(1),
   ts: z.iso.datetime(),
@@ -84,6 +91,8 @@ export const eventSchema = z
       "hold.cleared",
       z.strictObject({ target, hold: holdKindSchema, by: actor, reason: text.optional() }),
     ),
+    /** A note about the event's task, or about its item when the task is null. */
+    event("note.added", z.strictObject({ kind: noteKindSchema, text })),
     event("plan.proposed", z.strictObject({ plan: planSchema })),
     event("plan.accepted", z.strictObject({ plan: planSchema, by: actor })),
     event("node.enter", z.strictObject({ kind: z.enum(["D", "A"]) })),

@@ -6,6 +6,7 @@ import {
   type Factory,
   isClosed,
   type KozoHome,
+  type NoteKind,
   type Reference,
   runFiles,
   type Stage,
@@ -15,7 +16,7 @@ import {
 import type { z } from "zod";
 import { CommandError, type VerbResult } from "./api.ts";
 import type { EventStore, NewEvent } from "./event-store.ts";
-import { addHumanNote, enqueue } from "./instructions.ts";
+import { enqueue } from "./instructions.ts";
 import { itemPath, writeItemFile } from "./item-file.ts";
 import { readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
@@ -161,6 +162,16 @@ export class ControlPlane {
     } as NewEvent);
   }
 
+  /** Keeps what a human said about an item or a task for the runs that follow. */
+  private async note(item: string, target: string, kind: NoteKind, text: string) {
+    await this.store.append({
+      type: "note.added",
+      item,
+      task: target === item ? null : target,
+      data: { kind, text },
+    });
+  }
+
   private async move(kind: "item" | "task", ref: string, to: Stage) {
     const { subject, item, task } = this.subject(ref, kind);
     if (subject.stage === to) return;
@@ -179,8 +190,7 @@ export class ControlPlane {
       return { message: `${ref} is not waiting for an approval` };
     const start = subject.hold.reason === "start approval";
     await this.clearHold("item", ref, body.text);
-    if (body.text)
-      await addHumanNote(this.home, ref, { target: ref, kind: "approval", text: body.text });
+    if (body.text) await this.note(ref, ref, "approval", body.text);
     if (start) {
       await this.move("item", ref, "triage");
       return { message: `approved the start of ${ref}; it goes to Triage` };
@@ -202,7 +212,7 @@ export class ControlPlane {
       return { message: `${ref} is not waiting for a plan approval` };
     }
     await this.clearHold("item", ref, body.reason);
-    await addHumanNote(this.home, ref, { target: ref, kind: "rejection", text: body.reason });
+    await this.note(ref, ref, "rejection", body.reason);
     await this.move("item", ref, "triage");
     return { message: `rejected the plan of ${ref}; Triage drafts it again with your reason` };
   }
@@ -210,12 +220,12 @@ export class ControlPlane {
   private async say(ref: string, kind: "item" | "task", body: Body<"say">): Promise<VerbResult> {
     const { subject, item } = this.subject(ref, kind);
     if (subject.hold?.kind === "question") {
-      await addHumanNote(this.home, item, { target: ref, kind: "answer", text: body.text });
+      await this.note(item, ref, "answer", body.text);
       await this.clearHold(kind, ref, body.text);
       return { message: `answered ${ref}; work resumes` };
     }
     // An instruction also belongs to the runs after the current one, should it stop first.
-    await addHumanNote(this.home, item, { target: ref, kind: "instruction", text: body.text });
+    await this.note(item, ref, "instruction", body.text);
     const running = this.runner?.sessionFor(ref) ?? null;
     if (running) {
       await enqueue(runFiles(this.home, running).queue, body.text);
@@ -232,7 +242,7 @@ export class ControlPlane {
     if (verb === "say") {
       if (this.runner?.sessionFor(owner) === ref) {
         const { text } = body as Body<"say">;
-        await addHumanNote(this.home, run.item, { target: owner, kind: "instruction", text });
+        await this.note(run.item, owner, "instruction", text);
         await enqueue(runFiles(this.home, ref).queue, text);
         return { message: `sent to ${ref}, which reads it at its next turn` };
       }
@@ -280,8 +290,7 @@ export class ControlPlane {
   ): Promise<VerbResult> {
     const { subject, item } = this.subject(ref, kind);
     if (isClosed(subject.stage)) throw new CommandError(409, `${ref} is ${subject.stage}`);
-    if (body.text)
-      await addHumanNote(this.home, item, { target: ref, kind: "instruction", text: body.text });
+    if (body.text) await this.note(item, ref, "instruction", body.text);
     if (subject.hold && subject.hold.kind !== "attention" && subject.hold.kind !== "question") {
       throw new CommandError(409, `${ref} is held by ${subject.hold.kind}`);
     }

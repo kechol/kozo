@@ -48,6 +48,7 @@ const examples: Record<EventType, unknown> = {
   "stage.changed": { target: "task", from: "building", to: "reviewing" },
   "hold.set": { target: "item", hold: "approval", reason: "plan approval" },
   "hold.cleared": { target: "item", hold: "approval", by: "human" },
+  "note.added": { kind: "answer", text: "Show Sold out for zero." },
   "plan.proposed": { plan },
   "plan.accepted": { plan, by: "kozod" },
   "node.enter": { kind: "D" },

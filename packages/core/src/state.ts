@@ -1,5 +1,5 @@
 import type { AutonomyLevel, Charter, WorkClass } from "./charter.ts";
-import type { Event } from "./event.ts";
+import type { Event, NoteKind } from "./event.ts";
 import type { Plan } from "./plan.ts";
 import type { ReviewVerdict } from "./verdict.ts";
 import { type HoldKind, type RunState, type Stage, stageSchema } from "./work-model.ts";
@@ -8,6 +8,14 @@ export interface Hold {
   kind: HoldKind;
   reason: string;
   since: string;
+}
+
+export interface Note {
+  ts: string;
+  /** The item or task reference the note is about. */
+  target: string;
+  kind: NoteKind;
+  text: string;
 }
 
 export interface ItemState {
@@ -24,6 +32,8 @@ export interface ItemState {
   draft: Plan | null;
   plan: Plan | null;
   tasks: string[];
+  /** The notes about the item and its tasks, oldest first. */
+  notes: Note[];
   createdAt: string;
   updatedAt: string;
 }
@@ -173,6 +183,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
         draft: null,
         plan: null,
         tasks: [],
+        notes: [],
         createdAt: event.ts,
         updatedAt: event.ts,
       };
@@ -227,6 +238,17 @@ export function applyEvent(state: FactoryState, event: Event): void {
       }
       subject.hold = null;
       subject.updatedAt = event.ts;
+      return;
+    }
+    case "note.added": {
+      const subject = required(item, `item ${event.item}`);
+      if (event.task !== null) required(task, `task ${event.task}`);
+      subject.notes.push({
+        ts: event.ts,
+        target: event.task ?? subject.ref,
+        kind: event.data.kind,
+        text: event.data.text,
+      });
       return;
     }
     case "plan.proposed": {

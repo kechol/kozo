@@ -65,6 +65,13 @@ export type WorkerMessage =
   | { blocked: Blocked }
   | { outcome: AgentOutcome };
 
+/** One line of a run's instruction queue as kozod writes it. */
+export const queueLineSchema = z.strictObject({
+  v: z.literal(1),
+  ts: z.iso.datetime(),
+  text: z.string(),
+});
+
 /** The queue's entries after `delivered`, read again at every turn boundary. */
 async function queued(path: string, delivered: number): Promise<Instruction[]> {
   const file = Bun.file(path);
@@ -72,10 +79,7 @@ async function queued(path: string, delivered: number): Promise<Instruction[]> {
   return (await file.text())
     .split("\n")
     .filter((line) => line.trim() !== "")
-    .map((line, seq) => ({
-      seq,
-      text: String((JSON.parse(line) as { text?: unknown }).text ?? ""),
-    }))
+    .map((line, seq) => ({ seq, text: queueLineSchema.parse(JSON.parse(line)).text }))
     .filter((instruction) => instruction.seq > delivered);
 }
 
