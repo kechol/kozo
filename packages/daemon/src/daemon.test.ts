@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { kozoHome } from "@kozo/core";
-import { tempDirectory } from "@kozo/testing";
+import {
+  fakeAgent,
+  gitRepository,
+  goodChange,
+  suiteBase,
+  suiteTask,
+  tempDirectory,
+} from "@kozo/testing";
 import { Daemon } from "./daemon.ts";
+import { inProcessLauncher } from "./launcher.ts";
 
 describe("Daemon", () => {
   test("serves the local API on 127.0.0.1 with the home's token, and only once per home", async () => {
@@ -39,4 +49,104 @@ describe("Daemon", () => {
       await daemon.stop();
     }
   });
+
+  test("a run that was going when kozod stopped resumes from its checkpoint at the next start", async () => {
+    await using repo = await gitRepository();
+    await repo.commit(suiteBase, "the suite shop");
+    await using dir = await tempDirectory();
+    const home = kozoHome(dir.path);
+    await mkdir(home.factory, { recursive: true });
+    await Bun.write(
+      join(home.factory, "factory.yml"),
+      `repositories:\n  - { path: ${repo.path} }\n`,
+    );
+    const triage = {
+      outcome: "plan",
+      plan: {
+        class: "docs",
+        risk: "low",
+        approach: "Say only N left",
+        done_when: suiteTask.doneWhen,
+        tasks: [
+          {
+            id: "t1",
+            goal: suiteTask.goal,
+            done_when: suiteTask.doneWhen,
+            scope: suiteTask.scope,
+            depends_on: [],
+            estimate: { lines: 20, files: 2 },
+          },
+        ],
+      },
+    };
+    const port = 19000 + Math.floor(Math.random() * 500);
+    const first = await Daemon.start({
+      home,
+      port,
+      tickMs: 50,
+      launcher: inProcessLauncher(
+        fakeAgent((request) =>
+          request.agent === "triage" ? [{ answer: triage }] : [{ hang: true }],
+        ),
+      ),
+    });
+    const token = (await Bun.file(home.apiToken).text()).trim();
+    const post = (path: string, body: unknown) =>
+      fetch(`http://127.0.0.1:${port}${path}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+    await post("/api/items", { title: "Low stock", class: "docs" });
+    while (first.store.state.items["K-1"]?.hold?.reason !== "plan approval") await Bun.sleep(20);
+    await post("/api/refs/K-1/approve", {});
+    while (first.store.state.items["K-1"]?.stage !== "building") await Bun.sleep(20);
+    while (first.store.state.tasks["K-1/t1"]?.checkpoint?.node !== "implement") await Bun.sleep(20);
+    await first.stop();
+
+    const second = await Daemon.start({
+      home,
+      port,
+      tickMs: 50,
+      launcher: inProcessLauncher(
+        fakeAgent([
+          { write: goodChange },
+          { commit: "feat: low stock" },
+          { tool: "Bash", input: { command: "unused" }, output: "" },
+          {
+            answer: {
+              version: 1,
+              outcome: "done",
+              summary: "s",
+              changes: [],
+              out_of_scope: [],
+              tests: [],
+            },
+          },
+        ]),
+      ),
+    });
+    try {
+      const runs = Object.values(second.store.state.runs);
+      expect(runs.find((run) => run.agent === "implement")?.state).toBe("lost");
+      while (
+        second.store.state.tasks["K-1/t1"]?.stage === "building" &&
+        !second.store.state.tasks["K-1/t1"]?.hold
+      ) {
+        await Bun.sleep(50);
+      }
+      const resumed = Object.values(second.store.state.runs)
+        .filter((run) => run.agent === "implement")
+        .at(-1);
+      const first = second.store.db
+        .query<{ node: string }, [string]>(
+          "select json_extract(line, '$.node') as node from events where type = 'checkpoint' and run_id = ? order by id limit 1",
+        )
+        .get(resumed?.ref ?? "");
+      expect(first?.node).toBe("implement");
+    } finally {
+      await second.scheduler.idle();
+      await second.stop();
+    }
+  }, 120_000);
 });

@@ -8,6 +8,7 @@ import { ControlPlane } from "./control-plane.ts";
 import { EventStore } from "./event-store.ts";
 import { loadFactory } from "./factory-config.ts";
 import { type Launcher, processLauncher } from "./launcher.ts";
+import { Reconciler } from "./reconcile.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
 
@@ -113,7 +114,18 @@ export class Daemon {
       commands,
     });
     const server = serveApi(app, port);
-    const timer = setInterval(() => scheduler.tick(), tickMs);
+    const reconciler = new Reconciler(store, runner, (line) => console.error(line));
+    await reconciler.recover();
+    let reconciling = Promise.resolve();
+    let ticks = 0;
+    const timer = setInterval(() => {
+      ticks += 1;
+      // Reconciliation runs once a minute; looking for work to start, every tick.
+      if (ticks % Math.max(1, Math.round(60_000 / tickMs)) === 0) {
+        reconciling = reconciling.then(() => reconciler.reconcile()).then(() => scheduler.tick());
+      }
+      scheduler.tick();
+    }, tickMs);
     scheduler.tick();
     return new Daemon(home, store, port, server, scheduler, timer);
   }

@@ -103,12 +103,30 @@ const itemEdges: Partial<Record<Stage, readonly Stage[]>> = {
 const taskEdges: Partial<Record<Stage, readonly Stage[]>> = {
   building: ["reviewing", "complete"],
   reviewing: ["building", "handoff", "complete"],
-  handoff: ["building", "complete"],
+  // A human's commit on the task branch sends the task back to Reviewing.
+  handoff: ["building", "reviewing", "complete"],
 };
 
 function allowed(edges: typeof itemEdges, from: Stage, to: Stage): boolean {
   if (to === "cancelled") return !isClosed(from);
   return edges[from]?.includes(to) ?? false;
+}
+
+/**
+ * The plan with its task IDs numbered after an item's `existing` tasks, as when an item comes
+ * back from a post-merge defect with a new plan: t1 becomes t<existing + 1>, dependencies too.
+ */
+export function numberAfter(plan: Plan, existing: number): Plan {
+  if (existing === 0) return plan;
+  const renamed = (id: string) => `t${Number(id.slice(1)) + existing}`;
+  return {
+    ...plan,
+    tasks: plan.tasks.map((task) => ({
+      ...task,
+      id: renamed(task.id),
+      depends_on: task.depends_on.map(renamed),
+    })) as Plan["tasks"],
+  };
 }
 
 /** The task references of a plan's tasks, in plan order. */
@@ -225,12 +243,15 @@ export function applyEvent(state: FactoryState, event: Event): void {
         throw new StateError(`${subject.ref} cannot accept a plan in ${subject.stage}`);
       }
       if (subject.hold) throw new StateError(`${subject.ref} is held by ${subject.hold.kind}`);
+      const refs = taskReferences(plan);
+      const reused = refs.find((ref) => state.tasks[ref]);
+      if (reused) throw new StateError(`${reused} already exists; number the new tasks after it`);
       subject.plan = plan;
       subject.draft = null;
       subject.stage = "building";
-      subject.tasks = taskReferences(plan);
+      subject.tasks = [...subject.tasks, ...refs];
       plan.tasks.forEach((planned, index) => {
-        const ref = subject.tasks[index] ?? "";
+        const ref = refs[index] ?? "";
         state.tasks[ref] = {
           ref,
           item: subject.ref,

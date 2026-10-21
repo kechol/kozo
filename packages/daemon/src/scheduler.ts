@@ -29,6 +29,8 @@ export function awaitingMerge(state: FactoryState, task: TaskState): boolean {
  */
 export function resumePoint(state: FactoryState, task: TaskState): Node {
   const last = lastBlueprintRun(state, task);
+  // A task sent back to Reviewing after its run finished, by a human's commit, is reviewed again.
+  if (task.stage === "reviewing" && last?.state === "succeeded") return "review";
   const node = task.checkpoint?.node as Node | undefined;
   if (
     last &&
@@ -137,7 +139,10 @@ export class Scheduler {
     const state = this.store.state;
     if (task.hold || isClosed(task.stage) || this.active.has(task.ref)) return false;
     if (startBlocker(state, task) !== null) return false;
-    if (task.stage === "building") return true;
+    if (task.stage === "building" || task.stage === "reviewing") {
+      const last = lastBlueprintRun(state, task);
+      return last === null || isRunOver(last.state);
+    }
     const last = lastBlueprintRun(state, task);
     return last !== null && isRunOver(last.state) && last.state !== "succeeded";
   }

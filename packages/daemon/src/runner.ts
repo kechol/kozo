@@ -8,6 +8,7 @@ import {
   type Constraints,
   type GateLevel,
   type KozoHome,
+  numberAfter,
   type Plan,
   planNeeded,
   planSchema,
@@ -54,7 +55,7 @@ import triageDefinition from "../../../templates/factory/agents/triage/agent.md"
   type: "text",
 };
 import type { EventStore, NewEvent } from "./event-store.ts";
-import { humanNotes } from "./instructions.ts";
+import { addHumanNote, humanNotes } from "./instructions.ts";
 import { itemDirectory, readItemFile } from "./item-file.ts";
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { defaultBranch } from "./repository.ts";
@@ -114,6 +115,32 @@ export class Runner {
     readonly store: EventStore,
     readonly deps: RunnerDeps,
   ) {}
+
+  private apiFailures = 0;
+
+  /**
+   * Three sessions in a row that fail on the API, rather than on a limit or a stop-check,
+   * pause the factory: retrying into an outage only spends the budget.
+   */
+  private async countApiFailure(result: SessionResult) {
+    const reason = result.status === "failed" ? result.outcome.reason : "";
+    const api = result.status === "failed" && !/^(error_max|stop-check)/.test(reason);
+    this.apiFailures = api
+      ? this.apiFailures + 1
+      : result.status === "answered"
+        ? 0
+        : this.apiFailures;
+    if (this.apiFailures >= 3 && !this.store.state.paused) {
+      await this.store.append({
+        type: "factory.changed",
+        data: {
+          paused: true,
+          reason: `three sessions in a row failed on the API; the last: ${reason}`.slice(0, 500),
+        },
+      });
+      this.apiFailures = 0;
+    }
+  }
 
   /** Stops a run's session now; the run ends as stopped. Returns whether one was running. */
   stopSession(run: string): boolean {
@@ -200,11 +227,14 @@ export class Runner {
     const specPath = await this.writeSpec(spec);
     const session = this.deps.launcher.launch(spec, specPath);
     this.sessions.set(spec.run, session);
+    let result: SessionResult;
     try {
-      return await pumpSession(this.store, session, envelope, maxMinutes);
+      result = await pumpSession(this.store, session, envelope, maxMinutes);
     } finally {
       this.sessions.delete(spec.run);
     }
+    await this.countApiFailure(result);
+    return result;
   }
 
   // --- Triage ---------------------------------------------------------------------------------
@@ -296,7 +326,9 @@ export class Runner {
         await this.hold("item", itemRef, null, "question", answer.data.question, run);
         return;
       }
-      const draft = planSchema.safeParse({ version: 1, item: itemRef, ...answer.data.plan });
+      const draft = planSchema.safeParse(
+        numberAfter({ version: 1, item: itemRef, ...answer.data.plan } as Plan, item.tasks.length),
+      );
       if (!draft.success) {
         await this.endRun(run, "failed", "the plan draft is invalid");
         await this.hold(
@@ -976,7 +1008,8 @@ export class Runner {
               charter,
             );
           }
-          await exit(node, true);
+          const verified = (await git(worktree, ["rev-parse", "HEAD"])).trim();
+          await exit(node, true, `verified ${verified}`);
           return await stopHere("succeeded");
         }
       }
@@ -1113,6 +1146,72 @@ export class Runner {
     const dir = itemDirectory(this.home, itemRef);
     await mkdir(dir, { recursive: true });
     await Bun.write(join(dir, `handoff-${task.ref.split("/").at(-1)}.md`), text);
+  }
+
+  /**
+   * Complete: a task whose branch is merged has its DONE_WHEN checked with the gates of its
+   * risk tier on the merged default branch. A pass completes the task, and the item once every
+   * task is complete; a failure is a post-merge defect that sends the item back to Triage.
+   */
+  async complete(taskRef: string): Promise<void> {
+    const task = this.store.state.tasks[taskRef];
+    const item = task ? this.store.state.items[task.item] : undefined;
+    if (!task || !item?.plan || task.stage !== "handoff") return;
+    const repository = await this.repository(item.repository);
+    const worktree = worktreePath(this.home, repository.path, taskRef);
+    const level = gatesFor[item.plan.risk];
+    await git(worktree, [
+      "-c",
+      "core.hooksPath=/dev/null",
+      "checkout",
+      "--quiet",
+      "--detach",
+      repository.tip,
+    ]);
+    let output = "";
+    const result = await runGates({
+      cwd: worktree,
+      level,
+      base: repository.branch,
+      env: commandEnvironmentFrom(process.env),
+      log: (text) => {
+        output += text;
+      },
+    });
+    await this.store.append({
+      type: "gates.result",
+      item: item.ref,
+      task: taskRef,
+      node: "complete",
+      data:
+        result.status === "pass"
+          ? { level, status: "pass" }
+          : result.status === "fail"
+            ? { level, status: "fail", failed: result.failed }
+            : { level, status: "MISCONFIGURED", reason: result.reason },
+    });
+    await this.moveTask(task, "complete", null);
+    await releaseTask(this.home, repository.path, taskRef, { deleteBranch: false });
+    const owner = this.store.state.items[item.ref];
+    if (!owner || owner.tasks.some((ref) => this.store.state.tasks[ref]?.stage !== "complete"))
+      return;
+    await this.store.append({
+      type: "stage.changed",
+      item: item.ref,
+      data: { target: "item", from: owner.stage, to: "complete" },
+    });
+    if (result.status !== "pass") {
+      await addHumanNote(this.home, item.ref, {
+        target: item.ref,
+        kind: "instruction",
+        text: `After the merge, the ${level} gates on ${repository.branch} failed, so DONE_WHEN is not met:\n${tail(output)}`,
+      });
+      await this.store.append({
+        type: "stage.changed",
+        item: item.ref,
+        data: { target: "item", from: "complete", to: "triage" },
+      });
+    }
   }
 
   /** Removes a task's worktree and branch after it is cancelled. */

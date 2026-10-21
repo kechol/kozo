@@ -16,7 +16,8 @@ import type { AgentRequest } from "@kozo/worker";
 import { ControlPlane } from "./control-plane.ts";
 import { EventStore } from "./event-store.ts";
 import { loadFactory } from "./factory-config.ts";
-import { inProcessLauncher } from "./launcher.ts";
+import { inProcessLauncher, type Launcher } from "./launcher.ts";
+import { Reconciler } from "./reconcile.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
 
@@ -68,7 +69,12 @@ const noVerifier: Verifier = {
 async function factoryOf(
   script: (request: AgentRequest) => FakeStep[],
   judge: Judge = judgeWith("accept"),
-  options: { charter?: (text: string) => string; factory?: string; now?: () => Date } = {},
+  options: {
+    charter?: (text: string) => string;
+    factory?: string;
+    now?: () => Date;
+    launcher?: (fallback: Launcher) => Launcher;
+  } = {},
 ) {
   const repo = await gitRepository();
   const charter = suiteBase[".kozo/charter.yml"] ?? "";
@@ -86,8 +92,9 @@ async function factoryOf(
   const factory = await loadFactory(home);
   const store = await EventStore.open(home);
   const agent = fakeAgent(script);
+  const inProcess = inProcessLauncher(agent);
   const runner = new Runner(home, store, {
-    launcher: inProcessLauncher(agent),
+    launcher: options.launcher ? options.launcher(inProcess) : inProcess,
     judge,
     verifier: noVerifier,
     kozoCommand: "kozo",
@@ -101,12 +108,14 @@ async function factoryOf(
     (line) => console.error(line),
     options.now,
   );
+  const reconciler = new Reconciler(store, runner, (line) => console.error(line));
   return {
     repo,
     home,
     store,
     control,
     scheduler,
+    reconciler,
     agent,
     async settle() {
       scheduler.tick();
@@ -426,5 +435,189 @@ describe("the minimal path", () => {
       stage: "planning",
       hold: { kind: "approval", reason: "plan approval" },
     });
+  }, 120_000);
+
+  async function toHandoff(env: Awaited<ReturnType<typeof factoryOf>>) {
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    expect(env.store.state.tasks[`${ref}/t1`]?.stage).toBe("handoff");
+    return { ref, task: `${ref}/t1` };
+  }
+
+  test("a merged task is checked at Complete and completes its item", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: plan }] : implement(),
+    );
+    const { ref, task } = await toHandoff(env);
+    await env.reconciler.reconcile();
+    expect(env.store.state.tasks[task]?.stage).toBe("handoff");
+    await env.repo.git(
+      "merge",
+      "--no-ff",
+      "--quiet",
+      "-m",
+      "merge the low stock notice",
+      "kozo/K-1-t1",
+    );
+    await env.reconciler.reconcile();
+    expect(env.store.state.tasks[task]?.stage).toBe("complete");
+    expect(env.store.state.items[ref]?.stage).toBe("complete");
+    expect(await env.repo.git("worktree", "list")).not.toContain("K-1-t1");
+  }, 180_000);
+
+  test("a failing check after the merge is a defect that sends the item back to Triage", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: plan }] : implement(),
+    );
+    const { ref, task } = await toHandoff(env);
+    await env.control.pauseFactory();
+    await env.repo.git("merge", "--no-ff", "--quiet", "-m", "merge", "kozo/K-1-t1");
+    await env.repo.commit({ "src/debug.ts": "console.log('left over');\n" }, "debug");
+    await env.reconciler.reconcile();
+    expect(env.store.state.tasks[task]?.stage).toBe("complete");
+    expect(env.store.state.items[ref]).toMatchObject({ stage: "triage", hold: null });
+    const notes = await Bun.file(join(env.home.items, ref, "notes.jsonl")).text();
+    expect(notes).toContain("DONE_WHEN is not met");
+  }, 180_000);
+
+  test("a branch deleted unmerged needs attention, and a human's commit sends the task back to Reviewing", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: plan }] : implement(),
+    );
+    const { task } = await toHandoff(env);
+    const worktree = (await env.repo.git("worktree", "list", "--porcelain"))
+      .split("\n")
+      .find((line) => line.startsWith("worktree ") && line.includes("K-1-t1"))
+      ?.slice("worktree ".length);
+    if (!worktree) throw new Error("expected the task worktree");
+    await Bun.write(join(worktree, "src", "note.ts"), "export const note = 1;\n");
+    const human = {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_AUTHOR_NAME: "Owner",
+      GIT_AUTHOR_EMAIL: "owner@example.com",
+      GIT_COMMITTER_NAME: "Owner",
+      GIT_COMMITTER_EMAIL: "owner@example.com",
+    };
+    for (const args of [
+      ["add", "--all"],
+      ["commit", "--quiet", "-m", "a human touch"],
+    ]) {
+      expect(await Bun.spawn(["git", ...args], { cwd: worktree, env: human }).exited).toBe(0);
+    }
+    await env.reconciler.reconcile();
+    expect(env.store.state.tasks[task]?.stage).toBe("reviewing");
+    await env.settle();
+    expect(env.store.state.tasks[task]?.stage).toBe("handoff");
+    await env.reconciler.reconcile();
+    expect(env.store.state.tasks[task]?.stage).toBe("handoff");
+
+    await env.repo.git("worktree", "remove", "--force", worktree);
+    await env.repo.git("branch", "-D", "kozo/K-1-t1");
+    await env.reconciler.reconcile();
+    expect(env.store.state.tasks[task]?.hold).toMatchObject({
+      kind: "attention",
+      reason: "kozo/K-1-t1 was deleted without a merge",
+    });
+  }, 240_000);
+
+  test("a worker that dies makes the run lost, and retry resumes it from the checkpoint", async () => {
+    let launches = 0;
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+      judgeWith("accept"),
+      {
+        launcher: (fallback) => ({
+          launch(spec, path) {
+            launches += 1;
+            if (spec.agent !== "implement" || launches > 2) return fallback.launch(spec, path);
+            return {
+              pid: 4242,
+              stop() {},
+              messages: (async function* () {
+                yield {
+                  record: {
+                    type: "agent.message",
+                    data: { agent: "implement", text: "Starting." },
+                  },
+                } as const;
+              })(),
+            };
+          },
+        }),
+      },
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const task = `${ref}/t1`;
+    expect(env.store.state.tasks[task]?.hold).toMatchObject({
+      kind: "attention",
+      reason: "the run lost its worker",
+    });
+    expect(
+      Object.values(env.store.state.runs).find((run) => run.agent === "implement")?.state,
+    ).toBe("lost");
+    await env.control.act(
+      task,
+      { kind: "task", item: { repo: null, number: 1 }, task: 1 },
+      "retry",
+      {},
+    );
+    await env.settle();
+    expect(env.store.state.tasks[task]?.stage).toBe("handoff");
+    const implementRuns = Object.values(env.store.state.runs).filter(
+      (run) => run.agent === "implement",
+    );
+    const resumed = env.store.db
+      .query<{ node: string }, [string]>(
+        "select json_extract(line, '$.node') as node from events where type = 'checkpoint' and run_id = ? order by id limit 1",
+      )
+      .get(implementRuns.at(-1)?.ref ?? "");
+    expect(resumed?.node).toBe("implement");
+  }, 180_000);
+
+  test("kozo say reaches a running run at its next turn", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage"
+        ? [{ answer: plan }]
+        : [{ awaitInstruction: true }, ...implement()],
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    env.scheduler.tick();
+    while (env.agent.requests.length < 2) await Bun.sleep(20);
+    const task = `${ref}/t1`;
+    const said = await env.control.act(
+      task,
+      { kind: "task", item: { repo: null, number: 1 }, task: 1 },
+      "say",
+      {
+        text: "Keep 0 as Sold out.",
+      },
+    );
+    expect(said.message).toMatch(/^sent to r-\d+, which reads it at its next turn$/);
+    await env.settle();
+    const delivered = env.store.db
+      .query<{ n: number }, []>(
+        "select count(*) as n from events where type = 'instruction.delivered'",
+      )
+      .get();
+    expect(delivered?.n).toBe(1);
+    expect(env.store.state.tasks[task]?.stage).toBe("handoff");
+  }, 120_000);
+
+  test("three sessions in a row that fail on the API pause the factory", async () => {
+    await using env = await factoryOf(() => [{ fail: "error_during_execution" }]);
+    for (const title of ["First", "Second", "Third"]) {
+      await env.control.addItem({ title, class: "docs" });
+      await env.settle();
+    }
+    expect(env.store.state).toMatchObject({ paused: true });
+    expect(env.store.state.pausedReason).toStartWith("three sessions in a row failed on the API");
   }, 120_000);
 });
