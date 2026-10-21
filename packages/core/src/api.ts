@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { z } from "zod";
 import { workClassSchema } from "./charter.ts";
 import type { Reference } from "./reference.ts";
@@ -55,4 +56,13 @@ export type AddItem = z.infer<typeof addItemSchema>;
 export interface ApiError {
   error: string;
   issues?: string[];
+}
+
+/**
+ * What kozod answers to a client's random nonce at `/api/hello`: proof that it holds the API
+ * token, so the client sends the token only to its own kozod and never to another program
+ * that took the port while kozod was down.
+ */
+export function helloProof(token: string, nonce: string): string {
+  return createHmac("sha256", token).update(`kozo-hello:${nonce}`).digest("hex");
 }

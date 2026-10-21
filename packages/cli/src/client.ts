@@ -1,4 +1,5 @@
-import { apiPort, type KozoHome, kozoHome } from "@kozo/core";
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import { apiPort, helloProof, type KozoHome, kozoHome } from "@kozo/core";
 
 /** kozod is not running, or has never run in this home. */
 export class KozodUnavailable extends Error {}
@@ -21,6 +22,25 @@ export function apiPortFromEnvironment(): number {
   return Number(process.env.KOZO_PORT ?? apiPort);
 }
 
+/** Sends the token only after the server proves it holds the same token. */
+async function checkServer(base: string, token: string) {
+  const nonce = randomBytes(32).toString("hex");
+  let proof: unknown;
+  try {
+    const response = await fetch(`${base}/api/hello?nonce=${nonce}`);
+    proof = ((await response.json()) as { proof?: unknown }).proof;
+  } catch {
+    throw new KozodUnavailable("kozod is not running; start it with kozo up");
+  }
+  const expected = Buffer.from(helloProof(token, nonce));
+  const given = Buffer.from(typeof proof === "string" ? proof : "");
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
+    throw new KozodUnavailable(
+      `the server at ${base} is not this home's kozod; the token was not sent`,
+    );
+  }
+}
+
 /** A client of the local API, authenticated with the home's token. */
 export async function connect(home = kozoHome()): Promise<Client> {
   const tokenFile = Bun.file(home.apiToken);
@@ -29,6 +49,7 @@ export async function connect(home = kozoHome()): Promise<Client> {
   }
   const token = (await tokenFile.text()).trim();
   const base = `http://127.0.0.1:${apiPortFromEnvironment()}`;
+  await checkServer(base, token);
   const request = async (path: string, init: RequestInit = {}) => {
     try {
       return await fetch(`${base}${path}`, {

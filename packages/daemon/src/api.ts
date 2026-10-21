@@ -4,6 +4,7 @@ import {
   type ApiError,
   addItemSchema,
   type Event,
+  helloProof,
   listKindSchema,
   parseReference,
   type Reference,
@@ -94,6 +95,11 @@ export function createApi({
 
   app.use("*", async (c, next) => {
     if (!hosts.has(c.req.header("host") ?? "")) return error(c, 421, "unknown host");
+    if (c.req.method === "GET" && c.req.path === "/api/hello") {
+      const nonce = c.req.query("nonce") ?? "";
+      if (!/^[0-9a-f]{32,128}$/.test(nonce)) return error(c, 400, "hello needs a hex nonce");
+      return c.json({ proof: helloProof(token, nonce) });
+    }
     if (!tokenMatches(c.req.header("authorization"), token))
       return error(c, 401, "missing or wrong API token");
     const origin = c.req.header("origin");

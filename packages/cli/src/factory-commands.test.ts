@@ -8,6 +8,7 @@ import {
   type TempDirectory,
   tempDirectory,
 } from "@kozo/testing";
+import { printable } from "./factory-commands.ts";
 import { run } from "./index.ts";
 
 const kozod = join(import.meta.dir, "..", "..", "daemon", "src", "main.ts");
@@ -103,4 +104,12 @@ describe("the daily commands", () => {
     expect((await kozo("down")).stdout).toBe("kozod is not running");
     expect((await kozo("ls")).code).toBe(1);
   }, 60_000);
+});
+
+describe("printable", () => {
+  test("removes control characters and escape sequences but keeps tabs", () => {
+    expect(printable("ok\u001b]0;pwned\u0007\u001b[2Jdone\tnext\r\n\u009b")).toBe(
+      "ok]0;pwned[2Jdone\tnext",
+    );
+  });
 });

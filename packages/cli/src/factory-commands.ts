@@ -36,6 +36,15 @@ export interface Lines {
 /** A usage error found after the arguments parsed. */
 export class FactoryUsageError extends Error {}
 
+/**
+ * Text from kozod can carry what an agent or a request wrote, so control characters, escape
+ * sequences included, are removed before it reaches a terminal; tabs stay.
+ */
+export function printable(text: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: matching them is the point.
+  return text.replace(/[\u0000-\u0008\u000a-\u001f\u007f-\u009f]/g, "");
+}
+
 /** Maps an API answer to the CLI's exit code: 400 is a usage error and 404 is not found. */
 function exitFor(answer: Answer): number {
   if (answer.status === 404) return FactoryExit.notFound;
@@ -48,10 +57,12 @@ function printAnswer(out: Lines, json: boolean | undefined, answer: Answer, text
   if (json) {
     out.stdout(JSON.stringify(answer.body));
   } else if (answer.status >= 300) {
-    out.stderr(`kozo: ${answer.body.error ?? `kozod answered ${answer.status}`}`);
-    for (const issue of answer.body.issues ?? []) out.stderr(`  ${issue}`);
+    out.stderr(
+      `kozo: ${printable(String(answer.body.error ?? `kozod answered ${answer.status}`))}`,
+    );
+    for (const issue of answer.body.issues ?? []) out.stderr(`  ${printable(String(issue))}`);
   } else {
-    for (const line of text()) out.stdout(line);
+    for (const line of text()) out.stdout(printable(line));
   }
   return exitFor(answer);
 }
@@ -402,7 +413,7 @@ export async function show(args: readonly string[], out: Lines): Promise<number>
           .filter((line) => line.startsWith("data: "))
           .map((line) => line.slice(6))
           .join("\n");
-        if (data) out.stdout(values.json ? data : eventLine(JSON.parse(data)));
+        if (data) out.stdout(values.json ? data : printable(eventLine(JSON.parse(data))));
         end = buffer.indexOf("\n\n");
       }
     }
