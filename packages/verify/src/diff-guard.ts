@@ -18,8 +18,10 @@ export type Violation =
 export type DiffGuardResult =
   | {
       status: "pass" | "fail";
-      /** The merge base of the base and head refs, from which the Charter was read. */
+      /** The merge base of the base and head refs, from which the diff is taken. */
       base: string;
+      /** The tip of the base ref, from which the Charter and constraints were read. */
+      documentsAt: string;
       files: ChangedFile[];
       lines: number;
       limits: { lines: number; files: number };
@@ -48,15 +50,19 @@ export async function runDiffGuard(options: DiffGuardOptions): Promise<DiffGuard
 }
 
 async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise<DiffGuardResult> {
-  const mergeBase = (await git(cwd, ["merge-base", base, head])).trim();
-  const documents = await readBaseDocuments(cwd, mergeBase);
+  // The documents come from the base ref's tip, not the merge base: a branch forked from an old
+  // commit must not be judged by the looser Charter that commit may carry.
+  const baseTip = await resolveCommit(cwd, base);
+  const headCommit = await resolveCommit(cwd, head);
+  const mergeBase = (await git(cwd, ["merge-base", baseTip, headCommit])).trim();
+  const documents = await readBaseDocuments(cwd, baseTip);
   if (!documents.ok) {
     for (const issue of documents.issues) log(`kozo: ${issue}\n`);
     return { status: "MISCONFIGURED", reason: documents.problem };
   }
   const { charter, constraints } = documents;
 
-  const files = await changedFiles(cwd, mergeBase, head);
+  const files = await changedFiles(cwd, mergeBase, headCommit);
   const lines = files.reduce((sum, file) => sum + file.lines, 0);
   const limits = { lines: charter.limits.max_changed_lines, files: charter.limits.max_files };
   const violations: Violation[] = [];
@@ -88,7 +94,11 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
 
   for (const violation of violations) log(`kozo: ${describe(violation)}\n`);
   const status = violations.length === 0 ? "pass" : "fail";
-  return { status, base: mergeBase, files, lines, limits, violations };
+  return { status, base: mergeBase, documentsAt: baseTip, files, lines, limits, violations };
+}
+
+async function resolveCommit(cwd: string, ref: string) {
+  return (await git(cwd, ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`])).trim();
 }
 
 /** Lists the files that `head` changes relative to `base`, a rename counting as two files. */
@@ -101,10 +111,14 @@ async function changedFiles(cwd: string, base: string, head: string): Promise<Ch
 
   const lines = new Map<string, number>();
   for (const record of numstat.split("\0")) {
-    const [added, deleted, path] = record.split("\t");
-    if (path === undefined) continue;
+    if (record === "") continue;
+    // A path may itself contain tabs, so only the first two separate the counts.
+    const first = record.indexOf("\t");
+    const second = record.indexOf("\t", first + 1);
+    if (first < 0 || second < 0) throw new GitError(`unexpected numstat record: ${record}`);
+    const [added, deleted] = [record.slice(0, first), record.slice(first + 1, second)];
     // Binary files report "-" for both counts.
-    lines.set(path, (Number(added) || 0) + (Number(deleted) || 0));
+    lines.set(record.slice(second + 1), (Number(added) || 0) + (Number(deleted) || 0));
   }
 
   const fields = nameStatus.split("\0");
@@ -113,7 +127,9 @@ async function changedFiles(cwd: string, base: string, head: string): Promise<Ch
     const status = fields[index] ?? "";
     const path = fields[index + 1] ?? "";
     const change = status === "A" ? "added" : status === "D" ? "deleted" : "modified";
-    files.push({ path, change, lines: lines.get(path) ?? 0 });
+    const count = lines.get(path);
+    if (count === undefined) throw new GitError(`no line count for ${path}`);
+    files.push({ path, change, lines: count });
   }
   return files;
 }

@@ -159,6 +159,36 @@ describe("runDiffGuard", () => {
     expect(result.status === "pass" && result.base).toBe(base);
   });
 
+  test("a branch forked before the Charter was tightened is judged by the current Charter", async () => {
+    const repo = await gitRepository();
+    await using _ = repo;
+    const loose = await repo.commit({
+      [charterPath]: charter.replace("max_files: 3", "max_files: 30"),
+      [constraintsPath]: constraints,
+    });
+    await repo.commit({ [charterPath]: charter });
+    await repo.git("switch", "--quiet", "-c", "task", loose);
+    await repo.commit({
+      "src/a.ts": "1\n",
+      "src/b.ts": "1\n",
+      "src/c.ts": "1\n",
+      "src/d.ts": "1\n",
+    });
+    const { result } = await guard(repo.path, "main");
+    expect(result.status === "fail" && result.base).toBe(loose);
+    expect(kinds(result)).toEqual(["files"]);
+  });
+
+  test("a path containing a tab is counted whole", async () => {
+    const { repo, base } = await repository();
+    await using _ = repo;
+    await repo.commit({ "src/odd\tname.ts": "1\n2\n" });
+    const { result } = await guard(repo.path, base);
+    expect("files" in result && result.files).toEqual([
+      { path: "src/odd\tname.ts", change: "added", lines: 2 },
+    ]);
+  });
+
   test("a missing or invalid Charter at the base is MISCONFIGURED", async () => {
     const repo = await gitRepository();
     await using _ = repo;

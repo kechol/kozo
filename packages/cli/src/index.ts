@@ -20,7 +20,7 @@ Commands:
       Run the gates of one level (default full)
   diff-guard --base <ref> [--head <ref>] [--scope <glob>]... [--json]
       Check the diff from the merge base of <ref> to <head> (default HEAD)
-      against the Charter and constraints at that merge base
+      against the Charter and constraints at the tip of <ref>
 
 Options:
   --version  Print the version`;
