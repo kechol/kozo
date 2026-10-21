@@ -488,6 +488,7 @@ describe("the minimal path", () => {
     expect(env.store.state.items[ref]).toMatchObject({ stage: "triage", hold: null });
     const notes = await Bun.file(join(env.home.items, ref, "notes.jsonl")).text();
     expect(notes).toContain("DONE_WHEN is not met");
+    expect(JSON.parse(notes.trim().split("\n").at(-1) ?? "{}").kind).toBe("check");
   }, 180_000);
 
   test("a branch deleted unmerged needs attention, and a human's commit sends the task back to Reviewing", async () => {
