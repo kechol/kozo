@@ -26,8 +26,10 @@ const strictMatcher =
 const weakMatcher =
   /\.(?:toBeTruthy|toBeFalsy|toBeDefined)\s*\(|\.not\.toThrow\s*\(|\bexpect\.(?:anything|any)\s*\(|\bassert(?:\.ok)?\s*\(/g;
 const control = /^\s*(?:if\s*\(|try\s*\{|\}?\s*catch\b|\}?\s*else\b)/;
-// A bare return ends a test before the assertions after it; returning a value is ordinary code.
-const earlyReturn = /^\s*(?:if\s*\(.*\)\s*)?return\s*;?\s*$/;
+// Returning nothing, or a constant, ends a test before the assertions after it; returning a
+// computed value is ordinary helper code and is left to review.
+const earlyReturn =
+  /^\s*(?:if\s*\(.*\)\s*)?return(?:\s+(?:undefined|null|true|false|void\s+\S+|-?\d+|(["'`]).*\1))?\s*;?\s*$/;
 
 export interface TestFileChange {
   path: string;
@@ -128,6 +130,10 @@ function shallowestAssertions(texts: readonly string[]) {
   return depths;
 }
 
+function isCode(text: string) {
+  return text.trim() !== "" && !isWholeComment(text);
+}
+
 function count(texts: readonly string[], pattern: RegExp) {
   return texts.reduce((sum, text) => sum + (text.match(pattern)?.length ?? 0), 0);
 }
@@ -159,14 +165,16 @@ function indentation(text: string) {
   return text.length - text.trimStart().length;
 }
 
-function isCode(text: string) {
-  return text.trim() !== "" && !isComment(text);
-}
-
-// Only a line that is a comment as a whole counts, so that code after a short block comment is
-// still checked. A # comment needs a space after it, which JavaScript private fields lack.
-function isComment(text: string) {
-  return /^\s*(?:\/\/|\*(?!\/)|#(?:\s|!|$)|\/\*(?:(?!\*\/).)*\*\/\s*$)/.test(text);
+// Only a line that is a comment as a whole is skipped, and matching always sees the raw line:
+// cutting comments out of a line could be fooled by comment markers inside strings. A line that
+// closes a block comment before code, such as one ending a doc block, is code. A # comment needs
+// a space after it, which JavaScript private fields lack.
+function isWholeComment(text: string) {
+  const line = text.trim();
+  if (line.startsWith("//") || /^#(?:\s|!|$)/.test(line)) return true;
+  if (!line.startsWith("/*") && !line.startsWith("*")) return false;
+  const close = line.indexOf("*/");
+  return close < 0 || close === line.length - 2;
 }
 
 /**

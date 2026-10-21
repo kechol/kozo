@@ -180,6 +180,7 @@ describe("findTestWeakening", () => {
     expect(markersIn("/* later */ it.skip('a', () => {})", "/* a */ it.only('b') /* c */")).toEqual(
       ["skip", "only"],
     );
+    expect(markersIn(" * x */ it.skip('after a closing comment')")).toEqual(["skip"]);
     expect(markersIn("/* it.skip('a') */", " * it.skip('in a doc comment')", "# it.skip")).toEqual(
       [],
     );
@@ -235,9 +236,20 @@ describe("findTestWeakening", () => {
         change: "modified",
         lines: { added: added("  if (process.env.CI) return;", "  const total = 3;"), removed: [] },
       },
+      {
+        path: "b.test.ts",
+        change: "modified",
+        lines: { added: added("  return undefined;", "  return void 0;"), removed: [] },
+      },
+      {
+        path: "c.test.ts",
+        change: "modified",
+        lines: { added: added("  return items.map(toLine);"), removed: [] },
+      },
     ]);
     expect(found).toEqual([
       { kind: "weakened-test", path: "a.test.ts", reason: "an early return was added" },
+      { kind: "weakened-test", path: "b.test.ts", reason: "an early return was added" },
     ]);
   });
 
