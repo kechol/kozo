@@ -312,18 +312,17 @@ export class Runner {
         limits.max_minutes,
       );
       if (result.status !== "answered") {
+        if (result.status !== "stopped")
+          await this.hold("item", itemRef, null, "attention", `triage ${describe(result)}`, run);
         await this.endRun(
           run,
           result.status === "lost" ? "lost" : result.status === "stopped" ? "stopped" : "failed",
           describe(result),
         );
-        if (result.status !== "stopped")
-          await this.hold("item", itemRef, null, "attention", `triage ${describe(result)}`, run);
         return;
       }
       const answer = triageAnswerSchema.safeParse(result.outcome.output);
       if (!answer.success) {
-        await this.endRun(run, "failed", "the triage answer does not match its schema");
         await this.hold(
           "item",
           itemRef,
@@ -332,18 +331,18 @@ export class Runner {
           "triage answered outside its schema",
           run,
         );
+        await this.endRun(run, "failed", "the triage answer does not match its schema");
         return;
       }
       if (answer.data.outcome === "question") {
-        await this.endRun(run, "succeeded");
         await this.hold("item", itemRef, null, "question", answer.data.question, run);
+        await this.endRun(run, "succeeded");
         return;
       }
       const draft = planSchema.safeParse(
         numberAfter({ version: 1, item: itemRef, ...answer.data.plan } as Plan, item.tasks.length),
       );
       if (!draft.success) {
-        await this.endRun(run, "failed", "the plan draft is invalid");
         await this.hold(
           "item",
           itemRef,
@@ -352,6 +351,7 @@ export class Runner {
           `the plan draft is invalid: ${draft.error.issues[0]?.message}`,
           run,
         );
+        await this.endRun(run, "failed", "the plan draft is invalid");
         return;
       }
       await this.store.append({ ...envelope, type: "plan.proposed", data: { plan: draft.data } });

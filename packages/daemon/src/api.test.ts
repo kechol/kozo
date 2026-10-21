@@ -96,7 +96,21 @@ describe("the local API", () => {
   });
 
   test("events stream from Last-Event-ID, then live", async () => {
-    const response = await call("/api/refs/r-0003/events", { headers: { "last-event-id": "0" } });
+    const run = { item: "K-1", task: "K-1/t1", run_id: "r-0004" };
+    await store.append({
+      ...run,
+      type: "run.started",
+      data: {
+        agent: "review",
+        model: "claude-sonnet-5-5",
+        mode: "local",
+        charter_commit: "abc1234",
+        factory_commit: null,
+      },
+    });
+    await store.append({ ...run, type: "node.enter", data: { kind: "A" } });
+    await store.append({ ...run, type: "agent.message", data: { agent: "review", text: "One." } });
+    const response = await call("/api/refs/r-0004/events", { headers: { "last-event-id": "0" } });
     expect(response.headers.get("content-type")).toStartWith("text/event-stream");
     const reader = response.body?.getReader();
     if (!reader) throw new Error("expected a stream");
@@ -112,8 +126,7 @@ describe("the local API", () => {
       type: "agent.message",
       item: "K-1",
       task: "K-1/t1",
-      run_id: "r-0003",
-      parent_run: "r-0002",
+      run_id: "r-0004",
       data: { agent: "review", text: "Late note." },
     });
     while (!text.includes("Late note.")) {
@@ -122,7 +135,7 @@ describe("the local API", () => {
     }
     await reader.cancel();
 
-    const resumed = await call("/api/refs/r-0003/events", {
+    const resumed = await call("/api/refs/r-0004/events", {
       headers: { "last-event-id": String(ids[2]) },
     });
     const resumedReader = resumed.body?.getReader();

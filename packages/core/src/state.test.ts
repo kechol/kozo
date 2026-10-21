@@ -94,6 +94,41 @@ describe("replay", () => {
     expect(state.runs["r-0001"]?.endedAt).not.toBeNull();
   });
 
+  test("a sealed run takes no more events", () => {
+    const write = eventWriter();
+    const run = { item: "K-1", task: "K-1/t1", run_id: "r-0001" };
+    const started = [
+      ...planned(write),
+      write(
+        "run.started",
+        {
+          agent: "implement",
+          model: "claude-sonnet-5-5",
+          mode: "local",
+          charter_commit: "abc1234",
+          factory_commit: null,
+        },
+        run,
+      ),
+    ];
+    const seal = (state: object) =>
+      write(
+        "log.sealed",
+        { run: "r-0001", lines: 2, last: "0".repeat(64) },
+        { item: "K-1", ...state },
+      );
+    expect(() => replay([...started, seal({})])).toThrow("r-0001 is running, not over");
+    const ended = [
+      ...started,
+      write("run.changed", { from: "running", to: "failed" }, run),
+      seal({}),
+    ];
+    expect(replay(ended).runs["r-0001"]?.sealed).toBe(true);
+    expect(() => replay([...ended, write("checkpoint", { head: null }, run)])).toThrow(
+      "run r-0001 is sealed",
+    );
+  });
+
   test("an illegal transition is an error", () => {
     const write = eventWriter();
     const item = { item: "K-1" };

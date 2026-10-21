@@ -1,17 +1,33 @@
+import { createHash } from "node:crypto";
 import type { ParseResult } from "./document.ts";
 import { type Event, parseEvent } from "./event.ts";
 
+/** The hash that the next line of a log carries as `prev`: the SHA-256 of this line's text. */
+export function lineHash(line: string): string {
+  return createHash("sha256").update(line).digest("hex");
+}
+
+/** The events of one `events.jsonl` and the hash of its last line, null when it is empty. */
+export interface EventLog {
+  events: Event[];
+  last: string | null;
+}
+
 /**
- * Parses the text of one `events.jsonl`. Every line must parse and `seq` must count from 0
- * without gaps; an issue names the log and the line.
+ * Parses the text of one `events.jsonl`. Every line must parse, `seq` must count from 0
+ * without gaps, and `prev` must be the hash of the line before; an issue names the log and the
+ * line.
  */
-export function parseEventLog(text: string, name: string): ParseResult<Event[]> {
+export function parseEventLog(text: string, name: string): ParseResult<EventLog> {
   const events: Event[] = [];
   const issues: string[] = [];
   const lines = text.split("\n");
   if (lines.at(-1) === "") lines.pop();
+  let last: string | null = null;
   lines.forEach((line, index) => {
     const where = `${name}:${index + 1}`;
+    const expected = last;
+    last = lineHash(line);
     const result = parseEvent(line);
     if (!result.ok) {
       issues.push(...result.issues.map((issue) => `${where}: ${issue}`));
@@ -20,9 +36,36 @@ export function parseEventLog(text: string, name: string): ParseResult<Event[]> 
     if (result.value.seq !== index) {
       issues.push(`${where}: seq is ${result.value.seq}, expected ${index}`);
     }
+    if (result.value.prev !== expected) {
+      issues.push(`${where}: prev does not match the line before`);
+    }
     events.push(result.value);
   });
-  return issues.length > 0 ? { ok: false, issues } : { ok: true, value: events };
+  return issues.length > 0 ? { ok: false, issues } : { ok: true, value: { events, last } };
+}
+
+/**
+ * The seals in `logs` that their run's log does not match: a run log that is missing, or
+ * whose line count or last line differs from what kozod sealed when the run ended.
+ */
+export function sealIssues(logs: readonly EventLog[]): string[] {
+  const runs = new Map<string, EventLog>();
+  for (const log of logs) {
+    const run = log.events[0]?.run_id;
+    if (run) runs.set(run, log);
+  }
+  const issues: string[] = [];
+  for (const event of logs.flatMap((log) => log.events)) {
+    if (event.type !== "log.sealed") continue;
+    const { run, lines, last } = event.data;
+    const log = runs.get(run);
+    if (!log) issues.push(`runs/${run}/events.jsonl is missing; it was sealed at ${event.ts}`);
+    else if (log.events.length !== lines || log.last !== last)
+      issues.push(
+        `runs/${run}/events.jsonl does not match its seal: ${log.events.length} lines, sealed with ${lines}`,
+      );
+  }
+  return issues;
 }
 
 /** Merges the events of several logs into the order kozod wrote them, by their `ts`. */

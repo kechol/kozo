@@ -1,24 +1,27 @@
-import type { Event, EventType } from "@kozo/core";
+import { type Event, type EventType, lineHash } from "@kozo/core";
 
 type Data<T extends EventType> = Extract<Event, { type: T }>["data"];
 type Envelope = Partial<Pick<Event, "run_id" | "parent_run" | "item" | "task" | "node" | "cost">>;
 
 /**
  * Builds events as kozod would write them: strictly increasing `ts`, one millisecond apart,
- * and `seq` counted per log, the run's own or kozod's for events outside a run.
+ * and `seq` and `prev` per log, the run's own or kozod's for events outside a run, for lines
+ * written as `JSON.stringify(event)`.
  */
 export function eventWriter(start = "2026-10-21T09:00:00.000Z") {
   let clock = Date.parse(start);
   const seqs = new Map<string | null, number>();
+  const lasts = new Map<string | null, string>();
   return <T extends EventType>(type: T, data: Data<T>, envelope: Envelope = {}): Event => {
     const run = envelope.run_id ?? null;
     const seq = seqs.get(run) ?? 0;
     seqs.set(run, seq + 1);
     const ts = new Date(clock).toISOString();
     clock += 1;
-    return {
+    const event = {
       v: 1,
       ts,
+      prev: lasts.get(run) ?? null,
       run_id: run,
       parent_run: envelope.parent_run ?? null,
       item: envelope.item === undefined ? null : envelope.item,
@@ -29,5 +32,7 @@ export function eventWriter(start = "2026-10-21T09:00:00.000Z") {
       type,
       data,
     } as Event;
+    lasts.set(run, lineHash(JSON.stringify(event)));
+    return event;
   };
 }

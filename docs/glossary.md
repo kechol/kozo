@@ -143,8 +143,9 @@
 | autonomous diff | A merged diff to which no human added commits. | - | - | - |
 | autonomy rate | The share of merged diffs that are autonomous diffs. | - | - | - |
 | eval case | A case built from a past request with a repository, a start commit, the request body and the expected outcome, which may be a stop. | `evals/<case>.yml` | benchmark, fixture | - |
-| event log | The append-only per-run file from which context, views and metrics are all derived. | `events.jsonl` | audit log, history | - |
+| event log | The append-only file of events, one per run and one for kozod's own, whose every line carries the hash of the line before, from which context, views and metrics are all derived. | `events.jsonl`, `prev` | audit log, history | - |
 | failure type | A named pattern for a kind of failure that occurred twice, which then gets a structural fix. | - | - | - |
+| log seal | The event in kozod's own log that fixes the line count and the last line's hash of a run's log when the run ends, after which nothing is appended to that log. | `log.sealed` | - | - |
 | monthly review | The monthly reading of metrics, failure types, autonomy levels and cost. | `kozo report --review` | - | - |
 | post-merge defect | A merged diff that failed its DONE_WHEN check at Complete or was later tied to a revert or a fix commit. | - | regression | - |
 | retrospective | The weekly human reading of unresolved failures that turns each failure type into a structural fix. | `kozo report --week` | - | - |

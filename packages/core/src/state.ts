@@ -63,6 +63,8 @@ export interface RunInfo {
   state: RunState;
   startedAt: string;
   endedAt: string | null;
+  /** Whether kozod sealed the run's log, after which no event of the run may follow. */
+  sealed: boolean;
 }
 
 export interface FactoryState {
@@ -148,6 +150,9 @@ export function applyEvent(state: FactoryState, event: Event): void {
     throw new StateError(`event ${event.type} at ${event.ts} is not after ${state.lastTs}`);
   }
   state.lastTs = event.ts;
+  if (event.run_id !== null && state.runs[event.run_id]?.sealed) {
+    throw new StateError(`run ${event.run_id} is sealed`);
+  }
   const item = event.item === null ? undefined : state.items[event.item];
   const task = event.task === null ? undefined : state.tasks[event.task];
   switch (event.type) {
@@ -286,7 +291,15 @@ export function applyEvent(state: FactoryState, event: Event): void {
         state: "running",
         startedAt: event.ts,
         endedAt: null,
+        sealed: false,
       };
+      return;
+    }
+    case "log.sealed": {
+      const run = required(state.runs[event.data.run], `run ${event.data.run}`);
+      if (!isRunOver(run.state)) throw new StateError(`${run.ref} is ${run.state}, not over`);
+      if (run.sealed) throw new StateError(`${run.ref} is already sealed`);
+      run.sealed = true;
       return;
     }
     case "run.changed": {

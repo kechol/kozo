@@ -19,10 +19,13 @@ const costSchema = z.strictObject({ usd: amount, in: tokens, out: tokens, cache_
 /** Whether a stage or hold event is about the item or about the task of its line. */
 const target = z.enum(["item", "task"]);
 const actor = z.enum(["human", "kozod"]);
+const sha256 = z.string().regex(/^[0-9a-f]{64}$/);
 
 const envelope = {
   v: z.literal(1),
   ts: z.iso.datetime(),
+  /** The SHA-256 of the previous line of the same log, null on its first line. */
+  prev: sha256.nullable(),
   /** Null for events outside any run, which kozod keeps in its own log. */
   run_id: runReferenceSchema.nullable(),
   parent_run: runReferenceSchema.nullable(),
@@ -67,6 +70,11 @@ export const eventSchema = z
       }),
     ),
     event("factory.changed", z.strictObject({ paused: z.boolean(), reason: text })),
+    /** The run's log as it ended; nothing is appended to it afterwards. */
+    event(
+      "log.sealed",
+      z.strictObject({ run: runReferenceSchema, lines: z.int().positive(), last: sha256 }),
+    ),
     event(
       "stage.changed",
       z.strictObject({ target, from: stageSchema.nullable(), to: stageSchema }),
@@ -133,6 +141,13 @@ export const eventSchema = z
     }
     if (line.type.startsWith("run.") && line.run_id === null) {
       context.addIssue({ code: "custom", path: ["run_id"], message: `${line.type} needs a run` });
+    }
+    if (line.type === "log.sealed" && line.run_id !== null) {
+      context.addIssue({
+        code: "custom",
+        path: ["run_id"],
+        message: "A seal goes to kozod's own log",
+      });
     }
     const factoryWide = line.type === "factory.changed";
     if (factoryWide !== (line.item === null)) {

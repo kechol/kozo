@@ -4,6 +4,7 @@ import { type EventType, parseEvent } from "./event.ts";
 const envelope = {
   v: 1,
   ts: "2026-10-19T09:14:02.311Z",
+  prev: null,
   run_id: "r-0193",
   parent_run: null,
   item: "app#212",
@@ -42,6 +43,7 @@ const examples: Record<EventType, unknown> = {
   },
   "item.created": { repository: "~/src/app", title: "Low stock notice", source: "local" },
   "factory.changed": { paused: true, reason: "kozo pause" },
+  "log.sealed": { run: "r-0193", lines: 58, last: "a".repeat(64) },
   "run.changed": { from: "running", to: "failed", reason: "max_turns" },
   "stage.changed": { target: "task", from: "building", to: "reviewing" },
   "hold.set": { target: "item", hold: "approval", reason: "plan approval" },
@@ -73,7 +75,12 @@ function issuesOf(text: string) {
 describe("parseEvent", () => {
   test("parses an example of every event type", () => {
     for (const [type, data] of Object.entries(examples)) {
-      const overrides = type === "factory.changed" ? { item: null, task: null } : {};
+      const overrides =
+        type === "factory.changed"
+          ? { item: null, task: null }
+          : type === "log.sealed"
+            ? { run_id: null }
+            : {};
       const result = parseEvent(line(type, data, overrides));
       expect({ type, ok: result.ok }).toEqual({ type, ok: true });
     }
@@ -117,6 +124,9 @@ describe("parseEvent", () => {
     expect(issuesOf(line("hold.set", examples["hold.set"], { item: null, task: null }))).toEqual([
       "item: hold.set needs an item",
     ]);
+    expect(issuesOf(line("log.sealed", examples["log.sealed"]))).toEqual([
+      "run_id: A seal goes to kozod's own log",
+    ]);
   });
 
   test("a tool result keeps either its output or a path to it", () => {
@@ -133,6 +143,11 @@ describe("parseEvent", () => {
     expect(issuesOf(line("gates.result", { level: "full", status: "fail" }))[0]).toStartWith(
       "data.failed:",
     );
+  });
+
+  test("prev is a SHA-256 or null", () => {
+    expect(issuesOf(line("checkpoint", { head: null }, { prev: "abc" }))[0]).toStartWith("prev:");
+    expect(parseEvent(line("checkpoint", { head: null }, { prev: "0".repeat(64) })).ok).toBe(true);
   });
 
   test("a line that is not JSON is an issue on the document", () => {
