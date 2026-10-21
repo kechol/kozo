@@ -59,12 +59,15 @@ export async function resolveRange(cwd: string, base: string, head: string) {
 }
 
 /**
- * Whether a path matches any of the globs. A glob also covers everything under the directory it
- * names, so `db/migrations` and `db/migrations/` mean `db/migrations/**`, as a person writing a
- * protected path or a scope means them.
+ * Whether a path matches any of the globs. A pattern without glob syntax names a file or a
+ * directory and also covers everything under it, so `db/migrations` and `db/migrations/` mean
+ * `db/migrations/**`, as a person writing a protected path or a scope means them. A pattern with
+ * glob syntax keeps its exact meaning, so `src/*.test.ts` does not make every file under a
+ * directory named `src/a.test.ts` a test.
  */
 export function globMatcher(patterns: readonly string[]) {
   const globs = patterns.flatMap((pattern) => {
+    if (/[*?[\]{}!\\]/.test(pattern)) return [new Bun.Glob(pattern)];
     const trimmed = pattern.replace(/\/+$/, "");
     return [new Bun.Glob(trimmed), new Bun.Glob(`${trimmed}/**`)];
   });
