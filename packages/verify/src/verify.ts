@@ -1,4 +1,5 @@
-import { copyFile, mkdir, realpath } from "node:fs/promises";
+import { constants } from "node:fs";
+import { mkdir, open, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import {
   type VerdictFile,
@@ -130,10 +131,23 @@ export async function writeVerifyVerdict(
   record: VerifyRecord,
 ): Promise<string> {
   for (const path of record.conditions.flatMap((condition) => condition.evidence)) {
-    const { source, inside } = await resolveEvidence(cwd, path);
-    const target = join(dir, "evidence", inside);
-    await mkdir(dirname(target), { recursive: true });
-    await copyFile(source, target);
+    const { source, inside, identity } = await resolveEvidence(cwd, path);
+    // The file is opened without following a final link and must still be the file resolved
+    // above, so a link swapped in after the check cannot redirect the copy.
+    const handle = await open(source, constants.O_RDONLY | constants.O_NOFOLLOW).catch(() => null);
+    if (handle === null)
+      throw new SessionError(`evidence file ${path} changed while it was copied`);
+    try {
+      const opened = await handle.stat();
+      if (!opened.isFile() || opened.ino !== identity.ino || opened.dev !== identity.dev) {
+        throw new SessionError(`evidence file ${path} changed while it was copied`);
+      }
+      const target = join(dir, "evidence", inside);
+      await mkdir(dirname(target), { recursive: true });
+      await Bun.write(target, await handle.readFile());
+    } finally {
+      await handle.close();
+    }
   }
   const verdictPath = join(dir, "verdict.json");
   const file = Bun.file(verdictPath);
@@ -156,7 +170,9 @@ async function resolveEvidence(cwd: string, path: string) {
   if (inside.startsWith("..") || isAbsolute(inside)) {
     throw new SessionError(`evidence file ${path} is outside the worktree`);
   }
-  return { source, inside };
+  const identity = await stat(source);
+  if (!identity.isFile()) throw new SessionError(`evidence file ${path} is not a regular file`);
+  return { source, inside, identity };
 }
 
 /** The single line by which kozod reads verify; it is always the last line printed. */

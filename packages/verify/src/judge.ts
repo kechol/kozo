@@ -30,6 +30,23 @@ export interface Verifier {
 
 export class SessionError extends Error {}
 
+// What claude needs to run and to sign in. Everything else, GitHub tokens and cloud credentials
+// included, stays out of the session and of the shell it starts.
+const sessionEnvironment = [
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "TMPDIR",
+  "LANG",
+  "LC_ALL",
+  "TERM",
+  "ANTHROPIC_API_KEY",
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "CLAUDE_CONFIG_DIR",
+];
+
 /**
  * A judge that runs the user's own `claude` through the Agent SDK. The session has no tools and
  * starts in an empty directory, so content in the prompt can only influence the answer.
@@ -47,8 +64,9 @@ export function claudeJudge(executable: string): Judge {
   };
 }
 
-// Read-only tools plus the shell; the shell runs inside the sandbox below.
-const verifyTools = ["Bash", "Read", "Glob", "Grep"];
+// Only the shell, because only the shell runs inside the sandbox below; Read, Glob and Grep run
+// in Claude Code's own process and could read outside the worktree.
+const verifyTools = ["Bash"];
 
 // Credentials a verify session never needs; the sandbox denies reading them from the shell.
 const credentialPaths = [
@@ -62,9 +80,10 @@ const credentialPaths = [
 ];
 
 /**
- * A verifier that runs the user's own `claude` in the worktree. Shell commands run in Claude
- * Code's sandbox: writes stay inside the worktree, the network reaches only this machine, and
- * the credential files above cannot be read. A sandbox that cannot start fails the session.
+ * A verifier that runs the user's own `claude` in the worktree with the shell as its only tool.
+ * Shell commands run in Claude Code's sandbox: writes stay inside the worktree, the network
+ * reaches only this machine, and the credential files above cannot be read. A sandbox that
+ * cannot start fails the session.
  */
 export function claudeVerifier(executable: string): Verifier {
   return {
@@ -92,15 +111,19 @@ export function claudeVerifier(executable: string): Verifier {
 }
 
 /**
- * Runs one session with no setting sources, CLAUDE.md, MCP servers or transcript, and without
- * GitHub tokens in its environment, and returns its structured output.
+ * Runs one session with no setting sources, CLAUDE.md, MCP servers or transcript, and returns
+ * its structured output. The session gets only the environment it needs to run and to sign in.
  */
 async function runSession(
   executable: string,
   request: SessionRequest,
   session: Pick<Options, "cwd" | "maxTurns" | "permissionMode" | "sandbox"> & { tools: string[] },
 ): Promise<SessionAnswer> {
-  const { GH_TOKEN: _, GITHUB_TOKEN: __, ...env } = process.env;
+  const env = Object.fromEntries(
+    sessionEnvironment
+      .filter((name) => process.env[name] !== undefined)
+      .map((name) => [name, process.env[name]]),
+  );
   try {
     let answer: SessionAnswer | undefined;
     for await (const message of query({
