@@ -1,6 +1,13 @@
 import { parseArgs } from "node:util";
 import { gateLevelSchema } from "@kozo/core";
-import { diffGuardLine, gatesLine, runDiffGuard, runGates } from "@kozo/verify";
+import {
+  diffGuardLine,
+  gatesLine,
+  proveLine,
+  runDiffGuard,
+  runGates,
+  runProve,
+} from "@kozo/verify";
 import pkg from "../package.json" with { type: "json" };
 
 export const ExitCode = { success: 0, failure: 1, usage: 2 } as const;
@@ -21,6 +28,9 @@ Commands:
   diff-guard --base <ref> [--head <ref>] [--scope <glob>]... [--json]
       Check the diff from the merge base of <ref> to <head> (default HEAD)
       against the Charter and constraints at the tip of <ref>
+  prove --base <ref> [--json]
+      Require the changed tests to pass at HEAD and to fail with the
+      non-test changes reverted in place; the worktree must be clean
 
 Options:
   --version  Print the version`;
@@ -37,6 +47,7 @@ export async function run(
   }
   if (command === "gates") return await gates(rest, out, cwd);
   if (command === "diff-guard") return await diffGuard(rest, out, cwd);
+  if (command === "prove") return await prove(rest, out, cwd);
   return usage(out, command === undefined ? undefined : `unknown command '${command}'`);
 }
 
@@ -92,6 +103,30 @@ async function diffGuard(args: readonly string[], out: Output, cwd: string): Pro
     log: values.json ? out.rawStderr : out.rawStdout,
   });
   const line = diffGuardLine(result);
+  if (values.json) out.stdout(JSON.stringify({ ...result, line }));
+  else out.stdout(line);
+  return result.status === "pass" ? ExitCode.success : ExitCode.failure;
+}
+
+async function prove(args: readonly string[], out: Output, cwd: string): Promise<number> {
+  let values: { base?: string; json?: boolean };
+  try {
+    ({ values } = parseArgs({
+      args: [...args],
+      options: { base: { type: "string" }, json: { type: "boolean" } },
+      strict: true,
+    }));
+  } catch (error) {
+    return usage(out, (error as Error).message);
+  }
+  if (values.base === undefined) return usage(out, "prove needs --base <ref>");
+
+  const result = await runProve({
+    cwd,
+    base: values.base,
+    log: values.json ? out.rawStderr : out.rawStdout,
+  });
+  const line = proveLine(result);
   if (values.json) out.stdout(JSON.stringify({ ...result, line }));
   else out.stdout(line);
   return result.status === "pass" ? ExitCode.success : ExitCode.failure;

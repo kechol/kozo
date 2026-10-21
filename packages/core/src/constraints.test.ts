@@ -58,6 +58,7 @@ describe("parseConstraints", () => {
         tests: ["**/*.test.ts"],
         gates: { lint: { run: "bun run check" } },
         levels: { fast: ["lint"] },
+        prove: [],
       },
     });
   });
@@ -66,6 +67,22 @@ describe("parseConstraints", () => {
     expect(issuesOf(sampleShop.replace(/tests:\n( {2}- .*\n)+/, ""))[0]).toStartWith("tests:");
     expect(issuesOf(sampleShop.replace(/tests:\n( {2}- .*\n)+/, "tests: []\n"))[0]).toStartWith(
       "tests:",
+    );
+  });
+
+  test("prove entries need test globs and a {files} placeholder", () => {
+    const withProve = (entry: string) => `${sampleShop}prove:\n${entry}`;
+    const result = parseConstraints(
+      withProve('  - files: ["src/**/*.test.ts"]\n    run: pnpm vitest run {files}\n'),
+    );
+    expect(result.ok && result.value.prove).toEqual([
+      { files: ["src/**/*.test.ts"], run: "pnpm vitest run {files}" },
+    ]);
+    expect(
+      issuesOf(withProve('  - files: ["src/**/*.test.ts"]\n    run: pnpm vitest run\n')),
+    ).toEqual(["prove.0.run: Put {files} where the test files go"]);
+    expect(issuesOf(withProve("  - files: []\n    run: x {files}\n"))[0]).toStartWith(
+      "prove.0.files:",
     );
   });
 

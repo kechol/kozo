@@ -21,6 +21,14 @@ export const constraintsSchema = z
     tests: z.array(z.string().min(1)).nonempty(),
     gates: z.record(gateName, z.strictObject({ run: z.string().min(1) })),
     levels: z.partialRecord(gateLevelSchema, levelGates),
+    prove: z
+      .array(
+        z.strictObject({
+          files: z.array(z.string().min(1)).nonempty(),
+          run: z.string().includes("{files}", { message: "Put {files} where the test files go" }),
+        }),
+      )
+      .default([]),
   })
   .superRefine((constraints, context) => {
     for (const [level, names] of Object.entries(constraints.levels)) {

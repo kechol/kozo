@@ -102,3 +102,30 @@ describe("kozo diff-guard", () => {
     );
   });
 });
+
+describe("kozo prove", () => {
+  test("needs --base", async () => {
+    const result = await capture(["prove"]);
+    expect(result.code).toBe(ExitCode.usage);
+    expect(result.stderr).toContain("prove needs --base <ref>");
+  });
+
+  test("proves a change and ends with its line", async () => {
+    await using repo = await gitRepository();
+    const base = await repo.commit({
+      ".kozo/charter.yml": exampleCharter,
+      ".kozo/constraints.yml": [
+        "version: 1",
+        "tests: ['tests/**']",
+        "gates: {}",
+        "levels: {}",
+        "prove: [{ files: ['tests/*.sh'], run: 'sh {files}' }]",
+      ].join("\n"),
+      "value.txt": "1\n",
+    });
+    await repo.commit({ "value.txt": "2\n", "tests/value.sh": 'test "$(cat value.txt)" = 2\n' });
+    const result = await capture(["prove", "--base", base], repo.path);
+    expect(result.code).toBe(ExitCode.success);
+    expect(result.stdout).toBe("KOZO_PROVE: status=pass tests=1 reverted=1");
+  });
+});
