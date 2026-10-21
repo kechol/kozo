@@ -129,3 +129,16 @@ describe("kozo prove", () => {
     expect(result.stdout).toBe("KOZO_PROVE: status=pass tests=1 reverted=1");
   });
 });
+
+describe("kozo review", () => {
+  test("needs --base, --goal and --done-when", async () => {
+    const result = await capture(["review", "--base", "main", "--goal", "x"]);
+    expect(result.code).toBe(ExitCode.usage);
+    expect(result.stderr).toContain("at least one --done-when");
+  });
+
+  test("rejects a cost limit that is not a positive number", async () => {
+    const args = ["review", "--base", "main", "--goal", "x", "--done-when", "y", "--max-cost", "0"];
+    expect((await capture(args)).code).toBe(ExitCode.usage);
+  });
+});
