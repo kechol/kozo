@@ -2,7 +2,9 @@ export class GitError extends Error {}
 
 /** Runs git in `cwd` and returns its stdout; a non-zero exit throws a GitError carrying stderr. */
 export async function git(cwd: string, args: readonly string[]): Promise<string> {
-  const child = Bun.spawn(["git", ...args], {
+  // A developer's core.fsmonitor starts a daemon per repository, which costs each new worktree
+  // a few hundred milliseconds and adds nothing to one-off reads.
+  const child = Bun.spawn(["git", "-c", "core.fsmonitor=false", ...args], {
     cwd,
     stdin: "ignore",
     stdout: "pipe",
