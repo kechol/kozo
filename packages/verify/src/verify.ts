@@ -13,7 +13,7 @@ import { resolveBase, resolveCommit } from "./changes.ts";
 import { guarded } from "./command.ts";
 import { GitError, showFile } from "./git.ts";
 import { parseAnswer, type SessionAnswer, SessionError, type Verifier } from "./judge.ts";
-import { stopProcessesIn } from "./processes.ts";
+import { runningProcesses, stopProcessesIn } from "./processes.ts";
 import { updateVerdictFile } from "./verdict-file.ts";
 
 export const verifyAgent = parseAgentDefinition(verifyDefinition);
@@ -52,7 +52,7 @@ async function verify(options: VerifyOptions): Promise<VerifyResult> {
     return { status: "MISCONFIGURED", reason: "verify-app-missing" };
   }
   const head = await resolveCommit(cwd, "HEAD");
-  const started = new Date();
+  const before = await runningProcesses();
   let answer: SessionAnswer;
   try {
     answer = await options.verifier.verify({
@@ -64,7 +64,7 @@ async function verify(options: VerifyOptions): Promise<VerifyResult> {
       maxCostUsd: options.maxCostUsd,
     });
   } finally {
-    const stopped = await stopProcessesIn(cwd, started);
+    const stopped = await stopProcessesIn(cwd, before);
     if (stopped.length > 0)
       log(`kozo: stopped processes left in the worktree: ${stopped.join(", ")}\n`);
   }

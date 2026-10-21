@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { tempDirectory } from "@kozo/testing";
-import { stopProcessesIn } from "./processes.ts";
+import { runningProcesses, stopProcessesIn } from "./processes.ts";
 
 function sleeper(cwd: string) {
   return Bun.spawn(["sleep", "60"], { cwd, stdout: "ignore", stderr: "ignore" });
@@ -23,8 +23,8 @@ describe("stopProcessesIn", () => {
     const script = `${dir.path}/stop.ts`;
     await Bun.write(
       script,
-      `import { stopProcessesIn } from ${JSON.stringify(`${import.meta.dir}/processes.ts`)};\n` +
-        "console.log(JSON.stringify(await stopProcessesIn(process.cwd(), new Date(Date.now() - 60_000))));\n",
+      `import { runningProcesses, stopProcessesIn } from ${JSON.stringify(`${import.meta.dir}/processes.ts`)};\n` +
+        "console.log(JSON.stringify(await stopProcessesIn(process.cwd(), await runningProcesses())));\n",
     );
     // A shell in the directory starts the script, as a human's terminal or a tool would.
     const shell = Bun.spawn(
@@ -39,15 +39,15 @@ describe("stopProcessesIn", () => {
     expect(output).toContain("shell-survived");
   });
 
-  test("stops processes started in the directory since the given time", async () => {
+  test("stops processes started in the directory after the snapshot", async () => {
     await using dir = await tempDirectory({ "sub/.keep": "" });
     await using elsewhere = await tempDirectory();
-    const since = new Date();
+    const before = await runningProcesses();
     const inside = sleeper(`${dir.path}/sub`);
     const outside = sleeper(elsewhere.path);
     await listed(inside.pid);
     try {
-      const stopped = await stopProcessesIn(dir.path, since);
+      const stopped = await stopProcessesIn(dir.path, before);
       expect(stopped).toEqual([inside.pid]);
       expect(await inside.exited).not.toBe(0);
       expect(outside.exitCode).toBeNull();
@@ -59,14 +59,13 @@ describe("stopProcessesIn", () => {
 
   test("leaves processes that were already running", async () => {
     await using dir = await tempDirectory();
-    const before = sleeper(dir.path);
+    const earlier = sleeper(dir.path);
     try {
-      // ps reports age in whole seconds, so the sleeper must be at least one second old.
-      await Bun.sleep(1500);
-      expect(await stopProcessesIn(dir.path, new Date())).toEqual([]);
-      expect(before.exitCode).toBeNull();
+      await listed(earlier.pid);
+      expect(await stopProcessesIn(dir.path, await runningProcesses())).toEqual([]);
+      expect(earlier.exitCode).toBeNull();
     } finally {
-      before.kill();
+      earlier.kill();
     }
   });
 });
