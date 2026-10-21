@@ -129,7 +129,7 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
   const runByGates = await includedFiles(
     gateFiles([...gateCommands, ...reachedScripts(gateCommands, rootScripts)]),
     (path: string) => showFile(cwd, mergeBase, path).catch(() => null),
-    baseFiles,
+    [...baseFiles, ...files.map((file) => file.path)],
   );
   for (const file of files) {
     const gate = runByGates.get(file.path);

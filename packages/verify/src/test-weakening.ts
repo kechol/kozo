@@ -308,32 +308,33 @@ export interface GateFile {
  */
 export function gateFiles(gateCommands: readonly string[]): Map<string, GateFile> {
   const files = new Map<string, GateFile>();
+  const at = (base: string, path: string) => clean(posix.join(base, path));
   for (const command of gateCommands) {
-    let directory = ".";
+    // A cd inside a subshell or a substitution affects only its group, which this split cannot
+    // see, so every directory the command moves to counts for every later command in it.
+    const directories = new Set(["."]);
     for (const segment of command.split(/&&|\|\||\$\(|[;|&()`]/)) {
       const words = segment.trim().split(/\s+/).filter(Boolean);
       if (words[0] === "cd" && words[1]) {
-        directory = clean(posix.join(directory, words[1]));
+        for (const directory of [...directories]) directories.add(at(directory, words[1]));
         continue;
       }
-      const at = (base: string, path: string) => clean(posix.join(base, path));
-      words.forEach((word, index) => {
-        const path = clean(word);
-        if (
-          !path.startsWith("-") &&
-          !path.includes("=") &&
-          (path.includes("/") || scriptLike.test(path))
-        ) {
-          files.set(at(directory, path), { command, directory });
-        }
-        const runner = runners[path.split("/").at(-1) ?? ""];
-        if (!runner) return;
-        const rest = words.slice(index + 1);
-        const runIn = at(directory, optionValues(rest, runner.directory).at(-1) ?? ".");
-        for (const name of [...runner.files, ...optionValues(rest, runner.file)]) {
-          files.set(at(runIn, name), { command, directory: runIn });
-        }
-      });
+      for (const directory of directories) {
+        words.forEach((word, index) => {
+          const path = clean(word);
+          const pathLike = path.includes("/") || scriptLike.test(path);
+          if (!path.startsWith("-") && !path.includes("=") && pathLike) {
+            files.set(at(directory, path), { command, directory });
+          }
+          const runner = runners[path.split("/").at(-1) ?? ""];
+          if (!runner) return;
+          const rest = words.slice(index + 1);
+          const runIn = at(directory, optionValues(rest, runner.directory).at(-1) ?? ".");
+          for (const name of [...runner.files, ...optionValues(rest, runner.file)]) {
+            files.set(at(runIn, name), { command, directory: runIn });
+          }
+        });
+      }
     }
   }
   return files;
@@ -362,12 +363,12 @@ export function reachedScripts(
  * The files that gate files load in turn: a Makefile's include, a shell script's source or
  * dot, followed from `files` as they are at the base, a few levels deep. Each operand is read
  * from the directory the gate runs in and from the including file's own, and a glob is matched
- * against the base's files.
+ * against `knownFiles`: the base's files and the diff's, since an added file can match it too.
  */
 export async function includedFiles(
   files: Map<string, GateFile>,
   read: (path: string) => Promise<string | null>,
-  baseFiles: readonly string[] = [],
+  knownFiles: readonly string[] = [],
 ): Promise<Map<string, GateFile>> {
   const all = new Map(files);
   let frontier = [...files.keys()];
@@ -385,7 +386,7 @@ export async function includedFiles(
           ].map(clean);
           const expanded = candidates.flatMap((candidate) =>
             /[*?[]/.test(candidate)
-              ? baseFiles.filter((file) => new Bun.Glob(candidate).match(file))
+              ? knownFiles.filter((file) => new Bun.Glob(candidate).match(file))
               : [candidate],
           );
           for (const included of expanded) {

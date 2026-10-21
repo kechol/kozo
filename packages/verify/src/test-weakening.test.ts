@@ -398,6 +398,7 @@ describe("gateFiles", () => {
       "check.py",
       "ci.mk",
       "justfile",
+      "run.sh",
       "scripts/lint.sh",
       "tools/run.sh",
       "web/GNUmakefile",
@@ -406,11 +407,15 @@ describe("gateFiles", () => {
     ]);
     expect(files.get("scripts/lint.sh")?.command).toBe("sh scripts/lint.sh");
     expect([...gateFiles(["(cd web && make test)", "echo $(sh ./gen.sh)"]).keys()].sort()).toEqual([
+      "GNUmakefile",
+      "Makefile",
       "gen.sh",
+      "makefile",
       "web/GNUmakefile",
       "web/Makefile",
       "web/makefile",
     ]);
+    expect([...gateFiles(["(cd web && make lint) && make test"]).keys()]).toContain("Makefile");
   });
 
   test("follows the package.json scripts a gate runs and the files gate files include", async () => {
