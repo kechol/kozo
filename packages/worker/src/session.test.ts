@@ -31,6 +31,7 @@ async function suite() {
       protectedPaths: [".kozo/**"],
       existingTests: ["src/stock.test.ts"],
       tests: ["**/*.test.ts"],
+      baseFiles: Object.keys(suiteBase),
       writable: true,
     },
     sandbox: { denyRead: [], allowRead: [], allowWrite: [], denyWrite: [] },

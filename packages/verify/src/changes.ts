@@ -129,3 +129,19 @@ export async function changedFiles(
   }
   return files;
 }
+
+// A file named like one test case, which a runner picks up as tests and not as setup.
+const testCaseName =
+  /(?:\.(?:test|spec)\.[cm]?[jt]sx?|_test\.(?:go|py)|_spec\.rb)$|(?:^|\/)test_[^/]+\.py$/;
+// Files a runner loads for every test, so a new one could change how existing tests behave.
+const autoLoaded =
+  /(?:^|\/)(?:conftest\.py|__init__\.py|__mocks__\/|setup[^/]*|global[-_.]?(?:setup|teardown)[^/]*|vitest\.config[^/]*|jest\.config[^/]*|playwright\.config[^/]*)/;
+
+/**
+ * Whether a path the diff adds may stand outside the task's scope as a new test: it matches the
+ * constraints' test globs, is named like a single test case, and is none of the files a test
+ * runner loads for every test.
+ */
+export function isNewTestCase(path: string, tests: readonly string[]): boolean {
+  return globMatcher(tests)(path) && testCaseName.test(path) && !autoLoaded.test(path);
+}

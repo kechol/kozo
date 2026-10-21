@@ -79,15 +79,18 @@ describe("runDiffGuard", () => {
     ]);
   });
 
-  test("a new test file may sit outside the scope, an edited one may not", async () => {
+  test("a new test case may sit outside the scope, a new setup file may not", async () => {
     const { repo, base } = await repository();
     await using _ = repo;
     await repo.commit({
       "src/cart.ts": "export const cart = 2;\n",
       "tests/cart-total.test.ts": "test\n",
+      "tests/setup.ts": "globalThis.x = 1;\n",
     });
     const { result } = await guard(repo.path, base, ["src/**"]);
-    expect("violations" in result && result.violations).toEqual([]);
+    expect("violations" in result && result.violations).toEqual([
+      { kind: "out-of-scope", path: "tests/setup.ts" },
+    ]);
   });
 
   test("a protected path is a violation, including a new file under it", async () => {

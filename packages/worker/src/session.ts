@@ -31,6 +31,8 @@ export const workerSpecSchema = z.strictObject({
     existingTests: z.array(z.string()),
     /** The constraints' test globs, under which new test files may go outside the scope. */
     tests: z.array(z.string()),
+    /** Every file at the base, to tell a new test case from an existing file. */
+    baseFiles: z.array(z.string()),
     /** False for an agent that only reads, which may write nowhere. */
     writable: z.boolean(),
   }),
@@ -152,6 +154,7 @@ export async function runSession(
     protectedPaths: spec.policy.protectedPaths,
     existingTests: new Set(spec.policy.existingTests),
     tests: spec.policy.writable ? spec.policy.tests : undefined,
+    baseFiles: new Set(spec.policy.baseFiles),
   };
   const sandbox: SandboxPaths = spec.sandbox;
 

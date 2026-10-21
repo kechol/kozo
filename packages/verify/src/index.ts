@@ -1,5 +1,5 @@
 export * from "./base-documents.ts";
-export { globMatcher, protectedPathMatcher } from "./changes.ts";
+export { globMatcher, isNewTestCase, protectedPathMatcher } from "./changes.ts";
 export { commandEnvironmentFrom, runCommand } from "./command.ts";
 export * from "./diff-guard.ts";
 export * from "./gates.ts";

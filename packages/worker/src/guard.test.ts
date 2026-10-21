@@ -25,7 +25,8 @@ async function withPolicy(run: (policy: TaskPolicy, root: string) => Promise<voi
       scope: ["src/**", "tests/new/**"],
       protectedPaths: ["src/auth/**", ".kozo/**"],
       existingTests: new Set(["src/cart.test.ts"]),
-      tests: ["**/*.test.ts"],
+      tests: ["**/*.test.ts", "tests/**"],
+      baseFiles: new Set(["src/cart.test.ts", "src/cart.ts"]),
     },
     dir.path,
   );

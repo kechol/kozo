@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { globMatcher, protectedPathMatcher } from "./changes.ts";
+import { globMatcher, isNewTestCase, protectedPathMatcher } from "./changes.ts";
 
 describe("globMatcher", () => {
   test("a path without glob syntax covers the file or directory it names", () => {
@@ -40,5 +40,30 @@ describe("globMatcher on a literal path with glob syntax", () => {
     expect(matches("src/app/products/[slug]/page.tsx")).toBe(true);
     expect(matches("src/app/products/s/page.tsx")).toBe(true);
     expect(matches("src/app/products/[slug]/page.tsx/x")).toBe(false);
+  });
+});
+
+describe("isNewTestCase", () => {
+  test("takes files named like one test case and none that a runner loads for every test", () => {
+    const tests = ["**/*.test.ts", "tests/**", "e2e/**", "**/test_*.py", "**/*_test.go"];
+    for (const path of [
+      "tests/cart.test.ts",
+      "e2e/back-link.spec.ts",
+      "pkg/test_cart.py",
+      "cart_test.go",
+    ]) {
+      expect({ path, ok: isNewTestCase(path, tests) }).toEqual({ path, ok: true });
+    }
+    for (const path of [
+      "tests/helper.ts",
+      "tests/conftest.py",
+      "tests/setup.ts",
+      "tests/global-setup.ts",
+      "e2e/playwright.config.ts",
+      "tests/__mocks__/db.test.ts",
+      "src/cart.ts",
+    ]) {
+      expect({ path, ok: isNewTestCase(path, tests) }).toEqual({ path, ok: false });
+    }
   });
 });
