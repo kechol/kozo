@@ -326,15 +326,15 @@ function analyzeGit(args: Word[], context: Analysis): GuardDecision {
   if (subcommand.dynamic) return refuse("a git subcommand built from an expansion");
   const name = subcommand.text;
   const rest = words.map((word) => word.text);
-  // An argument built from an expansion could turn into any option. Only the value of a
-  // message flag, as in git commit -m "$(cat <<EOF ...)", and paths after -- may be dynamic.
-  const paths = rest.indexOf("--");
-  const dynamicOption = words.findIndex(
-    (word, index) =>
-      word.dynamic &&
-      (paths === -1 || index < paths) &&
-      !/^(-m|--message|-F|--file)$/.test(rest[index - 1] ?? ""),
-  );
+  // An argument built from an expansion could turn into any option. Only paths after a literal
+  // --, and the message of git commit or git stash, as in commit -m "$(cat <<EOF ...)", may be.
+  const paths = words.findIndex((word) => !word.dynamic && word.text === "--");
+  const takesMessage = name === "commit" || name === "stash";
+  const dynamicOption = words.findIndex((word, index) => {
+    if (!word.dynamic || (paths !== -1 && index > paths)) return false;
+    const flag = words[index - 1];
+    return !(takesMessage && flag && !flag.dynamic && /^(-m|--message|-F|--file)$/.test(flag.text));
+  });
   if (dynamicOption !== -1) return refuse(`git ${name}: an argument built from an expansion`);
   const reason = gitRefusedReasons[name];
   if (reason) return refuse(`git ${name}: ${reason}`);

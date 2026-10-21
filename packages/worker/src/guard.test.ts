@@ -150,6 +150,8 @@ describe("guardToolCall", () => {
         "git grep --open-files foo",
         'git grep "-$X" foo',
         "git log $OPTS",
+        'git grep -F "$X" src',
+        'git diff "$SEP" "$X"',
         "git help -w push",
         "sleep 10 &",
         "nohup bun run dev",
