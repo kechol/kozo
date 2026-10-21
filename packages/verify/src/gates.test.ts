@@ -4,6 +4,7 @@ import { constraintsPath, gatesLine, runGates } from "./gates.ts";
 
 const constraints = `
 version: 1
+tests: ["**/*.test.ts"]
 gates:
   greet:
     run: printf 'hello'

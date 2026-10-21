@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { tempDirectory } from "@kozo/testing";
+import { exampleCharter, gitRepository, tempDirectory } from "@kozo/testing";
 import pkg from "../package.json" with { type: "json" };
 import { ExitCode, run } from "./index.ts";
 
@@ -41,7 +41,8 @@ describe("kozo", () => {
 });
 
 describe("kozo gates", () => {
-  const constraints = "version: 1\ngates:\n  ok:\n    run: echo fine\nlevels:\n  full: [ok]\n";
+  const constraints =
+    "version: 1\ntests: [t.ts]\ngates:\n  ok:\n    run: echo fine\nlevels:\n  full: [ok]\n";
 
   test("runs the full level by default and ends with the KOZO_GATES line", async () => {
     await using dir = await tempDirectory({ ".kozo/constraints.yml": constraints });
@@ -69,5 +70,35 @@ describe("kozo gates", () => {
   test("an unknown level or option is a usage error", async () => {
     expect((await capture(["gates", "--level", "medium"])).code).toBe(ExitCode.usage);
     expect((await capture(["gates", "--fast"])).code).toBe(ExitCode.usage);
+  });
+});
+
+describe("kozo diff-guard", () => {
+  test("needs --base", async () => {
+    const result = await capture(["diff-guard"]);
+    expect(result.code).toBe(ExitCode.usage);
+    expect(result.stderr).toContain("diff-guard needs --base <ref>");
+  });
+
+  test("checks the diff against the base Charter and ends with its line", async () => {
+    await using repo = await gitRepository();
+    const base = await repo.commit({
+      ".kozo/charter.yml": exampleCharter,
+      ".kozo/constraints.yml": "version: 1\ntests: ['**/*.test.ts']\ngates: {}\nlevels: {}\n",
+    });
+    await repo.commit({ "src/a.ts": "1\n", ".github/ci.yml": "on: push\n" });
+    const result = await capture(
+      ["diff-guard", "--base", base, "--scope", "src/**", "--json"],
+      repo.path,
+    );
+    expect(result.code).toBe(ExitCode.failure);
+    const document = JSON.parse(result.stdout);
+    expect(document.violations.map((violation: { kind: string }) => violation.kind)).toEqual([
+      "out-of-scope",
+      "protected-path",
+    ]);
+    expect(document.line).toBe(
+      "KOZO_DIFF_GUARD: status=fail lines=2/400 files=2/8 violations=out-of-scope,protected-path",
+    );
   });
 });

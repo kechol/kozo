@@ -22,7 +22,8 @@ export interface GatesOptions {
   log(text: string): void;
 }
 
-export const constraintsPath = join(".kozo", "constraints.yml");
+// A repository path, used both on disk and inside git commits.
+export const constraintsPath = ".kozo/constraints.yml";
 
 export async function runGates({ cwd, level, log }: GatesOptions): Promise<GatesResult> {
   const started = performance.now();

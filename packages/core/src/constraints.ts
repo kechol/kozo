@@ -17,6 +17,8 @@ export const constraintsSchema = z
   .strictObject({
     version: z.literal(1),
     prepare: z.array(z.string().min(1)).default([]),
+    // Required: a guessed default could miss test helpers and let a diff edit them unnoticed.
+    tests: z.array(z.string().min(1)).nonempty(),
     gates: z.record(gateName, z.strictObject({ run: z.string().min(1) })),
     levels: z.partialRecord(gateLevelSchema, levelGates),
   })

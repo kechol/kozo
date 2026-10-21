@@ -6,6 +6,11 @@ version: 1
 prepare:
   - pnpm install --frozen-lockfile
   - pnpm db:up
+tests:
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
+  - "e2e/**"
+  - "tests/**"
 gates:
   typecheck:
     run: pnpm typecheck
@@ -41,19 +46,27 @@ describe("parseConstraints", () => {
     expect(result.value.levels.full).toEqual(["typecheck", "lint", "unit", "integration", "build"]);
   });
 
-  test("prepare and levels may be left out", () => {
+  test("prepare may be left out", () => {
     const result = parseConstraints(
-      "version: 1\ngates:\n  lint:\n    run: bun run check\nlevels:\n  fast: [lint]\n",
+      "version: 1\ntests: ['**/*.test.ts']\ngates:\n  lint:\n    run: bun run check\nlevels:\n  fast: [lint]\n",
     );
     expect(result).toEqual({
       ok: true,
       value: {
         version: 1,
         prepare: [],
+        tests: ["**/*.test.ts"],
         gates: { lint: { run: "bun run check" } },
         levels: { fast: ["lint"] },
       },
     });
+  });
+
+  test("a missing or empty tests list is an issue", () => {
+    expect(issuesOf(sampleShop.replace(/tests:\n( {2}- .*\n)+/, ""))[0]).toStartWith("tests:");
+    expect(issuesOf(sampleShop.replace(/tests:\n( {2}- .*\n)+/, "tests: []\n"))[0]).toStartWith(
+      "tests:",
+    );
   });
 
   test("a level that names an undefined gate is an issue at its entry", () => {

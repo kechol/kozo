@@ -63,6 +63,7 @@
 | paused | The hold set when a human stops an item, a task or a run, or takes a task over. | `paused` | - | - |
 | plan | The single document that states an item's work class, risk tier, approach, DONE_WHEN and task split. | `kozo-plan:v1`, `plan.yml` | spec, work order | - |
 | question | The hold that waits for a human answer after `kozo_blocked`, an escalate verdict or a needed protected-path change. | `question`, `kozo say` | - | - |
+| scope | The path globs of a task outside which its diff may not change files. | `scope`, `--scope` | - | - |
 | stage | The position of an item or a task in the flow: Intake, Triage, Planning, Building, Reviewing, Handoff, Complete or Cancelled. | `stage`, `kozo:<stage>` | phase, status, step | - |
 | task | The unit that kozo cuts from an item so that it produces exactly one diff. | `<item>/t<n>` | subtask, ticket | - |
 | trusted requester | A requester whose items need no start approval: the owner in local mode, or in GitHub mode a user with write access who opened the Issue after the repository was registered. | - | - | - |
@@ -101,6 +102,7 @@
 | prove | The V3 check that reverts non-test changes and requires the new tests to fail. | `kozo prove` | - | - |
 | review | The V4 judge that sees only the diff and the original instructions in a separate session. | `review` | - | - |
 | review verdict | The recommendation that review returns: accept, revise or escalate. | `review.verdict` | - | - |
+| test file | A file that a `tests` glob in the constraints matches, which diff-guard and prove treat as a test. | `tests` | spec file | - |
 | verification layer | One of the five layers V1 to V5, ordered from the cheapest deterministic check to the costliest judgment. | `V1`–`V5` | - | - |
 | verify | The V5 judge that runs the app through verify-app, exercises DONE_WHEN and saves evidence. | `verify` | - | - |
 | verify-app | The per-repository procedure that starts the app, checks its state, operates it, collects evidence and cleans up. | `.kozo/verify-app.md` | - | - |
