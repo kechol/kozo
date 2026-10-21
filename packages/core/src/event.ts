@@ -1,0 +1,121 @@
+import { z } from "zod";
+import { gateLevelSchema } from "./constraints.ts";
+import { type ParseResult, parseJsonDocument } from "./document.ts";
+import { planSchema } from "./plan.ts";
+import {
+  formatItemReference,
+  itemReferenceSchema,
+  parseReference,
+  runReferenceSchema,
+  taskReferenceSchema,
+} from "./reference.ts";
+import { reviewVerdictSchema } from "./verdict.ts";
+import { agentNameSchema, holdKindSchema, runStateSchema, stageSchema } from "./work-model.ts";
+
+const text = z.string().min(1);
+const amount = z.number().nonnegative();
+const tokens = z.int().nonnegative();
+const costSchema = z.strictObject({ usd: amount, in: tokens, out: tokens, cache_read: tokens });
+/** Whether a stage or hold event is about the item or about the task of its line. */
+const target = z.enum(["item", "task"]);
+const actor = z.enum(["human", "kozod"]);
+
+const envelope = {
+  v: z.literal(1),
+  ts: z.iso.datetime(),
+  run_id: runReferenceSchema,
+  parent_run: runReferenceSchema.nullable(),
+  item: itemReferenceSchema,
+  task: taskReferenceSchema.nullable(),
+  /** The line's position in its run's log, counted from 0 without gaps. */
+  seq: z.int().nonnegative(),
+  node: text.nullable(),
+  /** What this event added to the run's cost; `cost.tick` carries the running total. */
+  cost: costSchema,
+};
+
+const event = <T extends string, D extends z.ZodType>(type: T, data: D) =>
+  z.strictObject({ ...envelope, type: z.literal(type), data });
+
+export const eventSchema = z
+  .discriminatedUnion("type", [
+    event(
+      "run.started",
+      z.strictObject({
+        agent: agentNameSchema,
+        model: text,
+        mode: z.enum(["local", "github"]),
+        /** The default-branch commit whose Charter the run follows. */
+        charter_commit: text,
+        factory_commit: text,
+      }),
+    ),
+    event(
+      "run.changed",
+      z.strictObject({ from: runStateSchema, to: runStateSchema, reason: text.optional() }),
+    ),
+    event(
+      "stage.changed",
+      z.strictObject({ target, from: stageSchema.nullable(), to: stageSchema }),
+    ),
+    event("hold.set", z.strictObject({ target, hold: holdKindSchema, reason: text })),
+    event(
+      "hold.cleared",
+      z.strictObject({ target, hold: holdKindSchema, by: actor, reason: text.optional() }),
+    ),
+    event("plan.proposed", z.strictObject({ plan: planSchema })),
+    event("plan.accepted", z.strictObject({ plan: planSchema, by: actor })),
+    event("node.enter", z.strictObject({ kind: z.enum(["D", "A"]) })),
+    event("node.exit", z.strictObject({ ok: z.boolean(), summary: text.optional() })),
+    event("agent.message", z.strictObject({ agent: agentNameSchema, text })),
+    event("tool.call", z.strictObject({ call_id: text, tool: text, input: z.unknown() })),
+    event(
+      "tool.result",
+      z
+        .strictObject({
+          call_id: text,
+          is_error: z.boolean(),
+          output: z.unknown().optional(),
+          /** A large output is stored beside the log, and only its path is kept here. */
+          output_path: text.optional(),
+        })
+        .refine(
+          (data) => (data.output === undefined) !== (data.output_path === undefined),
+          "Give either output or output_path",
+        ),
+    ),
+    event("instruction.delivered", z.strictObject({ queue_seq: tokens, text })),
+    /** `head` is the task branch's commit at the checkpoint, null before the branch exists. */
+    event("checkpoint", z.strictObject({ head: text.nullable() })),
+    event(
+      "gates.result",
+      z.discriminatedUnion("status", [
+        z.strictObject({ level: gateLevelSchema, status: z.literal("pass") }),
+        z.strictObject({ level: gateLevelSchema, status: z.literal("fail"), failed: text }),
+        z.strictObject({
+          level: gateLevelSchema,
+          status: z.literal("MISCONFIGURED"),
+          reason: text,
+        }),
+      ]),
+    ),
+    event("review.verdict", z.strictObject({ verdict: reviewVerdictSchema, summary: text })),
+    event(
+      "external.write",
+      z.strictObject({ target: z.enum(["github", "local"]), action: text, subject: text }),
+    ),
+    event("cost.tick", costSchema),
+  ])
+  .superRefine((line, context) => {
+    const task = line.task === null ? null : parseReference(line.task);
+    if (task?.kind === "task" && formatItemReference(task.item) !== line.item) {
+      context.addIssue({ code: "custom", path: ["task"], message: "The task is not of this item" });
+    }
+  });
+export type Event = z.infer<typeof eventSchema>;
+export type EventType = Event["type"];
+
+/** Parses one line of `events.jsonl`; an unknown version or type is an issue, never skipped. */
+export function parseEvent(line: string): ParseResult<Event> {
+  return parseJsonDocument(eventSchema, line);
+}

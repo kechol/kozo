@@ -1,0 +1,48 @@
+import { z } from "zod";
+
+// Values are lowercase because GitHub mode shows a stage as the label `kozo:<stage>`.
+export const stageSchema = z.enum([
+  "intake",
+  "triage",
+  "planning",
+  "building",
+  "reviewing",
+  "handoff",
+  "complete",
+  "cancelled",
+]);
+export type Stage = z.infer<typeof stageSchema>;
+
+export const holdKindSchema = z.enum([
+  "approval",
+  "question",
+  "attention",
+  "dependency",
+  "capacity",
+  "paused",
+]);
+export type HoldKind = z.infer<typeof holdKindSchema>;
+
+export const runStateSchema = z.enum([
+  "queued",
+  "running",
+  "paused",
+  "succeeded",
+  "failed",
+  "stopped",
+  "lost",
+]);
+export type RunState = z.infer<typeof runStateSchema>;
+
+export const riskTierSchema = z.enum(["low", "normal", "high"]);
+export type RiskTier = z.infer<typeof riskTierSchema>;
+
+export const agentNameSchema = z.enum([
+  "triage",
+  "plan",
+  "implement",
+  "review",
+  "verify",
+  "explorer",
+]);
+export type AgentName = z.infer<typeof agentNameSchema>;
