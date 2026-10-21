@@ -1,7 +1,7 @@
 import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { type BaseDocumentsProblem, readBaseDocuments } from "./base-documents.ts";
-import { changedFiles, diffCommand, literal, resolveCommit } from "./changes.ts";
+import { changedFiles, diffCommand, literal, resolveBase, resolveCommit } from "./changes.ts";
 import { runCommand, secondsSince } from "./command.ts";
 import { GitError, git } from "./git.ts";
 
@@ -50,7 +50,7 @@ export async function runProve(options: ProveOptions): Promise<ProveResult> {
 }
 
 async function prove({ cwd, base, log }: ProveOptions): Promise<ProveResult> {
-  const baseTip = await resolveCommit(cwd, base);
+  const baseTip = await resolveBase(cwd, base);
   const head = await resolveCommit(cwd, "HEAD");
   const mergeBase = (await git(cwd, ["merge-base", baseTip, head])).trim();
   const documents = await readBaseDocuments(cwd, baseTip);

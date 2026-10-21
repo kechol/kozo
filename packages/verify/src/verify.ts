@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import { mkdir, open, realpath, stat } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   type VerdictFile,
   type VerifyRecord,
@@ -15,7 +15,7 @@ import verifyAppSkill from "../../../templates/factory/skills/verify-app/SKILL.m
   type: "text",
 };
 import { parseAgentDefinition, parseSkill } from "./agent-definition.ts";
-import { resolveCommit } from "./changes.ts";
+import { resolveBase, resolveCommit } from "./changes.ts";
 import { GitError, showFile } from "./git.ts";
 import { SessionError, type Verifier } from "./judge.ts";
 import { stopProcessesIn } from "./processes.ts";
@@ -56,7 +56,7 @@ export async function runVerify(options: VerifyOptions): Promise<VerifyResult> {
 
 async function verify(options: VerifyOptions): Promise<VerifyResult> {
   const { cwd, log } = options;
-  const procedure = await showFile(cwd, await resolveCommit(cwd, options.base), verifyAppPath);
+  const procedure = await showFile(cwd, await resolveBase(cwd, options.base), verifyAppPath);
   if (procedure === null) {
     log(`kozo: ${verifyAppPath} is missing at ${options.base}\n`);
     return { status: "MISCONFIGURED", reason: "verify-app-missing" };
@@ -131,10 +131,13 @@ export async function writeVerifyVerdict(
   cwd: string,
   record: VerifyRecord,
 ): Promise<string> {
-  await mkdir(dir, { recursive: true });
   const root = await realpath(cwd);
-  const out = relative(root, await realpath(dir));
-  if (!out.startsWith("..") && !isAbsolute(out)) {
+  // Checked before anything is created, against the deepest part of the path that exists.
+  if (isInside(root, await realpathOfExisting(dir))) {
+    throw new SessionError("the verdict directory must be outside the worktree");
+  }
+  await mkdir(dir, { recursive: true });
+  if (isInside(root, await realpath(dir))) {
     throw new SessionError("the verdict directory must be outside the worktree");
   }
   for (const path of record.conditions.flatMap((condition) => condition.evidence)) {
@@ -174,16 +177,32 @@ async function resolveEvidence(cwd: string, path: string) {
   const root = await realpath(cwd);
   const source = await realpath(join(root, path)).catch(() => null);
   if (source === null) throw new SessionError(`evidence file ${path} does not exist`);
-  const inside = relative(root, source);
-  if (inside.startsWith("..") || isAbsolute(inside)) {
+  if (!isInside(root, source)) {
     throw new SessionError(`evidence file ${path} is outside the worktree`);
   }
+  const inside = relative(root, source);
   const identity = await stat(source);
   // A hard link would let a file elsewhere on the machine pose as one inside the worktree.
   if (!identity.isFile() || identity.nlink !== 1) {
     throw new SessionError(`evidence file ${path} is not a regular file with a single link`);
   }
   return { source, inside, identity };
+}
+
+/** Whether `path` is `root` or lies under it, compared by path components, not by prefix. */
+function isInside(root: string, path: string) {
+  const rest = relative(root, path);
+  return rest === "" || (!isAbsolute(rest) && rest.split(sep)[0] !== "..");
+}
+
+/** The real path of `path`, or of its deepest ancestor that exists, with the rest appended. */
+async function realpathOfExisting(path: string): Promise<string> {
+  const absolute = resolve(path);
+  const real = await realpath(absolute).catch(() => null);
+  if (real !== null) return real;
+  const parent = dirname(absolute);
+  if (parent === absolute) return absolute;
+  return join(await realpathOfExisting(parent), basename(absolute));
 }
 
 /** The single line by which kozod reads verify; it is always the last line printed. */

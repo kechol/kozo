@@ -280,3 +280,25 @@ describe("runDiffGuard against evasion", () => {
     ]);
   });
 });
+
+describe("runDiffGuard base refs", () => {
+  test("a tag named like the base branch cannot stand in for it", async () => {
+    const repo = await gitRepository();
+    await using _ = repo;
+    const loose = await repo.commit({
+      [charterPath]: charter.replace("max_files: 3", "max_files: 30"),
+      [constraintsPath]: constraints,
+    });
+    await repo.commit({ [charterPath]: charter });
+    await repo.git("tag", "main", loose);
+    await repo.git("switch", "--quiet", "-c", "task");
+    await repo.commit({
+      "src/a.ts": "1\n",
+      "src/b.ts": "1\n",
+      "src/c.ts": "1\n",
+      "src/d.ts": "1\n",
+    });
+    const { result } = await guard(repo.path, "main");
+    expect(kinds(result)).toEqual(["files"]);
+  });
+});

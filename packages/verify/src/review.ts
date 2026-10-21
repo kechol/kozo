@@ -11,7 +11,7 @@ import reviewDefinition from "../../../templates/factory/agents/review/agent.md"
   type: "text",
 };
 import { parseAgentDefinition } from "./agent-definition.ts";
-import { diffCommand, resolveCommit } from "./changes.ts";
+import { diffCommand, resolveBase, resolveCommit } from "./changes.ts";
 import { GitError, git } from "./git.ts";
 import { type Judge, SessionError } from "./judge.ts";
 
@@ -46,9 +46,7 @@ export async function runReview(options: ReviewOptions): Promise<ReviewResult> {
 async function review(options: ReviewOptions): Promise<ReviewRecord> {
   const { cwd, judge, model } = options;
   const head = await resolveCommit(cwd, "HEAD");
-  const base = (
-    await git(cwd, ["merge-base", await resolveCommit(cwd, options.base), head])
-  ).trim();
+  const base = (await git(cwd, ["merge-base", await resolveBase(cwd, options.base), head])).trim();
   const diff = await git(cwd, [...(await diffCommand(cwd)), "-U5", base, head, "--"]);
   if (diff.trim() === "") throw new SessionError("there is no diff to review");
 

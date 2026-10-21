@@ -1,5 +1,12 @@
 import { type BaseDocumentsProblem, readBaseDocuments } from "./base-documents.ts";
-import { type ChangedFile, changedFiles, diffCommand, literal, resolveCommit } from "./changes.ts";
+import {
+  type ChangedFile,
+  changedFiles,
+  diffCommand,
+  literal,
+  resolveBase,
+  resolveCommit,
+} from "./changes.ts";
 import { GitError, git, showFile } from "./git.ts";
 import { changedGateScripts, findTestWeakening, type TestWeakening } from "./test-weakening.ts";
 import { parseChangedLines } from "./unified-diff.ts";
@@ -52,7 +59,7 @@ export async function runDiffGuard(options: DiffGuardOptions): Promise<DiffGuard
 async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise<DiffGuardResult> {
   // The documents come from the base ref's tip, not the merge base: a branch forked from an old
   // commit must not be judged by the looser Charter that commit may carry.
-  const baseTip = await resolveCommit(cwd, base);
+  const baseTip = await resolveBase(cwd, base);
   const headCommit = await resolveCommit(cwd, head);
   const mergeBase = (await git(cwd, ["merge-base", baseTip, headCommit])).trim();
   const documents = await readBaseDocuments(cwd, baseTip);
