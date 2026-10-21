@@ -620,6 +620,8 @@ describe("the minimal path", () => {
       )
       .get();
     expect(delivered?.n).toBe(1);
+    const notes = await Bun.file(join(env.home.items, ref, "notes.jsonl")).text();
+    expect(notes).toContain("Keep 0 as Sold out.");
     expect(env.store.state.tasks[task]?.stage).toBe("handoff");
   }, 120_000);
 

@@ -214,12 +214,13 @@ export class ControlPlane {
       await this.clearHold(kind, ref, body.text);
       return { message: `answered ${ref}; work resumes` };
     }
+    // An instruction also belongs to the runs after the current one, should it stop first.
+    await addHumanNote(this.home, item, { target: ref, kind: "instruction", text: body.text });
     const running = this.runner?.sessionFor(ref) ?? null;
     if (running) {
       await enqueue(runFiles(this.home, running).queue, body.text);
       return { message: `sent to ${running}, which reads it at its next turn` };
     }
-    await addHumanNote(this.home, item, { target: ref, kind: "instruction", text: body.text });
     return { message: `noted for the next run of ${ref}` };
   }
 
@@ -230,7 +231,9 @@ export class ControlPlane {
     const kind = run.task ? "task" : "item";
     if (verb === "say") {
       if (this.runner?.sessionFor(owner) === ref) {
-        await enqueue(runFiles(this.home, ref).queue, (body as Body<"say">).text);
+        const { text } = body as Body<"say">;
+        await addHumanNote(this.home, run.item, { target: owner, kind: "instruction", text });
+        await enqueue(runFiles(this.home, ref).queue, text);
         return { message: `sent to ${ref}, which reads it at its next turn` };
       }
       return await this.say(owner, kind, body as Body<"say">);
