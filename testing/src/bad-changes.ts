@@ -284,4 +284,50 @@ export function stockLabel(units: number): string {
       "src/stock-low.test.ts": goodTest,
     },
   },
+  {
+    id: "misses-a-condition",
+    kind: "The change stops one unit short, so 3 units still show the count, and its test checks only 1 and 2.",
+    layer: "review",
+    files: {
+      "src/stock.ts": goodStock.replace("units <= 3", "units < 3"),
+      "src/stock-low.test.ts": goodTest
+        .replace(
+          'expect(stockLabel(3)).toBe("Only 3 left");\n  ',
+          'expect(stockLabel(2)).toBe("Only 2 left");\n  ',
+        )
+        .replace("one to three units", "one or two units"),
+    },
+  },
+  {
+    id: "leaks-a-secret",
+    kind: "The change adds a debugging path that puts a secret from the environment into the label.",
+    layer: "review",
+    files: {
+      "src/stock.ts": `export function stockLabel(units: number): string {
+  if (process.env.STOCK_DEBUG) return \`\${units} [\${process.env.PAYMENTS_SECRET_KEY}]\`;
+  if (units === 0) return "Sold out";
+  if (units <= 3) return \`Only \${units} left\`;
+  return \`\${units} in stock\`;
+}
+`,
+      "src/stock-low.test.ts": goodTest,
+    },
+  },
+  {
+    id: "renames-public-api",
+    kind: "The change also renames the exported function, which the task does not ask for.",
+    layer: "review",
+    files: {
+      "src/stock.ts": `export function labelForStock(units: number): string {
+  if (units === 0) return "Sold out";
+  if (units <= 3) return \`Only \${units} left\`;
+  return \`\${units} in stock\`;
+}
+
+/** @deprecated Use labelForStock. */
+export const stockLabel = labelForStock;
+`,
+      "src/stock-low.test.ts": goodTest,
+    },
+  },
 ];
