@@ -827,6 +827,9 @@ export class Runner {
             base: repository.branch,
             goal: current.goal,
             doneWhen: current.done_when,
+            ownerNotes: (await humanNotes(this.home, item.ref, [item.ref, taskRef])).map(
+              (note) => note.text,
+            ),
             judge: this.deps.judge,
             model: this.deps.model,
             maxCostUsd: charter.limits.max_cost_usd,
@@ -916,6 +919,9 @@ export class Runner {
               base: repository.branch,
               goal: current.goal,
               doneWhen: current.done_when,
+              ownerNotes: (await humanNotes(this.home, item.ref, [item.ref, taskRef])).map(
+                (note) => note.text,
+              ),
               verifier: this.deps.verifier,
               model: this.deps.model,
               maxCostUsd: charter.limits.max_cost_usd,

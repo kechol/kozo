@@ -16,6 +16,8 @@ export interface ReviewOptions {
   base: string;
   goal: string;
   doneWhen: readonly string[];
+  /** What the owner said about the task since it was planned, such as an answer to a question. */
+  ownerNotes?: readonly string[];
   judge: Judge;
   model: string;
   maxCostUsd: number;
@@ -42,7 +44,7 @@ async function review(options: ReviewOptions): Promise<ReviewRecord> {
 
   const answer = await judge.judge({
     instructions: reviewAgent.instructions,
-    prompt: reviewPrompt(options.goal, options.doneWhen, diff),
+    prompt: reviewPrompt(options.goal, options.doneWhen, diff, options.ownerNotes),
     schema: reviewJudgmentJsonSchema,
     model,
     maxCostUsd: options.maxCostUsd,
@@ -66,7 +68,12 @@ async function review(options: ReviewOptions): Promise<ReviewRecord> {
  * Builds the judge's prompt from the instructions and the diff alone. The diff is untrusted, so
  * anything in it that would close its section is defused first.
  */
-export function reviewPrompt(goal: string, doneWhen: readonly string[], diff: string): string {
+export function reviewPrompt(
+  goal: string,
+  doneWhen: readonly string[],
+  diff: string,
+  ownerNotes: readonly string[] = [],
+): string {
   const defuse = (text: string) => defuseSections(text, ["instructions", "diff"]);
   const conditions = doneWhen.map((condition) => `- ${defuse(condition)}`).join("\n");
   return [
@@ -74,6 +81,12 @@ export function reviewPrompt(goal: string, doneWhen: readonly string[], diff: st
     `GOAL: ${defuse(goal)}`,
     "DONE_WHEN:",
     conditions,
+    ...(ownerNotes.length > 0
+      ? [
+          "The owner has since said, which takes precedence where it differs:",
+          ...ownerNotes.map((note) => `- ${defuse(note)}`),
+        ]
+      : []),
     "</instructions>",
     "",
     '<diff trust="untrusted">',

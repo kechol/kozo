@@ -31,6 +31,8 @@ export interface VerifyOptions {
   base: string;
   goal: string;
   doneWhen: readonly string[];
+  /** What the owner said about the task since it was planned, such as an answer to a question. */
+  ownerNotes?: readonly string[];
   verifier: Verifier;
   model: string;
   maxCostUsd: number;
@@ -64,7 +66,7 @@ async function verify(options: VerifyOptions): Promise<VerifyResult> {
     answer = await options.verifier.verify({
       cwd,
       instructions: `${verifyAgent.instructions}\n\n# Skill: verify-app\n\n${verifyAppSkillDefinition.instructions}`,
-      prompt: verifyPrompt(options.goal, options.doneWhen, procedure),
+      prompt: verifyPrompt(options.goal, options.doneWhen, procedure, options.ownerNotes),
       schema: verifyJudgmentJsonSchema,
       model: options.model,
       maxCostUsd: options.maxCostUsd,
@@ -118,13 +120,24 @@ async function verify(options: VerifyOptions): Promise<VerifyResult> {
  * Builds the verify agent's prompt; the procedure is the repository's, read at the base tip. The
  * goal and conditions come from a request, so nothing in them may close a section.
  */
-export function verifyPrompt(goal: string, doneWhen: readonly string[], procedure: string): string {
+export function verifyPrompt(
+  goal: string,
+  doneWhen: readonly string[],
+  procedure: string,
+  ownerNotes: readonly string[] = [],
+): string {
   const defuse = (text: string) => defuseSections(text, ["instructions", "verify-app"]);
   return [
     "<instructions>",
     `GOAL: ${defuse(goal)}`,
     "DONE_WHEN:",
     ...doneWhen.map((condition) => `- ${defuse(condition)}`),
+    ...(ownerNotes.length > 0
+      ? [
+          "The owner has since said, which takes precedence where it differs:",
+          ...ownerNotes.map((note) => `- ${defuse(note)}`),
+        ]
+      : []),
     "</instructions>",
     "",
     "<verify-app>",
