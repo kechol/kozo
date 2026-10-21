@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { cp, stat } from "node:fs/promises";
+import { chmod, cp, stat } from "node:fs/promises";
 import { recordedLogs, type TempDirectory, tempDirectory } from "@kozo/testing";
 import { CommandError, type Commands, createApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
@@ -61,6 +61,7 @@ describe("the local API", () => {
     expect((await call("/api/status", { headers: { authorization: "Bearer nope" } })).status).toBe(
       401,
     );
+    expect((await call("/api/status", { headers: { authorization: token } })).status).toBe(401);
     expect((await call("/api/status", { headers: { host: "evil.example.com" } })).status).toBe(421);
     const foreign = await call("/api/factory/pause", {
       method: "POST",
@@ -172,5 +173,16 @@ describe("apiToken", () => {
     expect(first).toMatch(/^[0-9a-f]{64}$/);
     expect(await apiToken(paths)).toBe(first);
     expect((await stat(paths.apiToken)).mode & 0o777).toBe(0o600);
+  });
+
+  test("a token file that others can read or that holds no full token is refused", async () => {
+    await using home = await tempDirectory();
+    const paths = kozoHome(home.path);
+    await Bun.write(paths.apiToken, "\n", { mode: 0o600 });
+    await chmod(paths.apiToken, 0o600);
+    await expect(apiToken(paths)).rejects.toThrow("does not hold a token");
+    await Bun.write(paths.apiToken, `${"b".repeat(64)}\n`);
+    await chmod(paths.apiToken, 0o644);
+    await expect(apiToken(paths)).rejects.toThrow("readable by others");
   });
 });

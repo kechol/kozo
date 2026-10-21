@@ -64,7 +64,8 @@ const error = (c: Context, status: number, message: string, issues?: string[]) =
   c.json({ error: message, ...(issues ? { issues } : {}) } satisfies ApiError, status as 400);
 
 function tokenMatches(header: string | undefined, token: string): boolean {
-  const given = Buffer.from(header?.replace(/^Bearer /, "") ?? "");
+  if (token === "" || !header?.startsWith("Bearer ")) return false;
+  const given = Buffer.from(header.slice("Bearer ".length));
   const expected = Buffer.from(token);
   return given.length === expected.length && timingSafeEqual(given, expected);
 }
