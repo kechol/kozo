@@ -1,4 +1,5 @@
 export * from "./base-documents.ts";
+export { globMatcher, protectedPathMatcher } from "./changes.ts";
 export * from "./diff-guard.ts";
 export * from "./gates.ts";
 export * from "./git.ts";

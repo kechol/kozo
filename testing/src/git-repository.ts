@@ -19,9 +19,9 @@ export const testGitEnvironment = {
   GIT_COMMITTER_EMAIL: "test@example.com",
 };
 
-/** Creates a git repository on `main` in a temporary directory, removed on dispose. */
-export async function gitRepository(): Promise<GitRepository> {
-  const directory = await tempDirectory();
+/** Creates a git repository on `main` in a temporary directory under `parent`, removed on dispose. */
+export async function gitRepository(parent?: string): Promise<GitRepository> {
+  const directory = await tempDirectory({}, parent);
   const git = async (...args: string[]) => {
     const child = Bun.spawn(["git", ...args], {
       cwd: directory.path,

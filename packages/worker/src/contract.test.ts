@@ -3,6 +3,7 @@ import { fakeAgent, gitRepository } from "@kozo/testing";
 import { claudeAgent } from "./claude-agent.ts";
 import type { AgentRecord, AgentRequest, CodingAgent, Instruction } from "./coding-agent.ts";
 import { factoryGitEnvironment } from "./git-environment.ts";
+import { guardToolCall } from "./guard.ts";
 
 type Scenario = "answer" | "instruction" | "stop";
 
@@ -71,6 +72,13 @@ function request(cwd: string, scenario: Scenario, model: string, queue: Instruct
     record: (record) => records.push(record),
     signal: controller.signal,
     env: factoryGitEnvironment,
+    guard: (tool, input) =>
+      guardToolCall(tool, input, {
+        worktree: cwd,
+        scope: ["**"],
+        protectedPaths: [],
+        existingTests: new Set(),
+      }),
   };
   return { value, records, controller };
 }

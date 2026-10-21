@@ -15,10 +15,19 @@ export const builtInTools = ["Read", "Glob", "Grep", "Edit", "Write", "Bash"];
 
 const toolServer = "kozo";
 
-/** Paths outside the home's credentials that a worker must not read either. */
-const workerDeniedPaths = [...credentialPaths, ".config/git/credentials"].map((path) =>
-  join(homedir(), path),
-);
+/**
+ * Credential paths a session's shell never reads: the usual ones under the home directory,
+ * gh and git under XDG_CONFIG_HOME, and Claude Code's own configuration directory.
+ */
+function deniedCredentials(env: NodeJS.ProcessEnv): string[] {
+  const xdg = env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
+  return [
+    ...[...credentialPaths, ".config/git/credentials"].map((path) => join(homedir(), path)),
+    join(xdg, "gh"),
+    join(xdg, "git", "credentials"),
+    ...(env.CLAUDE_CONFIG_DIR ? [env.CLAUDE_CONFIG_DIR] : []),
+  ];
+}
 
 function deliveredContext(instructions: Instruction[]) {
   return instructions
@@ -48,7 +57,7 @@ export function claudeAgent(executable: string): CodingAgent {
       };
 
       const preToolUse: HookCallback = async (input) => {
-        if (input.hook_event_name !== "PreToolUse" || !request.guard) return {};
+        if (input.hook_event_name !== "PreToolUse") return {};
         const decision = await request.guard(input.tool_name, input.tool_input);
         if (decision.allow) return {};
         request.record({
@@ -169,7 +178,12 @@ export function claudeAgent(executable: string): CodingAgent {
                 strictAllowlist: true,
                 allowLocalBinding: true,
               },
-              filesystem: { denyRead: workerDeniedPaths },
+              filesystem: {
+                denyRead: [...deniedCredentials(process.env), ...(request.sandbox?.denyRead ?? [])],
+                allowRead: request.sandbox?.allowRead ?? [],
+                allowWrite: request.sandbox?.allowWrite ?? [],
+                denyWrite: request.sandbox?.denyWrite ?? [],
+              },
             },
             hooks: {
               PreToolUse: [{ hooks: [preToolUse] }],

@@ -42,6 +42,13 @@ describe("claudeAgent", () => {
         record: () => {},
         signal: new AbortController().signal,
         env: { GIT_AUTHOR_NAME: "kozo" },
+        guard: async () => ({ allow: true }),
+        sandbox: {
+          denyRead: ["/home/.kozo"],
+          allowRead: ["/home/.kozo/worktrees/app-K-1-t1"],
+          allowWrite: ["/src/app/.git/objects"],
+          denyWrite: ["/home/.kozo/worktrees/app-K-1-t1/.git"],
+        },
       });
       expect(outcome).toEqual({
         status: "answered",
@@ -62,7 +69,12 @@ describe("claudeAgent", () => {
       allowUnsandboxedCommands: boolean;
       failIfUnavailable: boolean;
       network: { allowedDomains: string[]; strictAllowlist: boolean };
-      filesystem: { denyRead: string[] };
+      filesystem: {
+        denyRead: string[];
+        allowRead: string[];
+        allowWrite: string[];
+        denyWrite: string[];
+      };
     };
     expect(sandbox).toMatchObject({
       enabled: true,
@@ -76,6 +88,12 @@ describe("claudeAgent", () => {
     for (const path of [".config/gh", ".git-credentials", ".config/git/credentials", ".ssh"]) {
       expect(sandbox.filesystem.denyRead).toContain(join(homedir(), path));
     }
+    expect(sandbox.filesystem).toMatchObject({
+      allowRead: ["/home/.kozo/worktrees/app-K-1-t1"],
+      allowWrite: ["/src/app/.git/objects"],
+      denyWrite: ["/home/.kozo/worktrees/app-K-1-t1/.git"],
+    });
+    expect(sandbox.filesystem.denyRead).toContain("/home/.kozo");
     expect(captured).toMatchObject({
       permissionMode: "dontAsk",
       settingSources: [],

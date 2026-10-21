@@ -1,5 +1,6 @@
 import type { AgentName, Event } from "@kozo/core";
 import type { ZodType } from "zod";
+import type { SandboxPaths } from "./task-sandbox.ts";
 
 type RecordType =
   | "agent.message"
@@ -48,13 +49,18 @@ export interface AgentRequest {
   record(record: AgentRecord): void;
   /** Aborted when kozod stops the run; the session ends as soon as it can. */
   signal: AbortSignal;
-  /** Decides each tool call before it runs; a refusal reaches the agent as its reason. */
-  guard?(tool: string, input: unknown): Promise<GuardDecision>;
+  /**
+   * Decides each tool call before it runs; a refusal reaches the agent as its reason. It is
+   * required because the file tools run outside the sandbox and only the guard confines them.
+   */
+  guard(tool: string, input: unknown): Promise<GuardDecision>;
   /** Asked when the agent tries to finish; a message sends it back to work with that message. */
   beforeStop?(): Promise<string | null>;
   tools?: AgentTool[];
   /** Variables added to the session's environment, such as the factory's git identity. */
   env?: Record<string, string>;
+  /** Paths for the shell's sandbox beyond the credentials it never reads. */
+  sandbox?: SandboxPaths;
 }
 
 export type AgentOutcome =

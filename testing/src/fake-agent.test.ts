@@ -19,6 +19,7 @@ function request(cwd: string, overrides: Partial<AgentRequest> = {}) {
     pendingInstructions: async () => queue.splice(0),
     record: (record) => records.push(record),
     signal: controller.signal,
+    guard: async () => ({ allow: true }),
     ...overrides,
   };
   return { value, records, controller, queue };
