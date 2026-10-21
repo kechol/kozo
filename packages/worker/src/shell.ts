@@ -10,6 +10,8 @@ export interface ParsedShell {
   commands: Word[][];
   /** Here-document bodies, which a command such as `sh` may read as a script. */
   heredocs: string[];
+  /** Whether any command runs in the background with `&`. */
+  background: boolean;
 }
 
 export class ShellParseError extends Error {}
@@ -42,6 +44,7 @@ const redirection = /^(?:\d+|&)?(?:<<<|<<-|<<|>>|<>|>&|<&|>\||<|>)/;
 export function parseShell(source: string): ParsedShell {
   const commands: Word[][] = [];
   const heredocs: string[] = [];
+  let background = false;
   let current: Word[] = [];
   let pending: { delimiter: string; strip: boolean }[] = [];
   let i = 0;
@@ -54,6 +57,7 @@ export function parseShell(source: string): ParsedShell {
     const inner = parseShell(text);
     commands.push(...inner.commands);
     heredocs.push(...inner.heredocs);
+    background ||= inner.background;
   };
 
   /** The index just past the `)` that closes the `(` at `open`, skipping quoted text. */
@@ -77,15 +81,25 @@ export function parseShell(source: string): ParsedShell {
   const expansion = (j: number): number => {
     const next = source[j + 1];
     if (next === "(") {
+      // Arithmetic, $((...)), is parsed like a substitution too: it may hold one.
       const end = closing(j + 1);
-      const inner = source.slice(j + 2, end - 1);
-      if (!inner.startsWith("(")) nested(inner);
+      nested(source.slice(j + 2, end - 1));
       return end;
     }
     if (next === "{") {
-      const end = source.indexOf("}", j + 2);
-      if (end === -1) throw new ShellParseError("an unclosed ${");
-      return end + 1;
+      let depth = 0;
+      for (let k = j + 1; k < source.length; k += 1) {
+        if (source[k] === "{") depth += 1;
+        else if (source[k] === "}" && --depth === 0) {
+          const inner = source.slice(j + 2, k);
+          // ${x:-$(cmd)} runs cmd; rather than parse every operator of ${...}, refuse it.
+          if (inner.includes("$(") || inner.includes("`")) {
+            throw new ShellParseError("a substitution inside a parameter expansion");
+          }
+          return k + 1;
+        }
+      }
+      throw new ShellParseError("an unclosed ${");
     }
     let k = j + 1;
     if (/[@*#?$!0-9-]/.test(source[k] ?? "")) return k + 1;
@@ -193,7 +207,9 @@ export function parseShell(source: string): ParsedShell {
       }
     } else if (operatorChars.has(c)) {
       finish();
-      i += source[i + 1] === c || (c === "|" && source[i + 1] === "&") ? 2 : 1;
+      const double = source[i + 1] === c || (c === "|" && source[i + 1] === "&");
+      if (c === "&" && !double) background = true;
+      i += double ? 2 : 1;
     } else {
       const word = readWord();
       if (current.length === 0 && !word.dynamic && reservedWords.has(word.text)) continue;
@@ -202,5 +218,5 @@ export function parseShell(source: string): ParsedShell {
   }
   if (pending.length > 0) throw new ShellParseError("an unclosed here-document");
   finish();
-  return { commands, heredocs };
+  return { commands, heredocs, background };
 }

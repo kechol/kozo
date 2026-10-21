@@ -1,4 +1,4 @@
-import { realpathSync } from "node:fs";
+import { lstatSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { globMatcher, protectedPathMatcher } from "@kozo/verify";
 import type { GuardDecision } from "./coding-agent.ts";
@@ -46,17 +46,48 @@ function insideWorktree(policy: TaskPolicy, path: string): string | null {
   return rel.split(sep).join("/");
 }
 
+/**
+ * Why the file tools, which run outside the sandbox, must not follow this path as given: a
+ * symbolic link on the way, which the shell could re-point after the check, or a file with
+ * several hard links, which may be one outside the worktree.
+ */
+function linkProblem(policy: TaskPolicy, path: string): string | null {
+  const absolute = isAbsolute(path) ? path : resolve(policy.worktree, path);
+  // The worktree itself may sit below a symbolic link, such as /var on macOS; only what lies
+  // below it is the agent's to have made.
+  const root = [policy.worktree, realPath(policy.worktree)].find(
+    (candidate) => !relative(candidate, absolute).startsWith(".."),
+  );
+  if (root === undefined) return null;
+  let current = root;
+  for (const part of relative(root, absolute).split(sep).filter(Boolean)) {
+    current = resolve(current, part);
+    let stats: ReturnType<typeof lstatSync>;
+    try {
+      stats = lstatSync(current);
+    } catch {
+      return null;
+    }
+    if (stats.isSymbolicLink()) return `${path} goes through a symbolic link`;
+    if (stats.isFile() && stats.nlink > 1) return `${path} has more than one hard link`;
+  }
+  return null;
+}
+
 function checkRead(policy: TaskPolicy, path: unknown): GuardDecision {
   if (path === undefined) return allow;
   if (typeof path !== "string") return refuse("the path is not text");
   if (insideWorktree(policy, path) === null) return refuse(`${path} is outside the worktree`);
-  return allow;
+  const problem = linkProblem(policy, path);
+  return problem ? refuse(problem) : allow;
 }
 
 function checkWrite(policy: TaskPolicy, path: unknown): GuardDecision {
   if (typeof path !== "string") return refuse("the path is not text");
   const rel = insideWorktree(policy, path);
   if (rel === null) return refuse(`${path} is outside the worktree`);
+  const problem = linkProblem(policy, path);
+  if (problem) return refuse(problem);
   if (policy.protectedPaths.some((pattern) => protectedPathMatcher(pattern)(rel))) {
     return refuse(`${rel} is a protected path; ask with kozo_blocked if it must change`);
   }
@@ -78,6 +109,9 @@ const refusedCommands = new Map([
   ["su", "commands run as the worker's own user"],
   ["doas", "commands run as the worker's own user"],
   ["alias", "aliases would hide what a later command runs"],
+  ["nohup", "nothing may keep running after its command"],
+  ["setsid", "nothing may keep running after its command"],
+  ["disown", "nothing may keep running after its command"],
   ["crontab", "nothing may be scheduled outside the run"],
   ["at", "nothing may be scheduled outside the run"],
   ["launchctl", "nothing may be started outside the run"],
@@ -116,7 +150,6 @@ const gitAllowed = new Set([
   "fsck",
   "grep",
   "hash-object",
-  "help",
   "log",
   "ls-files",
   "ls-tree",
@@ -145,32 +178,97 @@ const gitAllowed = new Set([
   "write-tree",
 ]);
 
+/** Whether every argument is one of `flags`, with `=value` allowed where a flag ends in `=`. */
+const onlyFlags = (args: readonly string[], flags: readonly string[]) =>
+  args.every((arg) =>
+    flags.some((flag) => (flag.endsWith("=") ? arg.startsWith(flag) : arg === flag)),
+  );
+const positionals = (args: readonly string[]) => args.filter((arg) => !arg.startsWith("-"));
+
+// git accepts any unambiguous prefix of a long option, so these allow listed spellings only.
 const gitListing: Record<string, (args: string[]) => boolean> = {
   branch: (args) =>
-    args.every((arg) =>
-      /^(-a|-r|-l|--list|-v|-vv|--show-current|--no-color|--color(=.*)?|--format=.*|--sort=.*)$/.test(
-        arg,
-      ),
-    ),
-  tag: (args) => args.length === 0 || args[0] === "-l" || args[0] === "--list",
+    onlyFlags(args, [
+      "-a",
+      "-r",
+      "-l",
+      "--list",
+      "-v",
+      "-vv",
+      "--show-current",
+      "--no-color",
+      "--color",
+      "--color=",
+      "--format=",
+      "--sort=",
+    ]),
+  tag: (args) =>
+    args.length === 0 ||
+    ((args[0] === "-l" || args[0] === "--list") &&
+      positionals(args.slice(1)).length === args.length - 1),
   remote: (args) =>
-    args.length === 0 || (args.length === 1 && args[0] === "-v") || args[0] === "get-url",
-  config: (args) =>
-    args.some((arg) => /^(--get|--get-all|--get-regexp|--list|-l|get|list)$/.test(arg)) &&
-    !args.some((arg) =>
-      /^(--add|--unset|--unset-all|--replace-all|--rename-section|--remove-section|set|unset|-e|--edit)$/.test(
-        arg,
-      ),
-    ),
-  checkout: (args) =>
-    args.includes("--") && !args.some((arg) => /^(-b|-B|--orphan|--detach)$/.test(arg)),
-  rebase: (args) =>
-    !args.some(
-      (arg) => /^(-x|--exec|-i|--interactive|--root)$/.test(arg) || arg.startsWith("--exec="),
-    ) && args.filter((arg) => !arg.startsWith("-")).length <= 1,
-  reflog: (args) => args.length === 0 || args[0] === "show",
-  notes: (args) => args.length === 0 || args[0] === "list" || args[0] === "show",
-  worktree: (args) => args[0] === "list",
+    args.length === 0 ||
+    (args.length === 1 && args[0] === "-v") ||
+    (args[0] === "get-url" && positionals(args).length === args.length),
+  config: (args) => {
+    const flags = args.filter((arg) => arg.startsWith("-"));
+    const reading = ["--get", "--get-all", "--get-regexp", "--list", "-l"];
+    const read =
+      flags.some((flag) => reading.includes(flag)) || args[0] === "get" || args[0] === "list";
+    return (
+      read &&
+      onlyFlags(flags, [
+        ...reading,
+        "--show-origin",
+        "--show-scope",
+        "--local",
+        "--global",
+        "--null",
+        "-z",
+        "--name-only",
+        "--type=",
+        "--default=",
+      ])
+    );
+  },
+  checkout: (args) => {
+    const split = args.indexOf("--");
+    if (split === -1) return false;
+    const before = args.slice(0, split);
+    return (
+      positionals(before).length <= 1 &&
+      onlyFlags(
+        before.filter((arg) => arg.startsWith("-")),
+        ["-q", "--quiet"],
+      )
+    );
+  },
+  rebase: (args) => {
+    const rest = [...args];
+    const onto = rest.indexOf("--onto");
+    if (onto !== -1) rest.splice(onto, 2);
+    const flags = rest.filter((arg) => arg.startsWith("-"));
+    return (
+      positionals(rest).length <= 1 &&
+      onlyFlags(flags, [
+        "--continue",
+        "--abort",
+        "--skip",
+        "--quit",
+        "-q",
+        "--quiet",
+        "--autostash",
+        "--no-autostash",
+        "--keep-base",
+      ])
+    );
+  },
+  reflog: (args) =>
+    args.length === 0 || (args[0] === "show" && positionals(args).length === args.length),
+  notes: (args) =>
+    args.length === 0 ||
+    ((args[0] === "list" || args[0] === "show") && positionals(args).length === args.length),
+  worktree: (args) => args[0] === "list" && onlyFlags(args.slice(1), ["--porcelain"]),
 };
 
 const gitRefusedReasons: Record<string, string> = {
@@ -192,6 +290,11 @@ interface Analysis {
   depth: number;
   /** Scripts in the worktree that the command may run, read before the analysis. */
   scripts: ReadonlyMap<string, string | null>;
+  /**
+   * Whether the command is the only one in its call. A script is read before the call runs,
+   * so it may only run where nothing earlier in the same call could have rewritten it.
+   */
+  alone: boolean;
 }
 
 function analyzeGit(args: Word[], context: Analysis): GuardDecision {
@@ -218,6 +321,10 @@ function analyzeGit(args: Word[], context: Analysis): GuardDecision {
   const rest = words.map((word) => word.text);
   const reason = gitRefusedReasons[name];
   if (reason) return refuse(`git ${name}: ${reason}`);
+  if (name === "bisect" && rest[0] === "run") return analyzeCommand(words.slice(1), context);
+  if (name === "grep" && rest.some((arg) => arg.startsWith("-O") || arg.startsWith("--op"))) {
+    return refuse("git grep --open-files-in-pager runs another program");
+  }
   if (gitAllowed.has(name)) return allow;
   const listing = gitListing[name];
   if (listing?.(rest)) return allow;
@@ -235,10 +342,12 @@ function analyzeScript(text: string, context: Analysis): GuardDecision {
       return refuse(`the command does not parse: ${error.message}`);
     throw error;
   }
+  if (parsed.background) return refuse("background jobs could change files after this check");
   const inner: Analysis = {
     ...context,
     heredocs: [...context.heredocs, ...parsed.heredocs],
     depth: context.depth + 1,
+    alone: context.alone && parsed.commands.length === 1 && parsed.heredocs.length === 0,
   };
   for (const words of parsed.commands) {
     const decision = analyzeCommand(words, inner);
@@ -275,7 +384,7 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
     return allow;
   }
   if (name === "git") return analyzeGit(args, context);
-  if (["command", "builtin", "exec", "nohup", "time", "caffeinate"].includes(name)) {
+  if (["command", "builtin", "exec", "time", "caffeinate"].includes(name)) {
     const offset = args.findIndex((arg) => !arg.text.startsWith("-"));
     return offset === -1 ? allow : analyzeCommand(args.slice(offset), context);
   }
@@ -320,6 +429,7 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
     const script = context.scripts.get(path.text) ?? null;
     if (script === null)
       return refuse(`${name} ${path.text}: only scripts inside the worktree may run`);
+    if (!context.alone) return refuse(`run ${path.text} in a Bash call of its own`);
     return analyzeScript(script, context);
   }
   if (shells.has(name)) {
@@ -336,6 +446,7 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
       const script = context.scripts.get(file.text) ?? null;
       if (script === null)
         return refuse(`${name} ${file.text}: only scripts inside the worktree may run`);
+      if (!context.alone) return refuse(`run ${file.text} in a Bash call of its own`);
       return analyzeScript(script, context);
     }
     if (context.heredocs.length === 0) return refuse(`${name} reading its script from a pipe`);
@@ -360,6 +471,7 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
     const script = context.scripts.get(first.text) ?? null;
     const interpreter = script?.startsWith("#!") ? (script.split("\n")[0] ?? "") : "#!/bin/sh";
     if (script !== null && /\b(sh|bash|zsh|dash|ksh)\b/.test(interpreter)) {
+      if (!context.alone) return refuse(`run ${first.text} in a Bash call of its own`);
       return analyzeScript(script, context);
     }
   }
@@ -378,7 +490,13 @@ async function scriptsOf(
   } catch {
     return seen;
   }
-  const context: Analysis = { policy, heredocs: parsed.heredocs, depth: 0, scripts: seen };
+  const context: Analysis = {
+    policy,
+    heredocs: parsed.heredocs,
+    depth: 0,
+    scripts: seen,
+    alone: true,
+  };
   const candidates = parsed.commands.flatMap((words) =>
     words.filter((word) => !word.dynamic && !word.text.startsWith("-")).map((word) => word.text),
   );
@@ -427,7 +545,13 @@ export async function guardToolCall(
     case "Bash": {
       if (typeof fields.command !== "string") return refuse("the command is not text");
       const scripts = await scriptsOf(fields.command, policy);
-      return analyzeScript(fields.command, { policy, heredocs: [], depth: 0, scripts });
+      return analyzeScript(fields.command, {
+        policy,
+        heredocs: [],
+        depth: 0,
+        scripts,
+        alone: true,
+      });
     }
     default:
       return tool.startsWith("mcp__kozo__") ? allow : refuse(`${tool} is not a tool a run may use`);

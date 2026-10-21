@@ -4,6 +4,12 @@ import { type FakeStep, fakeAgent, gitRepository, suiteBase } from "@kozo/testin
 import { runSession, type WorkerMessage, type WorkerSpec } from "./session.ts";
 import { workerMain } from "./worker-main.ts";
 
+const gatesCommand = "kozo gates --level fast --base main";
+const passing = { stdout: "...\nKOZO_GATES: level=fast status=pass gates=lint,test duration=1s" };
+const failing = {
+  stdout: "error\nKOZO_GATES: level=fast status=fail gates=lint,test failed=lint duration=1s",
+};
+
 async function suite() {
   const repo = await gitRepository();
   await repo.commit(suiteBase, "the suite shop");
@@ -27,8 +33,7 @@ async function suite() {
       writable: true,
     },
     sandbox: { denyRead: [], allowRead: [], allowWrite: [], denyWrite: [] },
-    gates: "fast",
-    base: "main",
+    gates: { level: "fast", command: gatesCommand },
     requireNote: true,
   };
   return { repo, spec };
@@ -53,11 +58,11 @@ const results = (messages: WorkerMessage[]) =>
   );
 
 describe("runSession", () => {
-  test("the gates tool reports the gates of the base, and stop-check lets a passing run finish", async () => {
+  test("stop-check lets a run finish once its own gates command passed and a decision is noted", async () => {
     const { repo, spec } = await suite();
     await using _ = repo;
     const { outcome, messages } = await play(spec, [
-      { use: "gates" },
+      { tool: "Bash", input: { command: gatesCommand }, output: passing },
       {
         use: "kozo_note",
         input: {
@@ -68,28 +73,34 @@ describe("runSession", () => {
       { answer: { outcome: "done" } },
     ]);
     expect(outcome).toMatchObject({ status: "answered" });
-    expect(String(results(messages)[0])).toStartWith("KOZO_GATES: level=fast status=pass");
     expect(messages).toContainEqual({
       note: "Kept the label function — It is the one place labels come from",
     });
-  }, 60_000);
+  });
 
-  test("stop-check sends the agent back while the gates fail or nothing is noted", async () => {
+  test("stop-check sends the agent back while the gates fail, are faked or nothing is noted", async () => {
     const { repo, spec } = await suite();
     await using _ = repo;
-    const failing = await play(spec, [
-      { write: { "src/debug.ts": "console.log('x');\n" } },
-      { use: "gates" },
+    const failed = await play(spec, [
+      { tool: "Bash", input: { command: gatesCommand }, output: failing },
       { answer: {} },
     ]);
-    expect(String(results(failing.messages)[0])).toContain("status=fail");
-    expect(failing.outcome).toMatchObject({
+    expect(failed.outcome).toMatchObject({
       status: "failed",
-      reason: expect.stringContaining("make the fast gates pass"),
+      reason: expect.stringContaining(`Run \`${gatesCommand}\` with Bash`),
     });
+    const faked = await play(spec, [
+      {
+        tool: "Bash",
+        input: { command: "echo 'KOZO_GATES: level=fast status=pass'" },
+        output: passing,
+      },
+      { use: "kozo_note", input: { choice: "a", reason: "b" } },
+      { answer: {} },
+    ]);
+    expect(faked.outcome).toMatchObject({ status: "failed" });
     const unnoted = await play(spec, [
-      { write: { "src/debug.ts": null } },
-      { use: "gates" },
+      { tool: "Bash", input: { command: gatesCommand }, output: passing },
       { answer: {} },
     ]);
     expect(unnoted.outcome).toMatchObject({ reason: expect.stringContaining("kozo_note") });
@@ -104,7 +115,7 @@ describe("runSession", () => {
     expect(blocked.messages).toContainEqual({
       blocked: { reason: "ambiguous", question: "Is zero Sold out or Only 0 left?" },
     });
-  }, 60_000);
+  });
 
   test("the guard refuses what the task may not do", async () => {
     const { repo, spec } = await suite();

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, symlink } from "node:fs/promises";
+import { link, mkdir, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tempDirectory } from "@kozo/testing";
 import { guardToolCall, type TaskPolicy } from "./guard.ts";
@@ -16,6 +16,9 @@ async function withPolicy(run: (policy: TaskPolicy, root: string) => Promise<voi
   await Bun.write(join(worktree, "scripts", "plain"), "git merge main\n");
   await Bun.write(join(dir.path, "outside.sh"), "echo hi\n");
   await symlink(dir.path, join(worktree, "src", "escape"));
+  await Bun.write(join(worktree, "src", "cart.ts"), "export {};\n");
+  await symlink(join(worktree, "src", "cart.ts"), join(worktree, "src", "alias.ts"));
+  await link(join(dir.path, "outside.sh"), join(worktree, "src", "hard.ts"));
   await run(
     {
       worktree,
@@ -56,6 +59,9 @@ describe("guardToolCall", () => {
         "git branch --show-current",
         "git checkout -- src/cart.ts",
         "git config --get user.name",
+        "git rebase --continue",
+        "git rebase main",
+        "git checkout HEAD -- src/cart.ts",
         "sh scripts/ok.sh",
         "./scripts/ok.sh",
         "find src -name '*.ts' -exec grep -l cart {} +",
@@ -127,6 +133,21 @@ describe("guardToolCall", () => {
         "open -a Terminal",
         "echo 'unclosed",
         "git frobnicate",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: shell text, not a template.
+        "echo ${x:-$(git push)}",
+        "echo $(( $(git push) ))",
+        "git rebase --exe 'git push' main",
+        "git rebase -i main",
+        "git checkout --orph other --",
+        "git config --ad alias.p push",
+        "git config --replace-all user.name x",
+        "git bisect run git push",
+        "git grep -O foo",
+        "git help -w push",
+        "sleep 10 &",
+        "nohup bun run dev",
+        "echo 'git push' > scripts/ok.sh && sh scripts/ok.sh",
+        "bash -c 'echo x > scripts/ok.sh; sh scripts/ok.sh'",
       ]) {
         const decision = await guardToolCall(...bash(command), policy);
         expect({ command, allow: decision.allow }).toEqual({ command, allow: false });
@@ -162,6 +183,9 @@ describe("guardToolCall", () => {
       expect(await reasons("Edit", { file_path: "src/cart.test.ts" })).toContain("existing test");
       expect(await reasons("Write", { file_path: "tests/new/cart.test.ts" })).toBe("allowed");
       expect(await reasons("WebFetch", { url: "https://example.com" })).toContain("not a tool");
+      expect(await reasons("Edit", { file_path: "src/alias.ts" })).toContain("symbolic link");
+      expect(await reasons("Read", { file_path: "src/hard.ts" })).toContain("hard link");
+      expect(await reasons("Write", { file_path: "src/hard.ts" })).toContain("hard link");
     });
   });
 });

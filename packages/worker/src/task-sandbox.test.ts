@@ -39,7 +39,12 @@ describe("taskSandbox", () => {
   test("lets the shell write only the shared git directory's objects, kozo refs and the worktree's metadata", async () => {
     await using task = await taskWorktree();
     await task.repo.git("branch", "human-work", "main");
-    const paths = await taskSandbox(task.home, task.worktree, "kozo/K-1-t1");
+    await Bun.write(join(task.worktree, "src", "cart.test.ts"), "test\n");
+    const paths = await taskSandbox(task.home, task.worktree, "kozo/K-1-t1", {
+      writable: true,
+      protectedPaths: [".kozo/**", "src/*.test.ts"],
+      existingTests: ["src/cart.test.ts"],
+    });
     const common = await task.repo.git("rev-parse", "--path-format=absolute", "--git-common-dir");
     expect(paths.denyRead).toEqual([task.home.root]);
     expect(paths.allowRead).toEqual([task.worktree]);
@@ -53,6 +58,11 @@ describe("taskSandbox", () => {
     expect(paths.denyWrite).toContain(join(common, "refs", "heads", "main"));
     expect(paths.denyWrite).toContain(join(common, "refs", "heads", "human-work"));
     expect(paths.denyWrite).not.toContain(join(common, "refs", "heads", "kozo", "K-1-t1"));
+    expect(paths.denyWrite).toContain(join(task.worktree, ".kozo"));
+    expect(paths.denyWrite).toContain(join(task.worktree, "src", "cart.test.ts"));
+    const reading = await taskSandbox(task.home, task.worktree, "kozo/K-1-t1", { writable: false });
+    expect(reading.allowWrite).toEqual([]);
+    expect(reading.denyWrite).toContain(task.worktree);
   });
 
   const claude = Bun.which("claude");
@@ -88,7 +98,7 @@ describe("taskSandbox", () => {
         signal: new AbortController().signal,
         env: factoryGitEnvironment,
         guard: async () => ({ allow: true }),
-        sandbox: await taskSandbox(task.home, task.worktree, "kozo/K-1-t1"),
+        sandbox: await taskSandbox(task.home, task.worktree, "kozo/K-1-t1", { writable: true }),
       });
       expect(outcome.status).toBe("answered");
       expect(await task.repo.git("log", "-1", "--format=%s", "kozo/K-1-t1")).toBe("fix");
