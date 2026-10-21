@@ -10,10 +10,9 @@ export type ProcessTable = ReadonlyMap<number, { parent: number; started: string
  * identifies one process, so a reused ID does not pass for the process that held it before.
  */
 export async function runningProcesses(): Promise<ProcessTable> {
-  const child = Bun.spawn(["ps", "-axo", "pid=,ppid=,lstart="], {
-    stdout: "pipe",
-    stderr: "ignore",
-  });
+  // Checked here, before a session starts, rather than when its processes are to be stopped.
+  if (Bun.which("lsof") === null) throw new ProcessError("lsof is not on PATH");
+  const child = spawnTool(["ps", "-axo", "pid=,ppid=,lstart="]);
   const [output, exitCode] = await Promise.all([new Response(child.stdout).text(), child.exited]);
   const table = new Map<number, { parent: number; started: string }>();
   for (const line of output.split("\n")) {
@@ -58,11 +57,7 @@ export async function stopProcessesIn(dir: string, before: ProcessTable): Promis
 async function workingDirectories() {
   // lsof runs outside `dir`, since it would otherwise list itself as a new process there. It
   // exits 1 when it cannot inspect some processes; what it could list is still complete.
-  const child = Bun.spawn(["lsof", "-nP", "-d", "cwd", "-Fpn"], {
-    cwd: "/",
-    stdout: "pipe",
-    stderr: "ignore",
-  });
+  const child = spawnTool(["lsof", "-nP", "-d", "cwd", "-Fpn"], "/");
   const output = await new Response(child.stdout).text();
   await child.exited;
   const found: { pid: number; cwd: string }[] = [];
@@ -74,6 +69,14 @@ async function workingDirectories() {
   // lsof always lists its own working directory, so an empty list means it did not run.
   if (found.length === 0) throw new ProcessError("lsof could not list working directories");
   return found;
+}
+
+function spawnTool(command: string[], cwd?: string) {
+  try {
+    return Bun.spawn(command, { cwd, stdout: "pipe", stderr: "ignore" });
+  } catch (error) {
+    throw new ProcessError(`${command[0]} could not run: ${(error as Error).message}`);
+  }
 }
 
 function isRunning(pid: number) {
