@@ -15,8 +15,8 @@ export type BaseDocuments =
   | { ok: false; problem: BaseDocumentsProblem; issues: string[] };
 
 /**
- * Reads the Charter and the constraints as they are at `commit`, the base of the diff under
- * check, so that a diff cannot loosen the limits it is judged by.
+ * Reads the Charter and the constraints as they are at `commit`, the tip of the base ref, so
+ * that no commit inside the diff under check supplies the limits it is judged by.
  */
 export async function readBaseDocuments(cwd: string, commit: string): Promise<BaseDocuments> {
   const charterText = await showFile(cwd, commit, charterPath);
