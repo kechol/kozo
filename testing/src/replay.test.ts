@@ -33,7 +33,7 @@ describe("replayDirectory", () => {
     const lines = (await Bun.file(log).text()).split("\n");
     lines[2] = lines[2]?.replace('"v":1', '"v":2') ?? "";
     await Bun.write(log, lines.join("\n"));
-    expect(replayDirectory(copy.path)).rejects.toThrow("runs/r-0002/events.jsonl:3: v:");
+    await expect(replayDirectory(copy.path)).rejects.toThrow("runs/r-0002/events.jsonl:3: v:");
   });
 
   test("a missing line breaks the seq count", async () => {
@@ -43,6 +43,8 @@ describe("replayDirectory", () => {
     const lines = (await Bun.file(log).text()).split("\n");
     lines.splice(1, 1);
     await Bun.write(log, lines.join("\n"));
-    expect(replayDirectory(copy.path)).rejects.toThrow("events.jsonl:2: seq is 2, expected 1");
+    await expect(replayDirectory(copy.path)).rejects.toThrow(
+      "events.jsonl:2: seq is 2, expected 1",
+    );
   });
 });

@@ -36,6 +36,12 @@
     "packages/daemon": {
       "name": "@kozo/daemon",
       "version": "0.0.0",
+      "dependencies": {
+        "@kozo/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@kozo/testing": "workspace:*",
+      },
     },
     "packages/dashboard": {
       "name": "@kozo/dashboard",

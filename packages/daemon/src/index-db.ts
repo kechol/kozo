@@ -1,0 +1,158 @@
+import { Database } from "bun:sqlite";
+import { type Event, type FactoryState, itemStage } from "@kozo/core";
+
+export const indexSchemaVersion = 1;
+
+const schema = `
+create table meta (key text primary key, value text not null);
+create table items (
+  ref text primary key, repository text not null, title text not null, source text not null,
+  stage text not null, shown_stage text not null,
+  hold text, hold_reason text, hold_since text,
+  plan text, draft text, created_at text not null, updated_at text not null
+);
+create table tasks (
+  ref text primary key, item text not null, goal text not null, done_when text not null,
+  scope text not null, depends_on text not null, stage text not null,
+  hold text, hold_reason text, hold_since text,
+  revisions integer not null, handoff_fixes integer not null, checkpoint text,
+  updated_at text not null
+);
+create table runs (
+  ref text primary key, item text not null, task text, parent text, agent text not null,
+  model text not null, state text not null, started_at text not null, ended_at text
+);
+create table events (
+  id integer primary key, ts text not null, log text not null, seq integer not null,
+  run_id text, item text, task text, type text not null, line text not null
+);
+create index events_item on events (item, id);
+create index events_task on events (task, id);
+create index events_run on events (run_id, id);
+`;
+
+const json = (value: unknown) =>
+  value === null || value === undefined ? null : JSON.stringify(value);
+
+/**
+ * The SQLite index of a factory: items, tasks, runs and every event, all derived from the
+ * event logs. Only kozod writes it, and it can always be dropped and rebuilt.
+ */
+export class IndexDb {
+  readonly db: Database;
+
+  private constructor(db: Database) {
+    this.db = db;
+  }
+
+  /** Creates the index afresh at `path`, replacing whatever was there. */
+  static create(path: string): IndexDb {
+    const db = new Database(path, { create: true, strict: true });
+    db.exec("pragma journal_mode = wal");
+    const tables = db
+      .query<{ name: string }, []>("select name from sqlite_master where type = 'table'")
+      .all();
+    db.transaction(() => {
+      for (const { name } of tables) db.exec(`drop table "${name}"`);
+      db.exec(schema);
+      db.query("insert into meta (key, value) values ('schema_version', ?)").run(
+        String(indexSchemaVersion),
+      );
+    })();
+    return new IndexDb(db);
+  }
+
+  /** Records one event and the current rows of what it touched, in one transaction. */
+  record(event: Event, state: FactoryState): number {
+    let id = 0;
+    this.db.transaction(() => {
+      const result = this.db
+        .query(
+          "insert into events (ts, log, seq, run_id, item, task, type, line) values (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .run(
+          event.ts,
+          event.run_id ?? "kozod",
+          event.seq,
+          event.run_id,
+          event.item,
+          event.task,
+          event.type,
+          JSON.stringify(event),
+        );
+      id = Number(result.lastInsertRowid);
+      this.project(event, state);
+    })();
+    return id;
+  }
+
+  private project(event: Event, state: FactoryState) {
+    const item = event.item === null ? undefined : state.items[event.item];
+    if (item) {
+      this.db
+        .query(`insert or replace into items values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(
+          item.ref,
+          item.repository,
+          item.title,
+          item.source,
+          item.stage,
+          itemStage(state, item),
+          item.hold?.kind ?? null,
+          item.hold?.reason ?? null,
+          item.hold?.since ?? null,
+          json(item.plan),
+          json(item.draft),
+          item.createdAt,
+          item.updatedAt,
+        );
+      for (const ref of item.tasks) {
+        const task = state.tasks[ref];
+        if (!task) continue;
+        this.db
+          .query(`insert or replace into tasks values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(
+            task.ref,
+            task.item,
+            task.goal,
+            json(task.done_when),
+            json(task.scope),
+            json(task.depends_on),
+            task.stage,
+            task.hold?.kind ?? null,
+            task.hold?.reason ?? null,
+            task.hold?.since ?? null,
+            task.revisions,
+            task.handoffFixes,
+            json(task.checkpoint),
+            task.updatedAt,
+          );
+      }
+    }
+    const run = event.run_id === null ? undefined : state.runs[event.run_id];
+    if (run) {
+      this.db
+        .query(`insert or replace into runs values (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(
+          run.ref,
+          run.item,
+          run.task,
+          run.parent,
+          run.agent,
+          run.model,
+          run.state,
+          run.startedAt,
+          run.endedAt,
+        );
+    }
+    if (event.type === "factory.changed") {
+      this.db
+        .query("insert or replace into meta (key, value) values ('paused', ?)")
+        .run(state.paused ? (state.pausedReason ?? "") : "");
+    }
+  }
+
+  close() {
+    this.db.close();
+  }
+}
