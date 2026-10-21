@@ -6,6 +6,17 @@ function sleeper(cwd: string) {
   return Bun.spawn(["sleep", "60"], { cwd, stdout: "ignore", stderr: "ignore" });
 }
 
+/** Waits until lsof lists `pid` with a working directory, so a loaded machine cannot race it. */
+async function listed(pid: number) {
+  for (let tries = 0; tries < 50; tries++) {
+    const child = Bun.spawn(["lsof", "-a", "-p", String(pid), "-d", "cwd", "-Fn"], {
+      stdout: "pipe",
+    });
+    if ((await new Response(child.stdout).text()).includes("\nn")) return;
+    await Bun.sleep(20);
+  }
+}
+
 describe("stopProcessesIn", () => {
   test("spares this process's ancestors even when they run in the directory", async () => {
     await using dir = await tempDirectory();
@@ -34,6 +45,7 @@ describe("stopProcessesIn", () => {
     const since = new Date();
     const inside = sleeper(`${dir.path}/sub`);
     const outside = sleeper(elsewhere.path);
+    await listed(inside.pid);
     try {
       const stopped = await stopProcessesIn(dir.path, since);
       expect(stopped).toEqual([inside.pid]);
