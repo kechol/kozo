@@ -570,6 +570,9 @@ export async function guardToolCall(
         alone: true,
       });
     }
+    // The SDK's own tool by which a session hands in its structured answer.
+    case "StructuredOutput":
+      return allow;
     default:
       return tool.startsWith("mcp__kozo__") ? allow : refuse(`${tool} is not a tool a run may use`);
   }

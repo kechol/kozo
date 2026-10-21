@@ -79,7 +79,15 @@ export const triageAnswerSchema = z.discriminatedUnion("outcome", [
 ]);
 export type TriageAnswer = z.infer<typeof triageAnswerSchema>;
 
+// The API takes a tool's input schema only as one object at the top, without oneOf, so the
+// session answers in this flat shape and triageAnswerSchema checks the combination after.
+const triageAnswerWire = z.strictObject({
+  outcome: z.enum(["plan", "question"]),
+  plan: z.strictObject(draftFields).optional(),
+  question: z.string().min(1).optional(),
+});
+
 // Draft-07 is the JSON Schema draft that Claude Code's structured output reads.
-export const triageAnswerJsonSchema = z.toJSONSchema(triageAnswerSchema, {
+export const triageAnswerJsonSchema = z.toJSONSchema(triageAnswerWire, {
   target: "draft-7",
 }) as Record<string, unknown>;

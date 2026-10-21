@@ -39,7 +39,21 @@ export const runReportSchema = z.discriminatedUnion("outcome", [
 ]);
 export type RunReport = z.infer<typeof runReportSchema>;
 
+// The API takes a tool's input schema only as one object at the top, without oneOf, so the
+// session answers in this flat shape and runReportSchema checks the combination after.
+const runReportWire = z.strictObject({
+  ...common,
+  outcome: z.enum(["done", "blocked"]),
+  blocked: z
+    .strictObject({
+      reason: blockedReasonSchema,
+      question: text,
+      split: z.array(proposedTaskSchema).optional(),
+    })
+    .optional(),
+});
+
 // Draft-07 is the JSON Schema draft that Claude Code's structured output reads.
-export const runReportJsonSchema = z.toJSONSchema(runReportSchema, {
+export const runReportJsonSchema = z.toJSONSchema(runReportWire, {
   target: "draft-7",
 }) as Record<string, unknown>;

@@ -88,6 +88,9 @@ describe("guardToolCall", () => {
       expect(await guardToolCall("mcp__kozo__gates", { level: "fast" }, policy)).toEqual({
         allow: true,
       });
+      expect(await guardToolCall("StructuredOutput", { word: "done" }, policy)).toEqual({
+        allow: true,
+      });
     });
   });
 

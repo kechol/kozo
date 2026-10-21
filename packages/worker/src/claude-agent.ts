@@ -213,8 +213,16 @@ export function claudeAgent(executable: string): CodingAgent {
               cache_read: message.usage.cache_read_input_tokens,
             },
           });
-          if (message.subtype === "success") {
+          if (message.subtype === "success" && message.structured_output !== undefined) {
             return { status: "answered", output: message.structured_output, costUsd, turns };
+          }
+          if (message.subtype === "success") {
+            return {
+              status: "failed",
+              reason: `no structured answer: ${message.result.slice(0, 300)}`,
+              costUsd,
+              turns,
+            };
           }
           return { status: "failed", reason: message.subtype, costUsd, turns };
         }
