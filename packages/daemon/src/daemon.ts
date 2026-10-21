@@ -2,7 +2,9 @@ import { mkdir, rm } from "node:fs/promises";
 import { apiPort } from "@kozo/core";
 import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
+import { ControlPlane } from "./control-plane.ts";
 import { EventStore } from "./event-store.ts";
+import { loadFactory } from "./factory-config.ts";
 import { type KozoHome, kozoHome } from "./home.ts";
 
 export interface DaemonOptions {
@@ -49,10 +51,12 @@ export class Daemon {
     port = Number(process.env.KOZO_PORT ?? apiPort),
   }: DaemonOptions = {}): Promise<Daemon> {
     await mkdir(home.root, { recursive: true, mode: 0o700 });
+    const factory = await loadFactory(home);
     await claimHome(home);
     const store = await EventStore.open(home);
+    const control = new ControlPlane(home, store, factory);
     const commands: Commands = {
-      addItem: notYet("adding items"),
+      addItem: (body) => control.addItem(body),
       act: notYet("this verb"),
       pauseFactory: notYet("pausing the factory"),
       resumeFactory: notYet("resuming the factory"),
@@ -61,7 +65,13 @@ export class Daemon {
         return { message: "rebuilt kozo.db from the event logs" };
       },
     };
-    const app = createApi({ store, token: await apiToken(home), port, mode: "local", commands });
+    const app = createApi({
+      store,
+      token: await apiToken(home),
+      port,
+      mode: factory.mode,
+      commands,
+    });
     return new Daemon(home, store, port, serveApi(app, port));
   }
 

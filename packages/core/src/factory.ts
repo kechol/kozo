@@ -18,7 +18,7 @@ export const factorySchema = z
     version: z.literal(1),
     mode: z.enum(["local", "github"]),
     runtime: z.enum(["sdk", "cli"]),
-    repositories: z.array(repositorySchema).nonempty(),
+    repositories: z.array(repositorySchema),
     agent_defaults: agentSettings,
     agents: z.partialRecord(agentNameSchema, agentSettings).optional(),
     concurrency: z.int().positive(),
