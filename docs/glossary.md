@@ -97,6 +97,7 @@
 | gate | One command defined in the constraints, such as typecheck, lint, unit tests or build. | - | check | - |
 | gate level | The named set of gates to run: fast, full or deep. | `level` | - | - |
 | gates | The V1 command that runs the gates of one level and ends with a single `KOZO_GATES:` line. | `kozo gates`, `KOZO_GATES` | - | - |
+| prepare | The constraints commands that run once in a worktree before its first gate, such as installing dependencies. | `prepare` | setup | - |
 | prove | The V3 check that reverts non-test changes and requires the new tests to fail. | `kozo prove` | - | - |
 | review | The V4 judge that sees only the diff and the original instructions in a separate session. | `review` | - | - |
 | review verdict | The recommendation that review returns: accept, revise or escalate. | `review.verdict` | - | - |
