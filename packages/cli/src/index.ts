@@ -20,7 +20,7 @@ import pkg from "../package.json" with { type: "json" };
 
 export const ExitCode = { success: 0, failure: 1, usage: 2, awaitingHuman: 3 } as const;
 
-/** The model for review and verify until the comparison on the bad-change suite picks one. */
+/** The model review and verify sessions use unless --model names another. */
 export const defaultSessionModel = "claude-sonnet-5-5";
 
 export interface Output {
@@ -34,8 +34,9 @@ export interface Output {
 const USAGE = `Usage: kozo <command>
 
 Commands:
-  gates [--level fast|full|deep] [--json]
-      Run the gates of one level (default full)
+  gates [--level fast|full|deep] [--base <ref>] [--json]
+      Run the gates of one level (default full); with --base, take the
+      constraints from the tip of <ref> instead of the worktree
   diff-guard --base <ref> [--head <ref>] [--scope <glob>]... [--json]
       Check the diff from the merge base of <ref> to <head> (default HEAD)
       against the Charter and constraints at the tip of <ref>
@@ -75,11 +76,15 @@ export async function run(
 }
 
 async function gates(args: readonly string[], out: Output, cwd: string): Promise<number> {
-  let values: { level?: string; json?: boolean };
+  let values: { level?: string; base?: string; json?: boolean };
   try {
     ({ values } = parseArgs({
       args: [...args],
-      options: { level: { type: "string", default: "full" }, json: { type: "boolean" } },
+      options: {
+        level: { type: "string", default: "full" },
+        base: { type: "string" },
+        json: { type: "boolean" },
+      },
       strict: true,
     }));
   } catch (error) {
@@ -92,6 +97,7 @@ async function gates(args: readonly string[], out: Output, cwd: string): Promise
   const result = await runGates({
     cwd,
     level: level.data,
+    base: values.base,
     log: values.json ? out.rawStderr : out.rawStdout,
   });
   const line = gatesLine(result);
@@ -269,7 +275,12 @@ async function verify(args: readonly string[], out: Output, cwd: string): Promis
     log: values.json ? out.rawStderr : out.rawStdout,
   });
   if (result.status === "verified" && values.out !== undefined) {
-    await writeVerifyVerdict(values.out, cwd, result.record);
+    try {
+      await writeVerifyVerdict(values.out, cwd, result.record);
+    } catch (error) {
+      out.stderr(`kozo: ${(error as Error).message}`);
+      return ExitCode.failure;
+    }
   }
   const line = verifyLine(result);
   if (values.json) out.stdout(JSON.stringify({ ...result, line }));

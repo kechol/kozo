@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { tempDirectory } from "@kozo/testing";
+import { gitRepository, tempDirectory } from "@kozo/testing";
 import { constraintsPath, gatesLine, runGates } from "./gates.ts";
 
 const constraints = `
@@ -75,5 +75,22 @@ describe("runGates", () => {
     const { log, line } = await gatesIn(dir.path, "deep");
     expect(log).toContain("defines no deep level");
     expect(line).toContain("status=MISCONFIGURED reason=level-missing");
+  });
+
+  test("with a base, the constraints come from its tip, not the worktree", async () => {
+    await using repo = await gitRepository();
+    const base = await repo.commit({ [constraintsPath]: constraints });
+    await repo.commit({ [constraintsPath]: constraints.replace("exit 3", "exit 0") });
+    expect((await gatesIn(repo.path, "full")).result.status).toBe("pass");
+    let log = "";
+    const result = await runGates({ cwd: repo.path, level: "full", base, log: (t) => (log += t) });
+    expect(result.status === "fail" && result.failed).toBe("broken");
+  });
+
+  test("an unknown base is MISCONFIGURED", async () => {
+    await using repo = await gitRepository();
+    await repo.commit({ [constraintsPath]: constraints });
+    const result = await runGates({ cwd: repo.path, level: "fast", base: "nope", log: () => {} });
+    expect(gatesLine(result)).toContain("status=MISCONFIGURED reason=base-unknown");
   });
 });

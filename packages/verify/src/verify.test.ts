@@ -142,6 +142,19 @@ describe("writeVerifyVerdict", () => {
   });
 });
 
+describe("writeVerifyVerdict inside the worktree", () => {
+  test("refuses a verdict directory inside the worktree", async () => {
+    const { repo, base } = await repository();
+    await using _ = repo;
+    const fake = fakeVerifier(pass, { ".output/verify/01-notice.png": "png" });
+    const { result } = await verify(repo.path, base, fake.verifier);
+    if (result.status !== "verified") throw new Error("expected a verdict");
+    await expect(
+      writeVerifyVerdict(`${repo.path}/.output/run`, repo.path, result.record),
+    ).rejects.toThrow("must be outside the worktree");
+  });
+});
+
 describe("parseSkill", () => {
   test("the verify-app skill parses", () => {
     expect(verifyAppSkillDefinition.name).toBe("verify-app");

@@ -123,13 +123,20 @@ export function verifyPrompt(goal: string, doneWhen: readonly string[], procedur
 
 /**
  * Records the verify verdict in `<dir>/verdict.json` and copies its evidence files from the
- * worktree into `<dir>/evidence/`. Evidence paths that leave the worktree are refused.
+ * worktree into `<dir>/evidence/`. Evidence paths that leave the worktree are refused, and so is
+ * a `dir` inside the worktree, where the session could have planted links to redirect the writes.
  */
 export async function writeVerifyVerdict(
   dir: string,
   cwd: string,
   record: VerifyRecord,
 ): Promise<string> {
+  await mkdir(dir, { recursive: true });
+  const root = await realpath(cwd);
+  const out = relative(root, await realpath(dir));
+  if (!out.startsWith("..") && !isAbsolute(out)) {
+    throw new SessionError("the verdict directory must be outside the worktree");
+  }
   for (const path of record.conditions.flatMap((condition) => condition.evidence)) {
     const { source, inside, identity } = await resolveEvidence(cwd, path);
     // The file is opened without following a final link and must still be the file resolved
