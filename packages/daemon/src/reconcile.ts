@@ -18,21 +18,51 @@ async function branchTip(repository: string, branch: string): Promise<string | n
   }
 }
 
-/** Whether `branch` is in `target`, merged as it is or rebased into patch-equivalent commits. */
-async function merged(repository: string, branch: string, target: string): Promise<boolean> {
+/** Whether `head` is in `commit`, merged as it is or rebased into patch-equivalent commits. */
+async function contains(repository: string, head: string, commit: string): Promise<boolean> {
   try {
-    await git(repository, [
-      "merge-base",
-      "--is-ancestor",
-      `refs/heads/${branch}`,
-      `refs/heads/${target}`,
-    ]);
+    await git(repository, ["merge-base", "--is-ancestor", head, commit]);
     return true;
   } catch (error) {
     if (!(error instanceof GitError)) throw error;
   }
-  const cherry = await git(repository, ["cherry", `refs/heads/${target}`, `refs/heads/${branch}`]);
+  const cherry = await git(repository, ["cherry", commit, head]);
   return cherry.trim() !== "" && !cherry.split("\n").some((line) => line.startsWith("+"));
+}
+
+/**
+ * The first commit on the first-parent line of `target` that holds `head`, and its committer:
+ * the merge, the fast-forwarded tip or the commit that applied the rebased or squashed change.
+ * Once a commit holds the change, every later one on that line does, so a binary search finds it.
+ */
+async function mergingCommit(repository: string, head: string, target: string) {
+  const line = (
+    await git(repository, [
+      "rev-list",
+      "--first-parent",
+      "--max-count=1000",
+      `refs/heads/${target}`,
+    ])
+  )
+    .split("\n")
+    .filter(Boolean)
+    .reverse();
+  let low = 0;
+  let high = line.length - 1;
+  let found: string | null = null;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const commit = line[middle] ?? "";
+    if (await contains(repository, head, commit)) {
+      found = commit;
+      high = middle - 1;
+    } else {
+      low = middle + 1;
+    }
+  }
+  if (found === null) return { commit: null, committer: null };
+  const committer = (await git(repository, ["log", "-1", "--format=%cn <%ce>", found])).trim();
+  return { commit: found, committer };
 }
 
 /**
@@ -68,17 +98,14 @@ export class Reconciler {
     }
   }
 
-  /** The head that the task's last final verification passed with. */
+  /** The head that the task was last handed to the human with. */
   private verifiedHead(task: TaskState): string | null {
     const row = this.store.db
-      .query<{ line: string }, [string]>(
-        "select line from events where task = ? and type = 'node.exit' and json_extract(line, '$.node') = 'final-verify' order by id desc limit 1",
+      .query<{ head: string }, [string]>(
+        "select json_extract(line, '$.data.head') as head from events where task = ? and type = 'handoff.ready' order by id desc limit 1",
       )
       .get(task.ref);
-    const summary = row
-      ? (JSON.parse(row.line) as { data: { summary?: string } }).data.summary
-      : undefined;
-    return summary?.startsWith("verified ") ? summary.slice("verified ".length) : null;
+    return row?.head ?? null;
   }
 
   private async check(task: TaskState) {
@@ -104,7 +131,20 @@ export class Reconciler {
       }
       return;
     }
-    if (await merged(repository, branch, target)) {
+    if (await contains(repository, `refs/heads/${branch}`, `refs/heads/${target}`)) {
+      if (!task.merged) {
+        await this.store.append({
+          type: "branch.merged",
+          item: item.ref,
+          task: task.ref,
+          data: {
+            branch,
+            head: tip,
+            into: target,
+            ...(await mergingCommit(repository, tip, target)),
+          },
+        });
+      }
       // A task whose check cannot start now is merged still, and the next pass starts it.
       this.startWork(task.ref, () => this.runner.complete(task.ref));
       return;

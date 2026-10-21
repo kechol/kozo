@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { appendFile, mkdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import {
   afterReview,
   autonomyLevel,
@@ -765,28 +765,18 @@ export class Runner {
         }
         case "verify-deterministic": {
           await enter(node, "D");
-          let output = "";
+          const recorded = await this.recordedGates(
+            { ...envelope, node },
+            level,
+            worktree,
+            repository.branch,
+            join(files.dir, "gates-verify.log"),
+          );
+          const gates = recorded.result;
+          let output = recorded.output;
           const collect = (text: string) => {
             output += text;
           };
-          const gates = await runGates({
-            cwd: worktree,
-            level,
-            base: repository.branch,
-            log: collect,
-            env: environment,
-          });
-          await this.store.append({
-            ...envelope,
-            node,
-            type: "gates.result",
-            data:
-              gates.status === "pass"
-                ? { level, status: "pass" }
-                : gates.status === "fail"
-                  ? { level, status: "fail", failed: gates.failed }
-                  : { level, status: "MISCONFIGURED", reason: gates.reason },
-          });
           if (gates.status === "MISCONFIGURED") {
             await exit(node, false, `gates are MISCONFIGURED: ${gates.reason}`);
             await this.hold(
@@ -1039,27 +1029,13 @@ export class Runner {
               charter,
             );
           }
-          let output = "";
-          const deep = await runGates({
-            cwd: worktree,
-            level: "deep",
-            base: repository.branch,
-            env: environment,
-            log: (text) => {
-              output += text;
-            },
-          });
-          await this.store.append({
-            ...envelope,
-            node,
-            type: "gates.result",
-            data:
-              deep.status === "pass"
-                ? { level: "deep", status: "pass" }
-                : deep.status === "fail"
-                  ? { level: "deep", status: "fail", failed: deep.failed }
-                  : { level: "deep", status: "MISCONFIGURED", reason: deep.reason },
-          });
+          const { result: deep, output } = await this.recordedGates(
+            { ...envelope, node },
+            "deep",
+            worktree,
+            repository.branch,
+            join(files.dir, "gates-final.log"),
+          );
           if (deep.status !== "pass") {
             return await this.backToBuilding(
               current,
@@ -1072,6 +1048,16 @@ export class Runner {
           }
           const verified = (await git(worktree, ["rev-parse", "HEAD"])).trim();
           await exit(node, true, `verified ${verified}`);
+          await this.store.append({
+            ...envelope,
+            node,
+            type: "handoff.ready",
+            data: {
+              branch,
+              head: verified,
+              report: relative(this.home.root, handoffReportPath(this.home, item.ref, taskRef)),
+            },
+          });
           return await stopHere("succeeded");
         }
       }
@@ -1103,6 +1089,44 @@ export class Runner {
     await this.moveTask(task, "building", run, why);
     await this.endRun(run, "succeeded");
     return { kind: "retry", failure: why };
+  }
+
+  /**
+   * Runs the gates of `level` in `cwd` without credentials, keeps their whole output at
+   * `outputPath` and records the result with the commit they ran on.
+   */
+  private async recordedGates(
+    where: { run_id?: string; item: string; task: string | null; node: string },
+    level: GateLevel,
+    cwd: string,
+    base: string,
+    outputPath: string,
+  ) {
+    let output = "";
+    const result = await runGates({
+      cwd,
+      level,
+      base,
+      env: commandEnvironmentFrom(process.env),
+      log: (text) => {
+        output += text;
+      },
+    });
+    const head = (await git(cwd, ["rev-parse", "HEAD"])).trim();
+    await mkdir(dirname(outputPath), { recursive: true });
+    await Bun.write(outputPath, output);
+    const run = { level, head, output_path: relative(this.home.root, outputPath) };
+    await this.store.append({
+      ...where,
+      type: "gates.result",
+      data:
+        result.status === "pass"
+          ? { ...run, status: "pass" }
+          : result.status === "fail"
+            ? { ...run, status: "fail", failed: result.failed }
+            : { ...run, status: "MISCONFIGURED", reason: result.reason },
+    });
+    return { result, output };
   }
 
   /** The brief of the task's last implement run before `run`, for a run that resumes at implement. */
@@ -1205,9 +1229,9 @@ export class Runner {
       `Merge it with: git merge --no-ff ${taskBranch(task.ref)}`,
       "",
     ].join("\n");
-    const dir = itemDirectory(this.home, itemRef);
-    await mkdir(dir, { recursive: true });
-    await Bun.write(join(dir, `handoff-${task.ref.split("/").at(-1)}.md`), text);
+    const path = handoffReportPath(this.home, itemRef, task.ref);
+    await mkdir(dirname(path), { recursive: true });
+    await Bun.write(path, text);
   }
 
   /**
@@ -1230,28 +1254,13 @@ export class Runner {
       "--detach",
       repository.tip,
     ]);
-    let output = "";
-    const result = await runGates({
-      cwd: worktree,
+    const { result, output } = await this.recordedGates(
+      { item: item.ref, task: taskRef, node: "complete" },
       level,
-      base: repository.branch,
-      env: commandEnvironmentFrom(process.env),
-      log: (text) => {
-        output += text;
-      },
-    });
-    await this.store.append({
-      type: "gates.result",
-      item: item.ref,
-      task: taskRef,
-      node: "complete",
-      data:
-        result.status === "pass"
-          ? { level, status: "pass" }
-          : result.status === "fail"
-            ? { level, status: "fail", failed: result.failed }
-            : { level, status: "MISCONFIGURED", reason: result.reason },
-    });
+      worktree,
+      repository.branch,
+      join(itemDirectory(this.home, item.ref), `check-${taskRef.split("/").at(-1)}.log`),
+    );
     await this.moveTask(
       task,
       "complete",
@@ -1304,6 +1313,9 @@ export class Runner {
     await releaseTask(this.home, item.repository, taskRef, { deleteBranch });
   }
 }
+
+const handoffReportPath = (home: KozoHome, item: string, task: string) =>
+  join(itemDirectory(home, item), `handoff-${task.split("/").at(-1)}.md`);
 
 function describe(result: SessionResult): string {
   switch (result.status) {

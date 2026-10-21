@@ -48,6 +48,14 @@ const envelope = {
   cost: costSchema,
 };
 
+const gatesRun = {
+  level: gateLevelSchema,
+  /** The commit the gates ran on. */
+  head: text,
+  /** The gates' output, relative to the factory's home. */
+  output_path: text,
+};
+
 const event = <T extends string, D extends z.ZodType>(type: T, data: D) =>
   z.strictObject({ ...envelope, type: z.literal(type), data });
 
@@ -142,15 +150,24 @@ export const eventSchema = z
     event(
       "gates.result",
       z.discriminatedUnion("status", [
-        z.strictObject({ level: gateLevelSchema, status: z.literal("pass") }),
-        z.strictObject({ level: gateLevelSchema, status: z.literal("fail"), failed: text }),
-        z.strictObject({
-          level: gateLevelSchema,
-          status: z.literal("MISCONFIGURED"),
-          reason: text,
-        }),
+        z.strictObject({ ...gatesRun, status: z.literal("pass") }),
+        z.strictObject({ ...gatesRun, status: z.literal("fail"), failed: text }),
+        z.strictObject({ ...gatesRun, status: z.literal("MISCONFIGURED"), reason: text }),
       ]),
     ),
+    /** A task branch found in the default branch, and the first commit there that holds it. */
+    event(
+      "branch.merged",
+      z.strictObject({
+        branch: text,
+        head: text,
+        into: text,
+        commit: text.nullable(),
+        committer: text.nullable(),
+      }),
+    ),
+    /** The commit handed to the human after the final verification passed. */
+    event("handoff.ready", z.strictObject({ branch: text, head: text, report: text })),
     event("review.verdict", z.strictObject({ verdict: reviewVerdictSchema, summary: text })),
     event(
       "external.write",

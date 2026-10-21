@@ -60,6 +60,8 @@ export interface TaskState {
   handoffFixes: number;
   runs: string[];
   checkpoint: Checkpoint | null;
+  /** The commit of the default branch that brought the task branch in, once kozod saw it. */
+  merged: { commit: string | null; at: string } | null;
   updatedAt: string;
 }
 
@@ -292,6 +294,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
           handoffFixes: 0,
           runs: [],
           checkpoint: null,
+          merged: null,
           updatedAt: event.ts,
         };
       });
@@ -334,6 +337,12 @@ export function applyEvent(state: FactoryState, event: Event): void {
       }
       run.state = event.data.to;
       if (isRunOver(run.state)) run.endedAt = event.ts;
+      return;
+    }
+    case "branch.merged": {
+      const subject = required(task, `task ${event.task}`);
+      if (subject.merged) throw new StateError(`${subject.ref} is already merged`);
+      subject.merged = { commit: event.data.commit, at: event.ts };
       return;
     }
     case "checkpoint": {

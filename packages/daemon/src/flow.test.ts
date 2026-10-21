@@ -486,11 +486,51 @@ describe("the minimal path", () => {
       "merge the low stock notice",
       "kozo/K-1-t1",
     );
+    const tip = (await env.repo.git("rev-parse", "kozo/K-1-t1")).trim();
+    const mergeCommit = (await env.repo.git("rev-parse", "HEAD")).trim();
     await env.reconciler.reconcile();
     await env.scheduler.idle();
     expect(env.store.state.tasks[task]?.stage).toBe("complete");
     expect(env.store.state.items[ref]?.stage).toBe("complete");
     expect(await env.repo.git("worktree", "list")).not.toContain("K-1-t1");
+    const events = (type: string) =>
+      env.store.db
+        .query<{ line: string }, [string]>("select line from events where type = ? order by id")
+        .all(type)
+        .map((row) => JSON.parse(row.line));
+    expect(events("handoff.ready").at(-1)?.data).toMatchObject({
+      branch: "kozo/K-1-t1",
+      head: tip,
+      report: "items/K-1/handoff-t1.md",
+    });
+    expect(events("branch.merged")).toMatchObject([
+      {
+        task,
+        data: { branch: "kozo/K-1-t1", head: tip, into: "main", commit: mergeCommit },
+      },
+    ]);
+    expect(events("branch.merged")[0]?.data.committer).toEndWith("@example.com>");
+    const check = events("gates.result").at(-1);
+    expect(check).toMatchObject({ node: "complete", data: { head: mergeCommit } });
+    expect(await Bun.file(join(env.home.root, check?.data.output_path)).exists()).toBe(true);
+  }, 180_000);
+
+  test("a squashed merge is found by its patch, and the commit that applied it is recorded", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: plan }] : implement(),
+    );
+    const { task } = await toHandoff(env);
+    await env.repo.commit({ "NOTES.txt": "unrelated\n" }, "an unrelated change");
+    await env.repo.git("merge", "--squash", "--quiet", "kozo/K-1-t1");
+    await env.repo.git("commit", "--quiet", "-m", "the low stock notice, squashed");
+    const squashed = (await env.repo.git("rev-parse", "HEAD")).trim();
+    await env.repo.commit({ "LATER.txt": "later\n" }, "a later change");
+    await env.reconciler.reconcile();
+    await env.scheduler.idle();
+    expect(env.store.state.tasks[task]).toMatchObject({
+      stage: "complete",
+      merged: { commit: squashed },
+    });
   }, 180_000);
 
   test("a failing check after the merge is a defect that sends the item back to Triage", async () => {

@@ -74,7 +74,21 @@ const examples: Record<EventType, unknown> = {
   "tool.result": { call_id: "c1", is_error: false, output: "status=pass" },
   "instruction.delivered": { queue_seq: 0, text: "Keep the old label for zero." },
   checkpoint: { head: null },
-  "gates.result": { level: "full", status: "fail", failed: "unit" },
+  "gates.result": {
+    level: "full",
+    head: "9f3c2a1",
+    output_path: "runs/r-0193/gates-verify.log",
+    status: "fail",
+    failed: "unit",
+  },
+  "branch.merged": {
+    branch: "kozo/K-12-t1",
+    head: "9f3c2a1",
+    into: "main",
+    commit: "77ab301",
+    committer: "Owner <owner@example.com>",
+  },
+  "handoff.ready": { branch: "kozo/K-12-t1", head: "9f3c2a1", report: "items/K-12/handoff-t1.md" },
   "review.verdict": { verdict: "accept", summary: "The change does what was asked." },
   "external.write": { target: "local", action: "branch", subject: "kozo/K-12-t1" },
   "cost.tick": { usd: 0.42, in: 12000, out: 800, cache_read: 9000 },
@@ -157,9 +171,11 @@ describe("parseEvent", () => {
   });
 
   test("a gates result carries what its status needs", () => {
-    expect(issuesOf(line("gates.result", { level: "full", status: "fail" }))[0]).toStartWith(
-      "data.failed:",
-    );
+    expect(
+      issuesOf(
+        line("gates.result", { level: "full", head: "9f3c2a1", output_path: "x", status: "fail" }),
+      )[0],
+    ).toStartWith("data.failed:");
   });
 
   test("api_call is a UUID or null", () => {
