@@ -30,6 +30,7 @@ async function suite() {
       scope: ["src/**"],
       protectedPaths: [".kozo/**"],
       existingTests: ["src/stock.test.ts"],
+      tests: ["**/*.test.ts"],
       writable: true,
     },
     sandbox: { denyRead: [], allowRead: [], allowWrite: [], denyWrite: [] },

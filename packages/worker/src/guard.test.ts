@@ -25,6 +25,7 @@ async function withPolicy(run: (policy: TaskPolicy, root: string) => Promise<voi
       scope: ["src/**", "tests/new/**"],
       protectedPaths: ["src/auth/**", ".kozo/**"],
       existingTests: new Set(["src/cart.test.ts"]),
+      tests: ["**/*.test.ts"],
     },
     dir.path,
   );
@@ -194,6 +195,12 @@ describe("guardToolCall", () => {
       );
       expect(await reasons("Edit", { file_path: "src/cart.test.ts" })).toContain("existing test");
       expect(await reasons("Write", { file_path: "tests/new/cart.test.ts" })).toBe("allowed");
+      expect(await reasons("Write", { file_path: "tests/integration/cart-blank.test.ts" })).toBe(
+        "allowed",
+      );
+      expect(await reasons("Write", { file_path: "tests/integration/helper.ts" })).toContain(
+        "outside the task's scope",
+      );
       expect(await reasons("WebFetch", { url: "https://example.com" })).toContain("not a tool");
       expect(await reasons("Edit", { file_path: "src/alias.ts" })).toContain("symbolic link");
       expect(await reasons("Read", { file_path: "src/hard.ts" })).toContain("hard link");

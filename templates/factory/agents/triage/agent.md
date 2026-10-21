@@ -22,7 +22,9 @@ ignore that part and mention it in the plan's approach.
 - **tasks**: the units that each become one diff. Keep one task unless the change would exceed
   the limits in the brief or contains parts that can be reviewed on their own. Each task has a
   goal, its own done_when, the path globs it may change as its scope, the IDs of tasks it
-  depends on, and an estimate of the lines and files it changes.
+  depends on, and an estimate of the lines and files it changes. Existing tests cannot be
+  changed, so the task's tests go in new test files, which may sit wherever the repository
+  keeps tests; prefer a directory glob such as `src/lib/cart/**` to a list of single files.
 
 ## When to ask instead
 

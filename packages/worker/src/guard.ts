@@ -1,4 +1,4 @@
-import { lstatSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { globMatcher, protectedPathMatcher } from "@kozo/verify";
 import type { GuardDecision } from "./coding-agent.ts";
@@ -14,6 +14,8 @@ export interface TaskPolicy {
   protectedPaths: readonly string[];
   /** Test files that exist at the base, when the Charter protects existing tests. */
   existingTests: ReadonlySet<string>;
+  /** The constraints' test globs: a new test file may be written outside the scope. */
+  tests?: readonly string[];
 }
 
 const allow: GuardDecision = { allow: true };
@@ -91,7 +93,11 @@ function checkWrite(policy: TaskPolicy, path: unknown): GuardDecision {
   if (policy.protectedPaths.some((pattern) => protectedPathMatcher(pattern)(rel))) {
     return refuse(`${rel} is a protected path; ask with kozo_blocked if it must change`);
   }
-  if (!globMatcher(policy.scope)(rel)) {
+  const newTest =
+    policy.tests !== undefined &&
+    globMatcher(policy.tests)(rel) &&
+    !existsSync(resolve(policy.worktree, rel));
+  if (!globMatcher(policy.scope)(rel) && !newTest) {
     return refuse(`${rel} is outside the task's scope (${policy.scope.join(", ")})`);
   }
   if (policy.existingTests.has(rel)) {

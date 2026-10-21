@@ -290,7 +290,7 @@ export class Runner {
           maxTurns: limits.max_turns,
           maxCostUsd: limits.max_cost_usd,
           queue: runFiles(this.home, run).queue,
-          policy: { scope: [], protectedPaths: [], existingTests: [], writable: false },
+          policy: { scope: [], protectedPaths: [], existingTests: [], tests: [], writable: false },
           sandbox: await taskSandbox(this.home, checkout, "", { writable: false }),
           gates: null,
           requireNote: false,
@@ -665,6 +665,7 @@ export class Runner {
                 scope: [...current.scope],
                 protectedPaths: charter.protected_paths,
                 existingTests,
+                tests: constraints.tests,
                 writable: true,
               },
               sandbox: await taskSandbox(this.home, worktree, branch, {

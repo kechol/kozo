@@ -86,7 +86,9 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
   }));
   const isTest = globMatcher(constraints.tests);
   for (const file of files) {
-    if (inScope && !inScope(file.path)) {
+    // A new test may go wherever the repository keeps tests: it cannot weaken an existing one,
+    // and prove and review judge what it checks.
+    if (inScope && !inScope(file.path) && !(file.change === "added" && isTest(file.path))) {
       violations.push({ kind: "out-of-scope", path: file.path });
     }
     const hit = protectedGlobs.find(({ matches }) => matches(file.path));

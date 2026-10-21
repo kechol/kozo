@@ -29,6 +29,8 @@ export const workerSpecSchema = z.strictObject({
     scope: z.array(z.string()),
     protectedPaths: z.array(z.string()),
     existingTests: z.array(z.string()),
+    /** The constraints' test globs, under which new test files may go outside the scope. */
+    tests: z.array(z.string()),
     /** False for an agent that only reads, which may write nowhere. */
     writable: z.boolean(),
   }),
@@ -149,6 +151,7 @@ export async function runSession(
     scope: spec.policy.writable ? spec.policy.scope : [],
     protectedPaths: spec.policy.protectedPaths,
     existingTests: new Set(spec.policy.existingTests),
+    tests: spec.policy.writable ? spec.policy.tests : undefined,
   };
   const sandbox: SandboxPaths = spec.sandbox;
 
