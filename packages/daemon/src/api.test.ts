@@ -106,6 +106,9 @@ describe("the local API", () => {
         mode: "local",
         charter_commit: "abc1234",
         factory_commit: null,
+        kozo_version: "0.0.0",
+        runtime: "sdk",
+        request_sha: "0000000000000000000000000000000000000000000000000000000000000000",
       },
     });
     await store.append({ ...run, type: "node.enter", data: { kind: "A" } });

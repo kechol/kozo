@@ -3,6 +3,7 @@ import type { ZodType } from "zod";
 import type { SandboxPaths } from "./task-sandbox.ts";
 
 type RecordType =
+  | "session.started"
   | "agent.message"
   | "tool.call"
   | "tool.result"

@@ -99,6 +99,7 @@ async function factoryOf(
     verifier: noVerifier,
     kozoCommand: "kozo",
     model: "fake",
+    runtime: "sdk",
   });
   const control = new ControlPlane(home, store, factory, runner);
   const scheduler = new Scheduler(
@@ -225,6 +226,24 @@ describe("the minimal path", () => {
     expect(await Bun.file(runFiles(env.home, "r-0002").decisions).text()).toContain(
       "Kept the label",
     );
+    const sha256 = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");
+    const data = (type: string, run: string) =>
+      JSON.parse(
+        env.store.db
+          .query<{ line: string }, [string, string]>(
+            "select line from events where type = ? and run_id = ?",
+          )
+          .get(type, run)?.line ?? "{}",
+      ).data;
+    expect(data("run.started", "r-0002")).toMatchObject({
+      runtime: "sdk",
+      kozo_version: expect.any(String),
+      request_sha: sha256("# Show when only a few units are left\n\n"),
+    });
+    expect(data("session.started", "r-0002")).toMatchObject({
+      claude_version: "fake",
+      brief_sha: sha256(await Bun.file(runFiles(env.home, "r-0002").brief).text()),
+    });
   }, 120_000);
 
   test("a deterministic failure retries in a new run with the failure, and review revise goes back to Building", async () => {

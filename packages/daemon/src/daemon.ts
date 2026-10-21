@@ -88,6 +88,7 @@ export class Daemon {
       verifier: claudeVerifier(claude),
       kozoCommand: kozoCommand(),
       model: factory.agent_defaults.model,
+      runtime: factory.runtime,
     });
     const control = new ControlPlane(home, store, factory, runner);
     const scheduler = new Scheduler(store, runner, factory, (line) => console.error(line));

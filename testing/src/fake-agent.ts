@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { AgentRequest, CodingAgent } from "@kozo/worker";
@@ -60,6 +61,16 @@ export function fakeAgent(script: FakeScript): FakeAgent {
     async run(request) {
       requests.push(request);
       const steps = typeof script === "function" ? script(request) : script;
+      const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
+      request.record({
+        type: "session.started",
+        data: {
+          claude_version: "fake",
+          model: request.model,
+          brief_sha: sha256(request.prompt),
+          instructions_sha: sha256(request.instructions),
+        },
+      });
       let costUsd = 0;
       let turns = 0;
       let calls = 0;

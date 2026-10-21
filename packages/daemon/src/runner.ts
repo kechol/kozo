@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { appendFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -54,9 +55,10 @@ import implementDefinition from "../../../templates/factory/agents/implement/age
 import triageDefinition from "../../../templates/factory/agents/triage/agent.md" with {
   type: "text",
 };
+import pkg from "../package.json" with { type: "json" };
 import type { EventStore, NewEvent } from "./event-store.ts";
 import { notesAbout, ownersWords } from "./instructions.ts";
-import { itemDirectory, readItemFile } from "./item-file.ts";
+import { itemDirectory, readItemFile, requestText } from "./item-file.ts";
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { defaultBranch } from "./repository.ts";
 import { type Envelope, pumpSession, type SessionResult } from "./session-pump.ts";
@@ -69,6 +71,7 @@ export interface RunnerDeps {
   /** The shell words that run the kozo CLI inside the agent's sandbox, such as `kozo`. */
   kozoCommand: string;
   model: string;
+  runtime: "sdk" | "cli";
 }
 
 /** The nodes of the bugfix blueprint from Building to Handoff, in order. */
@@ -176,6 +179,7 @@ export class Runner {
     charterCommit: string,
   ) {
     const run = this.store.nextRun();
+    const request = requestText(await readItemFile(this.home, envelope.item));
     await this.store.append({
       type: "run.started",
       run_id: run,
@@ -188,6 +192,9 @@ export class Runner {
         mode: "local",
         charter_commit: charterCommit,
         factory_commit: null,
+        kozo_version: pkg.version,
+        runtime: this.deps.runtime,
+        request_sha: createHash("sha256").update(request).digest("hex"),
       },
     });
     return run;
@@ -273,7 +280,7 @@ export class Runner {
         `ITEM        ${itemRef} in ${repository.path}, default branch ${repository.branch}`,
         `LIMITS      a task changes at most ${limits.max_changed_lines} lines in ${limits.max_files} files; an item has at most ${limits.max_tasks_per_item} tasks`,
         `PROTECTED   ${repository.charter.protected_paths.join(", ")}`,
-        `REQUEST     ${wrapRequest(`# ${file.title}\n\n${file.body}`)}`,
+        `REQUEST     ${wrapRequest(requestText(file))}`,
         ...ownersWords(notes).map((note) => `OWNER       (${note.kind}) ${note.text}`),
         ...notes
           .filter((note) => note.kind === "check")
@@ -642,7 +649,7 @@ export class Runner {
                   : []),
               ],
             },
-            request: `# ${file.title}\n\n${file.body}`,
+            request: requestText(file),
             gates: level,
             limits: {
               max_changed_lines: charter.limits.max_changed_lines,

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -28,6 +29,8 @@ function deniedCredentials(env: NodeJS.ProcessEnv): string[] {
     ...(env.CLAUDE_CONFIG_DIR ? [env.CLAUDE_CONFIG_DIR] : []),
   ];
 }
+
+const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
 
 function deliveredContext(instructions: Instruction[]) {
   return instructions
@@ -193,6 +196,17 @@ export function claudeAgent(executable: string): CodingAgent {
             },
           },
         })) {
+          if (message.type === "system" && message.subtype === "init") {
+            request.record({
+              type: "session.started",
+              data: {
+                claude_version: message.claude_code_version,
+                model: message.model,
+                brief_sha: sha256(request.prompt),
+                instructions_sha: sha256(request.instructions),
+              },
+            });
+          }
           if (message.type === "assistant" && message.parent_tool_use_id === null) {
             const text = message.message.content
               .flatMap((block) => (block.type === "text" ? [block.text] : []))

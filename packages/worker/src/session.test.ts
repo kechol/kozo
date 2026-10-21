@@ -187,8 +187,12 @@ describe("runSession", () => {
       (line) => lines.push(line),
       fakeAgent([{ say: "hello" }, { answer: { ok: true } }]),
     );
-    expect(lines.map((line) => Object.keys(JSON.parse(line))[0])).toEqual(["record", "outcome"]);
-    expect(JSON.parse(lines[1] ?? "{}").outcome).toMatchObject({
+    expect(lines.map((line) => Object.keys(JSON.parse(line))[0])).toEqual([
+      "record",
+      "record",
+      "outcome",
+    ]);
+    expect(JSON.parse(lines[2] ?? "{}").outcome).toMatchObject({
       status: "answered",
       output: { ok: true },
     });

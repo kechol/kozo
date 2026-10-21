@@ -59,6 +59,10 @@ export async function writeItemFile(home: KozoHome, ref: string, item: ItemFile)
   await Bun.write(itemPath(home, ref), formatItemFile(item));
 }
 
+/** The request as runs read it: the title as a heading, then the body. */
+export const requestText = (item: Pick<ItemFile, "title" | "body">) =>
+  `# ${item.title}\n\n${item.body}`;
+
 export async function readItemFile(home: KozoHome, ref: string): Promise<ItemFile> {
   return parseItemFile(await Bun.file(itemPath(home, ref)).text());
 }

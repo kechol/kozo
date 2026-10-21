@@ -46,6 +46,7 @@ describe("fakeAgent", () => {
     });
     expect(await repo.git("log", "--format=%s", "-1")).toBe("fix: reject a blank quantity");
     expect(records.map((record) => record.type)).toEqual([
+      "session.started",
       "agent.message",
       "tool.call",
       "tool.result",
@@ -63,7 +64,7 @@ describe("fakeAgent", () => {
     await Bun.sleep(50);
     controller.abort();
     expect(await outcome).toMatchObject({ status: "stopped" });
-    expect(records).toEqual([
+    expect(records.slice(1)).toEqual([
       {
         type: "instruction.delivered",
         data: { queue_seq: 0, text: "Keep the old label for zero." },

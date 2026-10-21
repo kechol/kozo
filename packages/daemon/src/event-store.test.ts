@@ -39,6 +39,9 @@ describe("EventStore", () => {
         mode: "local",
         charter_commit: "abc1234",
         factory_commit: null,
+        kozo_version: "0.0.0",
+        runtime: "sdk",
+        request_sha: "0000000000000000000000000000000000000000000000000000000000000000",
       },
     });
     const kozod = await lines(home.eventsLog);
@@ -149,6 +152,9 @@ describe("EventStore", () => {
         mode: "local",
         charter_commit: "abc1234",
         factory_commit: null,
+        kozo_version: "0.0.0",
+        runtime: "sdk",
+        request_sha: "0000000000000000000000000000000000000000000000000000000000000000",
       },
     });
     await store.append({ ...run, type: "run.changed", data: { from: "running", to: "failed" } });

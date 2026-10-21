@@ -63,6 +63,20 @@ export const eventSchema = z
         charter_commit: text,
         /** Null while kozod runs on its built-in factory defaults. */
         factory_commit: text.nullable(),
+        kozo_version: text,
+        runtime: z.enum(["sdk", "cli"]),
+        /** The SHA-256 of the request, its title and body, as the run read it. */
+        request_sha: sha256,
+      }),
+    ),
+    /** What the worker's agent session actually started with. */
+    event(
+      "session.started",
+      z.strictObject({
+        claude_version: text,
+        model: text,
+        brief_sha: sha256,
+        instructions_sha: sha256,
       }),
     ),
     event(

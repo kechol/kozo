@@ -94,6 +94,10 @@ for (const implementation of implementations) {
       expect(await Bun.file(`${repo.path}/hello.txt`).text()).toBe("hi\n");
       expect(await repo.git("log", "-1", "--format=%s")).toBe("add hello");
       expect(records.some((record) => record.type === "tool.call")).toBe(true);
+      expect(records[0]).toMatchObject({
+        type: "session.started",
+        data: { brief_sha: new Bun.CryptoHasher("sha256").update(value.prompt).digest("hex") },
+      });
     }, 180_000);
 
     test("delivers a queued instruction at a turn boundary", async () => {
