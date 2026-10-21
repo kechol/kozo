@@ -21,9 +21,11 @@ import {
   type TaskState,
   triageAnswerJsonSchema,
   triageAnswerSchema,
+  type WorkClass,
   wrapRequest,
 } from "@kozo/core";
 import {
+  commandEnvironmentFrom,
   diffGuardLine,
   GitError,
   git,
@@ -309,13 +311,18 @@ export class Runner {
       }
       await this.store.append({ ...envelope, type: "plan.proposed", data: { plan: draft.data } });
       await this.endRun(run, "succeeded");
-      await this.afterTriage(itemRef, draft.data, repository.charter);
+      await this.afterTriage(itemRef, draft.data, repository.charter, file.class);
     } finally {
       await git(repository.path, ["worktree", "remove", "--force", checkout]).catch(() => {});
     }
   }
 
-  private async afterTriage(itemRef: string, plan: Plan, charter: Charter) {
+  private async afterTriage(
+    itemRef: string,
+    plan: Plan,
+    charter: Charter,
+    requested: WorkClass | null,
+  ) {
     if (plan.tasks.length > 1) {
       const split = plan.tasks.map((task) => `${task.id}: ${task.goal}`).join("; ");
       await this.hold(
@@ -327,7 +334,10 @@ export class Runner {
       );
       return;
     }
-    const level = autonomyLevel(charter, plan.class);
+    // The draft comes from a session that read the request, so its work class may lower the
+    // autonomy level but never raise it above the level of the class the human asked for.
+    const levels = [autonomyLevel(charter, requested), autonomyLevel(charter, plan.class)].sort();
+    const level = levels[0] ?? "L1";
     if (!planNeeded(level, plan)) {
       await this.store.append({
         type: "plan.accepted",
@@ -439,6 +449,8 @@ export class Runner {
       await appendFile(join(files.dir, "kozod.log"), text);
     };
     let prompt = "";
+    // The diff's own code runs in prepare, the gates and prove, so they get no credentials.
+    const environment = commandEnvironmentFrom(process.env);
     let existingTests: string[] = [];
 
     const enter = async (node: Node, kind: "D" | "A") => {
@@ -504,7 +516,7 @@ export class Runner {
             break;
           }
           for (const command of constraints.prepare) {
-            const code = await runCommand(command, worktree, (text) => void log(text));
+            const code = await runCommand(command, worktree, (text) => void log(text), environment);
             if (code !== 0) {
               await exit(node, false, `${command} exited with ${code}`);
               await this.hold(
@@ -701,6 +713,7 @@ export class Runner {
             level,
             base: repository.branch,
             log: collect,
+            env: environment,
           });
           await this.store.append({
             ...envelope,
@@ -728,7 +741,12 @@ export class Runner {
           if (gates.status === "fail")
             return await retry(node, `the ${gates.failed} gate failed:\n${tail(output)}`);
           output = "";
-          const prove = await runProve({ cwd: worktree, base: repository.branch, log: collect });
+          const prove = await runProve({
+            cwd: worktree,
+            base: repository.branch,
+            log: collect,
+            env: environment,
+          });
           if (prove.status !== "pass")
             return await retry(node, `${proveLine(prove)}\n${tail(output)}`);
           const guard = await runDiffGuard({
@@ -933,6 +951,7 @@ export class Runner {
             cwd: worktree,
             level: "deep",
             base: repository.branch,
+            env: environment,
             log: (text) => {
               output += text;
             },

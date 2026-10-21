@@ -32,6 +32,8 @@ export interface ProveOptions {
   cwd: string;
   base: string;
   log(text: string): void;
+  /** The test commands' environment; they inherit this process's when it is unset. */
+  env?: Record<string, string>;
 }
 
 /**
@@ -43,7 +45,7 @@ export async function runProve(options: ProveOptions): Promise<ProveResult> {
   return await guarded(options.log, [GitError], () => prove(options));
 }
 
-async function prove({ cwd, base, log }: ProveOptions): Promise<ProveResult> {
+async function prove({ cwd, base, log, env }: ProveOptions): Promise<ProveResult> {
   const { baseTip, head, mergeBase } = await resolveRange(cwd, base, "HEAD");
   const documents = await readBaseDocuments(cwd, baseTip);
   if (!documents.ok) {
@@ -95,7 +97,7 @@ async function prove({ cwd, base, log }: ProveOptions): Promise<ProveResult> {
   for (const run of runs) {
     log(`==> with the change: ${run.command}\n`);
     const started = performance.now();
-    run.withChange = await runCommand(run.command, cwd, log);
+    run.withChange = await runCommand(run.command, cwd, log, env);
     run.seconds += secondsSince(started);
     if (run.withChange !== 0) {
       log(`kozo: the tests fail with the change applied: ${run.files.join(", ")}\n`);
@@ -108,7 +110,7 @@ async function prove({ cwd, base, log }: ProveOptions): Promise<ProveResult> {
     for (const run of runs) {
       log(`==> without the change: ${run.command}\n`);
       const started = performance.now();
-      run.withoutChange = await runCommand(run.command, cwd, log);
+      run.withoutChange = await runCommand(run.command, cwd, log, env);
       run.seconds += secondsSince(started);
     }
   } finally {

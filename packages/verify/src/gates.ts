@@ -34,9 +34,11 @@ export interface GatesOptions {
   base?: string;
   /** Receives the gates' own output and kozo's progress lines, unchanged. */
   log(text: string): void;
+  /** The gates' environment; they inherit this process's when it is unset. */
+  env?: Record<string, string>;
 }
 
-export async function runGates({ cwd, level, base, log }: GatesOptions): Promise<GatesResult> {
+export async function runGates({ cwd, level, base, log, env }: GatesOptions): Promise<GatesResult> {
   const started = performance.now();
   const elapsed = () => secondsSince(started);
   const misconfigured = (reason: MisconfiguredReason): GatesResult => ({
@@ -87,7 +89,7 @@ export async function runGates({ cwd, level, base, log }: GatesOptions): Promise
     // The constraints schema guarantees every listed gate is defined.
     const run = parsed.value.gates[name]?.run ?? "";
     const gateStarted = performance.now();
-    const exitCode = await runCommand(run, cwd, emit);
+    const exitCode = await runCommand(run, cwd, emit, env);
     gates.push({ name, exitCode, seconds: secondsSince(gateStarted) });
     if (exitCode !== 0) {
       endLine();

@@ -1,10 +1,19 @@
-/** Runs `command` through `sh -c` in `cwd`, passing its output to `log`, and returns its exit code. */
-export async function runCommand(command: string, cwd: string, log: (text: string) => void) {
+/**
+ * Runs `command` through `sh -c` in `cwd`, passing its output to `log`, and returns its exit
+ * code. Without `env` the command inherits this process's environment.
+ */
+export async function runCommand(
+  command: string,
+  cwd: string,
+  log: (text: string) => void,
+  env?: Record<string, string>,
+) {
   const child = Bun.spawn(["sh", "-c", command], {
     cwd,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
+    ...(env ? { env } : {}),
   });
   await Promise.all([forward(child.stdout, log), forward(child.stderr, log)]);
   return await child.exited;
@@ -40,4 +49,28 @@ export async function guarded<T>(
     log(`kozo: ${message}\n`);
     return { status: "error", message };
   }
+}
+
+// What a gate or a test needs from the environment. Sign-in variables, tokens and cloud
+// credentials stay with kozod, since the commands run code from the diff under check.
+const commandEnvironment = [
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "TMPDIR",
+  "LANG",
+  "LC_ALL",
+  "TERM",
+];
+
+/** The environment kozod runs a diff's commands with: `source` without any credential. */
+export function commandEnvironmentFrom(source: Record<string, string | undefined>) {
+  return Object.fromEntries(
+    commandEnvironment.flatMap((name) => {
+      const value = source[name];
+      return value === undefined ? [] : [[name, value]];
+    }),
+  ) as Record<string, string>;
 }

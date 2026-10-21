@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { gitRepository, tempDirectory } from "@kozo/testing";
 import { constraintsPath } from "./base-documents.ts";
+import { commandEnvironmentFrom } from "./command.ts";
 import { gatesLine, runGates } from "./gates.ts";
 
 const constraints = `
@@ -93,5 +94,20 @@ describe("runGates", () => {
     await repo.commit({ [constraintsPath]: constraints });
     const result = await runGates({ cwd: repo.path, level: "fast", base: "nope", log: () => {} });
     expect(gatesLine(result)).toContain("status=MISCONFIGURED reason=base-unknown");
+  });
+});
+
+describe("commandEnvironmentFrom", () => {
+  test("keeps what a command needs to run and drops every credential", () => {
+    expect(
+      commandEnvironmentFrom({
+        PATH: "/usr/bin",
+        HOME: "/home/me",
+        GH_TOKEN: "x",
+        ANTHROPIC_API_KEY: "x",
+        CLAUDE_CODE_OAUTH_TOKEN: "x",
+        AWS_SECRET_ACCESS_KEY: "x",
+      }),
+    ).toEqual({ PATH: "/usr/bin", HOME: "/home/me" });
   });
 });
