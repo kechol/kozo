@@ -284,4 +284,26 @@ describe("runDiffGuard base refs", () => {
     const { result } = await guard(repo.path, "main");
     expect(kinds(result)).toEqual(["files"]);
   });
+
+  test("a tag named like the head branch cannot stand in for it", async () => {
+    const repo = await gitRepository();
+    await using _ = repo;
+    await repo.commit({ [charterPath]: charter, [constraintsPath]: constraints });
+    await repo.git("switch", "--quiet", "-c", "task");
+    await repo.commit({
+      "src/a.ts": "1\n",
+      "src/b.ts": "1\n",
+      "src/c.ts": "1\n",
+      "src/d.ts": "1\n",
+    });
+    await repo.git("tag", "task", "main");
+    await repo.git("switch", "--quiet", "main");
+    const result = await runDiffGuard({
+      cwd: repo.path,
+      base: "main",
+      head: "task",
+      log: () => {},
+    });
+    expect(kinds(result)).toEqual(["files"]);
+  });
 });

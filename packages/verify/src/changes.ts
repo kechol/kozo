@@ -36,17 +36,15 @@ export function literal(path: string) {
 }
 
 /**
- * Resolves the base ref that kozod names. A full commit ID or a full ref name is taken as it is;
- * any other name means a branch, `refs/heads/<name>`. git would otherwise look a short name up
- * among tags first, and a worker can create a tag in the repository it shares with kozod.
+ * Resolves a ref that kozod names to a commit. A full commit ID, a full ref name or HEAD is taken
+ * as it is; any other name means a branch, `refs/heads/<name>`. git would otherwise look a short
+ * name up among tags first, and a worker can create a tag in the repository it shares with kozod.
  */
-export async function resolveBase(cwd: string, base: string) {
-  const full = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(base) || base.startsWith("refs/");
-  return await resolveCommit(cwd, full ? base : `refs/heads/${base}`);
-}
-
-export async function resolveCommit(cwd: string, ref: string) {
-  return (await git(cwd, ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`])).trim();
+export async function resolveRef(cwd: string, ref: string) {
+  const full =
+    /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(ref) || ref.startsWith("refs/") || ref === "HEAD";
+  const name = full ? ref : `refs/heads/${ref}`;
+  return (await git(cwd, ["rev-parse", "--verify", "--end-of-options", `${name}^{commit}`])).trim();
 }
 
 /**
@@ -55,10 +53,7 @@ export async function resolveCommit(cwd: string, ref: string) {
  * commit may carry. The diff is taken from the merge base.
  */
 export async function resolveRange(cwd: string, base: string, head: string) {
-  const [baseTip, headCommit] = await Promise.all([
-    resolveBase(cwd, base),
-    resolveCommit(cwd, head),
-  ]);
+  const [baseTip, headCommit] = await Promise.all([resolveRef(cwd, base), resolveRef(cwd, head)]);
   const mergeBase = (await git(cwd, ["merge-base", baseTip, headCommit])).trim();
   return { baseTip, head: headCommit, mergeBase };
 }

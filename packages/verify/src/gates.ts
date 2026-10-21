@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { type GateLevel, parseConstraints } from "@kozo/core";
 import { constraintsPath } from "./base-documents.ts";
-import { resolveBase } from "./changes.ts";
+import { resolveRef } from "./changes.ts";
 import { runCommand, secondsSince } from "./command.ts";
 import { GitError, showFile } from "./git.ts";
 
@@ -99,7 +99,7 @@ export async function runGates({ cwd, level, base, log }: GatesOptions): Promise
 }
 
 async function readConstraints(cwd: string, base: string | undefined) {
-  if (base !== undefined) return await showFile(cwd, await resolveBase(cwd, base), constraintsPath);
+  if (base !== undefined) return await showFile(cwd, await resolveRef(cwd, base), constraintsPath);
   const file = Bun.file(join(cwd, constraintsPath));
   return (await file.exists()) ? await file.text() : null;
 }

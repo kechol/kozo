@@ -57,8 +57,8 @@ Commands:
 Options:
   --version  Print the version
 
-A <ref> after --base is a full commit ID, a full ref such as
-refs/remotes/origin/main, or a branch name, read as refs/heads/<name>.`;
+A <ref> after --base or --head is a full commit ID, HEAD, a full ref such
+as refs/remotes/origin/main, or a branch name, read as refs/heads/<name>.`;
 
 /** A usage error that a command raises after its arguments parsed. */
 class UsageError extends Error {}

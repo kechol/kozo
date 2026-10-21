@@ -9,7 +9,7 @@ import verifyAppSkill from "../../../templates/factory/skills/verify-app/SKILL.m
   type: "text",
 };
 import { parseAgentDefinition, parseSkill } from "./agent-definition.ts";
-import { resolveBase, resolveCommit } from "./changes.ts";
+import { resolveRef } from "./changes.ts";
 import { guarded } from "./command.ts";
 import { GitError, showFile } from "./git.ts";
 import { parseAnswer, type SessionAnswer, SessionError, type Verifier } from "./judge.ts";
@@ -46,12 +46,12 @@ export async function runVerify(options: VerifyOptions): Promise<VerifyResult> {
 
 async function verify(options: VerifyOptions): Promise<VerifyResult> {
   const { cwd, log } = options;
-  const procedure = await showFile(cwd, await resolveBase(cwd, options.base), verifyAppPath);
+  const procedure = await showFile(cwd, await resolveRef(cwd, options.base), verifyAppPath);
   if (procedure === null) {
     log(`kozo: ${verifyAppPath} is missing at ${options.base}\n`);
     return { status: "MISCONFIGURED", reason: "verify-app-missing" };
   }
-  const head = await resolveCommit(cwd, "HEAD");
+  const head = await resolveRef(cwd, "HEAD");
   const before = await runningProcesses();
   let answer: SessionAnswer;
   try {
