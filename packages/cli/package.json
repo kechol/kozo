@@ -3,5 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": "./src/index.ts"
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@kozo/core": "workspace:*",
+    "@kozo/verify": "workspace:*"
+  },
+  "devDependencies": {
+    "@kozo/testing": "workspace:*"
+  }
 }
