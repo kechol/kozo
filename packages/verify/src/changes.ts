@@ -58,9 +58,16 @@ export async function resolveRange(cwd: string, base: string, head: string) {
   return { baseTip, head: headCommit, mergeBase };
 }
 
-/** Whether a path matches any of the globs. */
+/**
+ * Whether a path matches any of the globs. A glob also covers everything under the directory it
+ * names, so `db/migrations` and `db/migrations/` mean `db/migrations/**`, as a person writing a
+ * protected path or a scope means them.
+ */
 export function globMatcher(patterns: readonly string[]) {
-  const globs = patterns.map((pattern) => new Bun.Glob(pattern));
+  const globs = patterns.flatMap((pattern) => {
+    const trimmed = pattern.replace(/\/+$/, "");
+    return [new Bun.Glob(trimmed), new Bun.Glob(`${trimmed}/**`)];
+  });
   return (path: string) => globs.some((glob) => glob.match(path));
 }
 

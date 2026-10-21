@@ -73,14 +73,14 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
   const inScope = scope && globMatcher(scope);
   const protectedGlobs = charter.protected_paths.map((pattern) => ({
     pattern,
-    glob: new Bun.Glob(pattern),
+    matches: globMatcher([pattern]),
   }));
   const isTest = globMatcher(constraints.tests);
   for (const file of files) {
     if (inScope && !inScope(file.path)) {
       violations.push({ kind: "out-of-scope", path: file.path });
     }
-    const hit = protectedGlobs.find(({ glob }) => glob.match(file.path));
+    const hit = protectedGlobs.find(({ matches }) => matches(file.path));
     if (hit) violations.push({ kind: "protected-path", path: file.path, pattern: hit.pattern });
     if (charter.existing_tests_protected && file.change !== "added" && isTest(file.path)) {
       violations.push({ kind: "existing-test", path: file.path, change: file.change });

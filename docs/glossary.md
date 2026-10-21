@@ -122,7 +122,7 @@
 | factory definition | The git repository of agents, skills, blueprints, automations, eval cases and `factory.yml` that kozod applies only after `kozo check` passes. | `~/.kozo/factory/`, `factory.yml` | factory config | - |
 | limits | The Charter caps per task and per run, such as changed lines, files, retries, turns, minutes and cost. | `limits` | - | - |
 | mode | The way kozo connects to the outside: `local` with local branches, or `github` with Issues and pull requests. | `mode` | - | - |
-| protected path | A Charter path pattern that is never changed unattended, so that touching it raises a question. | `protected_paths` | - | - |
+| protected path | A Charter path pattern that is never changed unattended, so that touching it raises a question; a pattern naming a directory covers everything under it. | `protected_paths` | - | - |
 | risk tier | The plan setting, low, normal or high, that decides verification depth and that kozod may only raise. | `risk` | risk class, risk level | - |
 | work class | The plan setting that selects the blueprint: docs, deps, bugfix, refactor, perf, migration or feature. | `class` | category, task type | - |
 

@@ -90,6 +90,25 @@ describe("runDiffGuard", () => {
     ]);
   });
 
+  test("a protected path or scope that names a directory covers everything under it", async () => {
+    const repo = await gitRepository();
+    await using _ = repo;
+    const base = await repo.commit({
+      [charterPath]: charter.replace(
+        '  - "AGENTS.md"\n',
+        '  - "AGENTS.md"\n  - "db/schema"\n  - "lib/vendor/"\n',
+      ),
+      [constraintsPath]: constraints,
+    });
+    await repo.commit({ "db/schema/users.sql": "x\n", "lib/vendor/pay.ts": "x\n" });
+    const { result } = await guard(repo.path, base, ["db/schema"]);
+    expect("violations" in result && result.violations).toEqual([
+      { kind: "protected-path", path: "db/schema/users.sql", pattern: "db/schema" },
+      { kind: "out-of-scope", path: "lib/vendor/pay.ts" },
+      { kind: "protected-path", path: "lib/vendor/pay.ts", pattern: "lib/vendor/" },
+    ]);
+  });
+
   test("modifying, deleting or renaming an existing test file is a violation", async () => {
     const { repo, base } = await repository();
     await using _ = repo;
