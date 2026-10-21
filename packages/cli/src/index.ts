@@ -21,7 +21,7 @@ import pkg from "../package.json" with { type: "json" };
 export const ExitCode = { success: 0, failure: 1, usage: 2, awaitingHuman: 3 } as const;
 
 /** The model review and verify sessions use unless --model names another. */
-export const defaultSessionModel = "claude-sonnet-5-5";
+const defaultSessionModel = "claude-sonnet-5-5";
 
 export interface Output {
   stdout(line: string): void;
@@ -60,6 +60,9 @@ Options:
 A <ref> after --base is a full commit ID, a full ref such as
 refs/remotes/origin/main, or a branch name, read as refs/heads/<name>.`;
 
+/** A usage error that a command raises after its arguments parsed. */
+class UsageError extends Error {}
+
 export async function run(
   args: readonly string[],
   out: Output,
@@ -70,163 +73,131 @@ export async function run(
     out.stdout(`kozo ${pkg.version}`);
     return ExitCode.success;
   }
-  if (command === "gates") return await gates(rest, out, cwd);
-  if (command === "diff-guard") return await diffGuard(rest, out, cwd);
-  if (command === "prove") return await prove(rest, out, cwd);
-  if (command === "review") return await review(rest, out, cwd);
-  if (command === "verify") return await verify(rest, out, cwd);
+  try {
+    if (command === "gates") return await gates(rest, out, cwd);
+    if (command === "diff-guard") return await diffGuard(rest, out, cwd);
+    if (command === "prove") return await prove(rest, out, cwd);
+    if (command === "review") return await review(rest, out, cwd);
+    if (command === "verify") return await verify(rest, out, cwd);
+  } catch (error) {
+    const fromParseArgs = String((error as { code?: unknown }).code).startsWith("ERR_PARSE_ARGS");
+    if (error instanceof UsageError || fromParseArgs) return usage(out, (error as Error).message);
+    throw error;
+  }
   return usage(out, command === undefined ? undefined : `unknown command '${command}'`);
 }
 
-async function gates(args: readonly string[], out: Output, cwd: string): Promise<number> {
-  let values: { level?: string; base?: string; json?: boolean };
-  try {
-    ({ values } = parseArgs({
-      args: [...args],
-      options: {
-        level: { type: "string", default: "full" },
-        base: { type: "string" },
-        json: { type: "boolean" },
-      },
-      strict: true,
-    }));
-  } catch (error) {
-    return usage(out, (error as Error).message);
-  }
-  const level = gateLevelSchema.safeParse(values.level);
-  if (!level.success) return usage(out, `unknown gate level '${values.level}'`);
+// With --json, stdout carries only the JSON document, so progress output goes to stderr.
+function logTo(out: Output, json: boolean | undefined) {
+  return json ? out.rawStderr : out.rawStdout;
+}
 
-  // With --json, stdout carries only the JSON document, so gate output goes to stderr.
+/** Prints the result: the JSON document with --json, otherwise `details` and then `line`. */
+function report(
+  out: Output,
+  json: boolean | undefined,
+  result: object,
+  line: string,
+  details: readonly string[] = [],
+) {
+  if (json) {
+    out.stdout(JSON.stringify({ ...result, line }));
+    return;
+  }
+  for (const detail of details) out.stdout(detail);
+  out.stdout(line);
+}
+
+async function gates(args: readonly string[], out: Output, cwd: string): Promise<number> {
+  const { values } = parseArgs({
+    args: [...args],
+    options: {
+      level: { type: "string", default: "full" },
+      base: { type: "string" },
+      json: { type: "boolean" },
+    },
+    strict: true,
+  });
+  const level = gateLevelSchema.safeParse(values.level);
+  if (!level.success) throw new UsageError(`unknown gate level '${values.level}'`);
+
   const result = await runGates({
     cwd,
     level: level.data,
     base: values.base,
-    log: values.json ? out.rawStderr : out.rawStdout,
+    log: logTo(out, values.json),
   });
-  const line = gatesLine(result);
-  if (values.json) out.stdout(JSON.stringify({ ...result, line }));
-  else out.stdout(line);
+  report(out, values.json, result, gatesLine(result));
   return result.status === "pass" ? ExitCode.success : ExitCode.failure;
 }
 
 async function diffGuard(args: readonly string[], out: Output, cwd: string): Promise<number> {
-  let values: { base?: string; head?: string; scope?: string[]; json?: boolean };
-  try {
-    ({ values } = parseArgs({
-      args: [...args],
-      options: {
-        base: { type: "string" },
-        head: { type: "string", default: "HEAD" },
-        scope: { type: "string", multiple: true },
-        json: { type: "boolean" },
-      },
-      strict: true,
-    }));
-  } catch (error) {
-    return usage(out, (error as Error).message);
-  }
-  if (values.base === undefined) return usage(out, "diff-guard needs --base <ref>");
+  const { values } = parseArgs({
+    args: [...args],
+    options: {
+      base: { type: "string" },
+      head: { type: "string", default: "HEAD" },
+      scope: { type: "string", multiple: true },
+      json: { type: "boolean" },
+    },
+    strict: true,
+  });
+  if (values.base === undefined) throw new UsageError("diff-guard needs --base <ref>");
 
   const result = await runDiffGuard({
     cwd,
     base: values.base,
-    head: values.head ?? "HEAD",
+    head: values.head,
     scope: values.scope,
-    log: values.json ? out.rawStderr : out.rawStdout,
+    log: logTo(out, values.json),
   });
-  const line = diffGuardLine(result);
-  if (values.json) out.stdout(JSON.stringify({ ...result, line }));
-  else out.stdout(line);
+  report(out, values.json, result, diffGuardLine(result));
   return result.status === "pass" ? ExitCode.success : ExitCode.failure;
 }
 
 async function prove(args: readonly string[], out: Output, cwd: string): Promise<number> {
-  let values: { base?: string; json?: boolean };
-  try {
-    ({ values } = parseArgs({
-      args: [...args],
-      options: { base: { type: "string" }, json: { type: "boolean" } },
-      strict: true,
-    }));
-  } catch (error) {
-    return usage(out, (error as Error).message);
-  }
-  if (values.base === undefined) return usage(out, "prove needs --base <ref>");
-
-  const result = await runProve({
-    cwd,
-    base: values.base,
-    log: values.json ? out.rawStderr : out.rawStdout,
+  const { values } = parseArgs({
+    args: [...args],
+    options: { base: { type: "string" }, json: { type: "boolean" } },
+    strict: true,
   });
-  const line = proveLine(result);
-  if (values.json) out.stdout(JSON.stringify({ ...result, line }));
-  else out.stdout(line);
+  if (values.base === undefined) throw new UsageError("prove needs --base <ref>");
+
+  const result = await runProve({ cwd, base: values.base, log: logTo(out, values.json) });
+  report(out, values.json, result, proveLine(result));
   return result.status === "pass" ? ExitCode.success : ExitCode.failure;
 }
 
-interface SessionArgs {
-  base: string;
-  goal: string;
-  doneWhen: string[];
-  model: string;
-  maxCostUsd: number;
-  out?: string;
-  json?: boolean;
-  executable: string;
-}
-
-/** Parses the arguments that review and verify share; returns an exit code on a usage error. */
-function sessionArgs(
-  command: string,
-  args: readonly string[],
-  out: Output,
-  defaultCost: string,
-): SessionArgs | number {
-  let values: {
-    base?: string;
-    goal?: string;
-    "done-when"?: string[];
-    model?: string;
-    "max-cost"?: string;
-    out?: string;
-    json?: boolean;
-  };
-  try {
-    ({ values } = parseArgs({
-      args: [...args],
-      options: {
-        base: { type: "string" },
-        goal: { type: "string" },
-        "done-when": { type: "string", multiple: true },
-        model: { type: "string", default: defaultSessionModel },
-        "max-cost": { type: "string", default: defaultCost },
-        out: { type: "string" },
-        json: { type: "boolean" },
-      },
-      strict: true,
-    }));
-  } catch (error) {
-    return usage(out, (error as Error).message);
-  }
+/** Parses the arguments that review and verify share; null means claude is not on PATH. */
+function sessionArgs(command: string, args: readonly string[], defaultCost: string) {
+  const { values } = parseArgs({
+    args: [...args],
+    options: {
+      base: { type: "string" },
+      goal: { type: "string" },
+      "done-when": { type: "string", multiple: true },
+      model: { type: "string", default: defaultSessionModel },
+      "max-cost": { type: "string", default: defaultCost },
+      out: { type: "string" },
+      json: { type: "boolean" },
+    },
+    strict: true,
+  });
   const doneWhen = values["done-when"] ?? [];
   if (values.base === undefined || values.goal === undefined || doneWhen.length === 0) {
-    return usage(
-      out,
+    throw new UsageError(
       `${command} needs --base <ref>, --goal <text> and at least one --done-when <text>`,
     );
   }
   const maxCostUsd = Number(values["max-cost"]);
-  if (!(maxCostUsd > 0)) return usage(out, "--max-cost must be a positive number of US dollars");
+  if (!(maxCostUsd > 0)) throw new UsageError("--max-cost must be a positive number of US dollars");
   const executable = Bun.which("claude");
-  if (executable === null) {
-    out.stderr(`kozo: ${command} needs the claude CLI on PATH`);
-    return ExitCode.failure;
-  }
+  if (executable === null) return null;
   return {
     base: values.base,
     goal: values.goal,
     doneWhen,
-    model: values.model ?? defaultSessionModel,
+    model: values.model,
     maxCostUsd,
     out: values.out,
     json: values.json,
@@ -235,29 +206,33 @@ function sessionArgs(
 }
 
 async function review(args: readonly string[], out: Output, cwd: string): Promise<number> {
-  const values = sessionArgs("review", args, out, "1");
-  if (typeof values === "number") return values;
+  const values = sessionArgs("review", args, "1");
+  if (values === null) return missingClaude(out, "review");
   const result = await runReview({
     ...values,
     cwd,
     judge: claudeJudge(values.executable),
-    log: values.json ? out.rawStderr : out.rawStdout,
+    log: logTo(out, values.json),
   });
   if (result.status === "reviewed" && values.out !== undefined) {
-    await writeReviewVerdict(values.out, result.record);
-  }
-  const line = reviewLine(result);
-  if (values.json) out.stdout(JSON.stringify({ ...result, line }));
-  else {
-    if (result.status === "reviewed") {
-      out.stdout(result.record.summary);
-      for (const finding of result.record.findings) {
-        const where = finding.path ? ` ${finding.path}:` : "";
-        out.stdout(`- [${finding.severity}] ${finding.criterion}:${where} ${finding.issue}`);
-      }
+    try {
+      await writeReviewVerdict(values.out, result.record);
+    } catch (error) {
+      out.stderr(`kozo: ${(error as Error).message}`);
+      return ExitCode.failure;
     }
-    out.stdout(line);
   }
+  const details =
+    result.status === "reviewed"
+      ? [
+          result.record.summary,
+          ...result.record.findings.map((finding) => {
+            const where = finding.path ? ` ${finding.path}:` : "";
+            return `- [${finding.severity}] ${finding.criterion}:${where} ${finding.issue}`;
+          }),
+        ]
+      : [];
+  report(out, values.json, result, reviewLine(result), details);
   if (result.status === "error") return ExitCode.failure;
   const codes = {
     accept: ExitCode.success,
@@ -268,14 +243,13 @@ async function review(args: readonly string[], out: Output, cwd: string): Promis
 }
 
 async function verify(args: readonly string[], out: Output, cwd: string): Promise<number> {
-  const values = sessionArgs("verify", args, out, "3");
-  if (typeof values === "number") return values;
-
+  const values = sessionArgs("verify", args, "3");
+  if (values === null) return missingClaude(out, "verify");
   const result = await runVerify({
     ...values,
     cwd,
     verifier: claudeVerifier(values.executable),
-    log: values.json ? out.rawStderr : out.rawStdout,
+    log: logTo(out, values.json),
   });
   if (result.status === "verified" && values.out !== undefined) {
     try {
@@ -285,21 +259,25 @@ async function verify(args: readonly string[], out: Output, cwd: string): Promis
       return ExitCode.failure;
     }
   }
-  const line = verifyLine(result);
-  if (values.json) out.stdout(JSON.stringify({ ...result, line }));
-  else {
-    if (result.status === "verified") {
-      out.stdout(result.record.summary);
-      for (const condition of result.record.conditions) {
-        const mark = condition.met ? "met" : "not met";
-        out.stdout(`- [${mark}] ${condition.condition}: ${condition.observation}`);
-      }
-    }
-    out.stdout(line);
-  }
+  const details =
+    result.status === "verified"
+      ? [
+          result.record.summary,
+          ...result.record.conditions.map((condition) => {
+            const mark = condition.met ? "met" : "not met";
+            return `- [${mark}] ${condition.condition}: ${condition.observation}`;
+          }),
+        ]
+      : [];
+  report(out, values.json, result, verifyLine(result), details);
   if (result.status !== "verified") return ExitCode.failure;
   const codes = { pass: ExitCode.success, fail: ExitCode.failure, blocked: ExitCode.awaitingHuman };
   return codes[result.record.result];
+}
+
+function missingClaude(out: Output, command: string): number {
+  out.stderr(`kozo: ${command} needs the claude CLI on PATH`);
+  return ExitCode.failure;
 }
 
 function usage(out: Output, problem: string | undefined): number {
