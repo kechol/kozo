@@ -5,7 +5,7 @@ import { caughtBy, runLayers } from "./layers.ts";
 // Each case builds a repository and runs the gates and prove, so allow more than the default.
 const timeout = 30_000;
 
-describe("the bad-change suite", () => {
+describe.concurrent("the bad-change suite", () => {
   test("has at least ten kinds of bad change", () => {
     expect(badChanges.length).toBeGreaterThanOrEqual(10);
     expect(new Set(badChanges.map((change) => change.id)).size).toBe(badChanges.length);

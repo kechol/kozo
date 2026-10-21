@@ -61,7 +61,8 @@ describe("stopProcessesIn", () => {
     await using dir = await tempDirectory();
     const before = sleeper(dir.path);
     try {
-      await Bun.sleep(2100);
+      // ps reports age in whole seconds, so the sleeper must be at least one second old.
+      await Bun.sleep(1500);
       expect(await stopProcessesIn(dir.path, new Date())).toEqual([]);
       expect(before.exitCode).toBeNull();
     } finally {

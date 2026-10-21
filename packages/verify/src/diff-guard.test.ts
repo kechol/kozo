@@ -1,27 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { gitRepository } from "@kozo/testing";
+import { exampleCharter, gitRepository } from "@kozo/testing";
 import { charterPath, constraintsPath } from "./base-documents.ts";
 import { diffGuardLine, runDiffGuard } from "./diff-guard.ts";
 
-const charter = `
-version: 1
-status: ready
-isolation: worktree
-protected_paths: [".kozo/**", "**/migrations/**", "AGENTS.md"]
-existing_tests_protected: true
-levels: { default: L1 }
-limits:
-  max_changed_lines: 10
-  max_files: 3
-  max_tasks_per_item: 8
-  inner_retries: 2
-  ci_fix_rounds: 2
-  no_progress_rounds: 3
-  max_turns: 40
-  max_minutes: 45
-  max_cost_usd: 5
-backpressure: { max_awaiting_merge: 3, max_held: 10 }
-`;
+const charter = exampleCharter
+  .replace("max_changed_lines: 400", "max_changed_lines: 10")
+  .replace("max_files: 8", "max_files: 3");
 
 const constraints = `
 version: 1
