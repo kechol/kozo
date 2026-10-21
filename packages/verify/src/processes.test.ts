@@ -1,0 +1,59 @@
+import { describe, expect, test } from "bun:test";
+import { tempDirectory } from "@kozo/testing";
+import { stopProcessesIn } from "./processes.ts";
+
+function sleeper(cwd: string) {
+  return Bun.spawn(["sleep", "60"], { cwd, stdout: "ignore", stderr: "ignore" });
+}
+
+describe("stopProcessesIn", () => {
+  test("spares this process's ancestors even when they run in the directory", async () => {
+    await using dir = await tempDirectory();
+    const script = `${dir.path}/stop.ts`;
+    await Bun.write(
+      script,
+      `import { stopProcessesIn } from ${JSON.stringify(`${import.meta.dir}/processes.ts`)};\n` +
+        "console.log(JSON.stringify(await stopProcessesIn(process.cwd(), new Date(Date.now() - 60_000))));\n",
+    );
+    // A shell in the directory starts the script, as a human's terminal or a tool would.
+    const shell = Bun.spawn(
+      ["sh", "-c", `"${process.execPath}" run stop.ts; echo shell-survived`],
+      {
+        cwd: dir.path,
+        stdout: "pipe",
+      },
+    );
+    const output = await new Response(shell.stdout).text();
+    expect(output).toContain("[]");
+    expect(output).toContain("shell-survived");
+  });
+
+  test("stops processes started in the directory since the given time", async () => {
+    await using dir = await tempDirectory({ "sub/.keep": "" });
+    await using elsewhere = await tempDirectory();
+    const since = new Date();
+    const inside = sleeper(`${dir.path}/sub`);
+    const outside = sleeper(elsewhere.path);
+    try {
+      const stopped = await stopProcessesIn(dir.path, since);
+      expect(stopped).toEqual([inside.pid]);
+      expect(await inside.exited).not.toBe(0);
+      expect(outside.exitCode).toBeNull();
+    } finally {
+      inside.kill();
+      outside.kill();
+    }
+  });
+
+  test("leaves processes that were already running", async () => {
+    await using dir = await tempDirectory();
+    const before = sleeper(dir.path);
+    try {
+      await Bun.sleep(2100);
+      expect(await stopProcessesIn(dir.path, new Date())).toEqual([]);
+      expect(before.exitCode).toBeNull();
+    } finally {
+      before.kill();
+    }
+  });
+});

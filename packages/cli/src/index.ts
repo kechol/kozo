@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 import { gateLevelSchema } from "@kozo/core";
 import {
   claudeJudge,
+  claudeVerifier,
   diffGuardLine,
   gatesLine,
   proveLine,
@@ -10,14 +11,17 @@ import {
   runGates,
   runProve,
   runReview,
+  runVerify,
+  verifyLine,
   writeReviewVerdict,
+  writeVerifyVerdict,
 } from "@kozo/verify";
 import pkg from "../package.json" with { type: "json" };
 
 export const ExitCode = { success: 0, failure: 1, usage: 2, awaitingHuman: 3 } as const;
 
-/** The review model until the comparison on the bad-change suite picks one. */
-export const defaultReviewModel = "claude-sonnet-5-5";
+/** The model for review and verify until the comparison on the bad-change suite picks one. */
+export const defaultSessionModel = "claude-sonnet-5-5";
 
 export interface Output {
   stdout(line: string): void;
@@ -43,6 +47,11 @@ Commands:
       Judge the diff from the merge base of <ref> to HEAD in a separate
       claude session that sees only the diff, GOAL and DONE_WHEN; with
       --out, record the verdict in <dir>/verdict.json
+  verify --base <ref> --goal <text> --done-when <text>... [--model <id>]
+         [--max-cost <usd>] [--out <dir>] [--json]
+      Run the app by .kozo/verify-app.md at the tip of <ref> in a sandboxed
+      claude session, exercise each DONE_WHEN condition and, with --out,
+      record the verdict and copy the evidence into <dir>
 
 Options:
   --version  Print the version`;
@@ -61,6 +70,7 @@ export async function run(
   if (command === "diff-guard") return await diffGuard(rest, out, cwd);
   if (command === "prove") return await prove(rest, out, cwd);
   if (command === "review") return await review(rest, out, cwd);
+  if (command === "verify") return await verify(rest, out, cwd);
   return usage(out, command === undefined ? undefined : `unknown command '${command}'`);
 }
 
@@ -145,7 +155,24 @@ async function prove(args: readonly string[], out: Output, cwd: string): Promise
   return result.status === "pass" ? ExitCode.success : ExitCode.failure;
 }
 
-async function review(args: readonly string[], out: Output, cwd: string): Promise<number> {
+interface SessionArgs {
+  base: string;
+  goal: string;
+  doneWhen: string[];
+  model: string;
+  maxCostUsd: number;
+  out?: string;
+  json?: boolean;
+  executable: string;
+}
+
+/** Parses the arguments that review and verify share; returns an exit code on a usage error. */
+function sessionArgs(
+  command: string,
+  args: readonly string[],
+  out: Output,
+  defaultCost: string,
+): SessionArgs | number {
   let values: {
     base?: string;
     goal?: string;
@@ -162,8 +189,8 @@ async function review(args: readonly string[], out: Output, cwd: string): Promis
         base: { type: "string" },
         goal: { type: "string" },
         "done-when": { type: "string", multiple: true },
-        model: { type: "string", default: defaultReviewModel },
-        "max-cost": { type: "string", default: "1" },
+        model: { type: "string", default: defaultSessionModel },
+        "max-cost": { type: "string", default: defaultCost },
         out: { type: "string" },
         json: { type: "boolean" },
       },
@@ -176,25 +203,35 @@ async function review(args: readonly string[], out: Output, cwd: string): Promis
   if (values.base === undefined || values.goal === undefined || doneWhen.length === 0) {
     return usage(
       out,
-      "review needs --base <ref>, --goal <text> and at least one --done-when <text>",
+      `${command} needs --base <ref>, --goal <text> and at least one --done-when <text>`,
     );
   }
   const maxCostUsd = Number(values["max-cost"]);
   if (!(maxCostUsd > 0)) return usage(out, "--max-cost must be a positive number of US dollars");
   const executable = Bun.which("claude");
   if (executable === null) {
-    out.stderr("kozo: review needs the claude CLI on PATH");
+    out.stderr(`kozo: ${command} needs the claude CLI on PATH`);
     return ExitCode.failure;
   }
-
-  const result = await runReview({
-    cwd,
+  return {
     base: values.base,
     goal: values.goal,
     doneWhen,
-    judge: claudeJudge(executable),
-    model: values.model ?? defaultReviewModel,
+    model: values.model ?? defaultSessionModel,
     maxCostUsd,
+    out: values.out,
+    json: values.json,
+    executable,
+  };
+}
+
+async function review(args: readonly string[], out: Output, cwd: string): Promise<number> {
+  const values = sessionArgs("review", args, out, "1");
+  if (typeof values === "number") return values;
+  const result = await runReview({
+    ...values,
+    cwd,
+    judge: claudeJudge(values.executable),
     log: values.json ? out.rawStderr : out.rawStdout,
   });
   if (result.status === "reviewed" && values.out !== undefined) {
@@ -219,6 +256,36 @@ async function review(args: readonly string[], out: Output, cwd: string): Promis
     escalate: ExitCode.awaitingHuman,
   };
   return codes[result.record.verdict];
+}
+
+async function verify(args: readonly string[], out: Output, cwd: string): Promise<number> {
+  const values = sessionArgs("verify", args, out, "3");
+  if (typeof values === "number") return values;
+
+  const result = await runVerify({
+    ...values,
+    cwd,
+    verifier: claudeVerifier(values.executable),
+    log: values.json ? out.rawStderr : out.rawStdout,
+  });
+  if (result.status === "verified" && values.out !== undefined) {
+    await writeVerifyVerdict(values.out, cwd, result.record);
+  }
+  const line = verifyLine(result);
+  if (values.json) out.stdout(JSON.stringify({ ...result, line }));
+  else {
+    if (result.status === "verified") {
+      out.stdout(result.record.summary);
+      for (const condition of result.record.conditions) {
+        const mark = condition.met ? "met" : "not met";
+        out.stdout(`- [${mark}] ${condition.condition}: ${condition.observation}`);
+      }
+    }
+    out.stdout(line);
+  }
+  if (result.status !== "verified") return ExitCode.failure;
+  const codes = { pass: ExitCode.success, fail: ExitCode.failure, blocked: ExitCode.awaitingHuman };
+  return codes[result.record.result];
 }
 
 function usage(out: Output, problem: string | undefined): number {

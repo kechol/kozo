@@ -30,14 +30,42 @@ export const reviewRecordSchema = reviewJudgmentSchema.extend({
 });
 export type ReviewRecord = z.infer<typeof reviewRecordSchema>;
 
+/** What the verify agent must answer after running the app. */
+export const verifyJudgmentSchema = z.strictObject({
+  result: z.enum(["pass", "fail", "blocked"]),
+  summary: z.string().min(1),
+  conditions: z.array(
+    z.strictObject({
+      condition: z.string().min(1),
+      met: z.boolean(),
+      observation: z.string().min(1),
+      /** Evidence files as paths relative to the repository root. */
+      evidence: z.array(z.string().min(1)),
+    }),
+  ),
+  cleanedUp: z.boolean(),
+});
+export type VerifyJudgment = z.infer<typeof verifyJudgmentSchema>;
+
+export const verifyRecordSchema = verifyJudgmentSchema.extend({
+  model: z.string().min(1),
+  costUsd: z.number().nonnegative(),
+  head: z.string().min(1),
+  verifiedAt: z.iso.datetime(),
+});
+export type VerifyRecord = z.infer<typeof verifyRecordSchema>;
+
 /** The verdicts of one run's judges, persisted as `verdict.json` in the run directory. */
 export const verdictFileSchema = z.strictObject({
   version: z.literal(1),
   review: reviewRecordSchema.optional(),
+  verify: verifyRecordSchema.optional(),
 });
 export type VerdictFile = z.infer<typeof verdictFileSchema>;
 
-/** The judgment schema as draft-07 JSON Schema, the draft Claude Code's structured output reads. */
-export const reviewJudgmentJsonSchema = z.toJSONSchema(reviewJudgmentSchema, {
-  target: "draft-7",
-}) as Record<string, unknown>;
+// Draft-07 is the JSON Schema draft that Claude Code's structured output reads.
+const jsonSchema = (schema: z.ZodType) =>
+  z.toJSONSchema(schema, { target: "draft-7" }) as Record<string, unknown>;
+
+export const reviewJudgmentJsonSchema = jsonSchema(reviewJudgmentSchema);
+export const verifyJudgmentJsonSchema = jsonSchema(verifyJudgmentSchema);

@@ -13,7 +13,7 @@ import reviewDefinition from "../../../templates/factory/agents/review/agent.md"
 import { parseAgentDefinition } from "./agent-definition.ts";
 import { diffCommand, resolveCommit } from "./changes.ts";
 import { GitError, git } from "./git.ts";
-import { type Judge, JudgeError } from "./judge.ts";
+import { type Judge, SessionError } from "./judge.ts";
 
 export const reviewAgent = parseAgentDefinition(reviewDefinition);
 
@@ -37,7 +37,7 @@ export async function runReview(options: ReviewOptions): Promise<ReviewResult> {
   try {
     return { status: "reviewed", record: await review(options) };
   } catch (error) {
-    if (!(error instanceof GitError || error instanceof JudgeError)) throw error;
+    if (!(error instanceof GitError || error instanceof SessionError)) throw error;
     options.log(`kozo: ${error.message}\n`);
     return { status: "error", message: error.message };
   }
@@ -50,7 +50,7 @@ async function review(options: ReviewOptions): Promise<ReviewRecord> {
     await git(cwd, ["merge-base", await resolveCommit(cwd, options.base), head])
   ).trim();
   const diff = await git(cwd, [...(await diffCommand(cwd)), "-U5", base, head, "--"]);
-  if (diff.trim() === "") throw new JudgeError("there is no diff to review");
+  if (diff.trim() === "") throw new SessionError("there is no diff to review");
 
   const answer = await judge.judge({
     instructions: reviewAgent.instructions,
@@ -61,11 +61,13 @@ async function review(options: ReviewOptions): Promise<ReviewRecord> {
   });
   const judgment = reviewJudgmentSchema.safeParse(answer.output);
   if (!judgment.success) {
-    throw new JudgeError(`the review answer does not match its schema: ${judgment.error.message}`);
+    throw new SessionError(
+      `the review answer does not match its schema: ${judgment.error.message}`,
+    );
   }
   const blocking = judgment.data.findings.some((finding) => finding.severity === "blocking");
   if (judgment.data.verdict === "accept" && blocking) {
-    throw new JudgeError("the review accepted the diff despite a blocking finding");
+    throw new SessionError("the review accepted the diff despite a blocking finding");
   }
   return {
     ...judgment.data,

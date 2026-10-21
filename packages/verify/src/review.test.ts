@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { verdictFileSchema } from "@kozo/core";
 import { gitRepository, tempDirectory } from "@kozo/testing";
 import { parseAgentDefinition } from "./agent-definition.ts";
-import type { Judge, JudgeRequest } from "./judge.ts";
+import type { Judge, SessionRequest } from "./judge.ts";
 import { reviewAgent, reviewLine, reviewPrompt, runReview, writeReviewVerdict } from "./review.ts";
 
 function fakeJudge(output: unknown) {
-  const requests: JudgeRequest[] = [];
+  const requests: SessionRequest[] = [];
   const judge: Judge = {
     async judge(request) {
       requests.push(request);
