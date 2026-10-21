@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import type { ChangedLines } from "./unified-diff.ts";
 
 export type TestWeakening =
@@ -247,35 +248,127 @@ const runnerFiles: Record<string, readonly string[]> = {
   nox: ["noxfile.py"],
 };
 
-const scriptLike = /\.(?:sh|bash|zsh|py|rb|pl|js|mjs|cjs|ts|mts|php|lua)$/;
+// The options by which a runner names its directory or its task file instead.
+const directoryOptions = ["-C", "--directory", "-d", "--working-directory", "--dir"];
+const fileOptions = [
+  "-f",
+  "--file",
+  "--makefile",
+  "--justfile",
+  "-t",
+  "--taskfile",
+  "--rakefile",
+  "-c",
+];
+
+const scriptLike = /\.(?:sh|bash|zsh|py|rb|pl|js|mjs|cjs|ts|mts|php|lua|mk)$/;
+
+const clean = (path: string) =>
+  posix.normalize(path.replace(/^['"]|['"]$/g, "")).replace(/\/+$/, "");
+
+/** The value of an option in `words` at `index`: `-C dir`, `-Cdir` or `--directory=dir`. */
+function optionValue(
+  words: readonly string[],
+  index: number,
+  names: readonly string[],
+): string | null {
+  const word = words[index] ?? "";
+  for (const name of names) {
+    if (word === name) return words[index + 1] ?? null;
+    if (name.startsWith("--") && word.startsWith(`${name}=`)) return word.slice(name.length + 1);
+    if (!name.startsWith("--") && word.startsWith(name) && word.length > name.length) {
+      return word.slice(name.length);
+    }
+  }
+  return null;
+}
 
 /**
  * The files whose content decides what a gate command does, mapped to that command: the files
- * it names, such as `scripts/lint.sh`, and the task files its runner reads, such as the
- * Makefile of `make test` or of `make -C sub test`.
+ * it names, such as `scripts/lint.sh`, read from the directory a leading `cd` moves to, and
+ * the task files its runner reads, such as the Makefile of `make test`, `make -C sub test` or
+ * `make -f ci.mk test`.
  */
 export function gateFiles(gateCommands: readonly string[]): Map<string, string> {
   const files = new Map<string, string>();
   for (const command of gateCommands) {
-    const words = command
-      .split(/[\s;&|()]+/)
-      .map((word) => word.replace(/^['"]|['"]$/g, ""))
-      .filter(Boolean);
-    words.forEach((word, index) => {
-      const path = word.replace(/^\.\//, "");
-      if (
-        !path.startsWith("-") &&
-        !path.includes("=") &&
-        (path.includes("/") || scriptLike.test(path))
-      ) {
-        files.set(path, command);
+    let directory = "";
+    for (const segment of command.split(/&&|\|\||[;|&]/)) {
+      const words = segment.trim().split(/\s+/).filter(Boolean);
+      if (words[0] === "cd" && words[1]) {
+        directory = clean(posix.join(directory, words[1]));
+        continue;
       }
-      const names = runnerFiles[word.split("/").at(-1) ?? ""];
-      if (!names) return;
-      const directory =
-        words[index + 1] === "-C" ? `${words[index + 2]?.replace(/\/+$/, "")}/` : "";
-      for (const name of names) files.set(`${directory}${name}`, command);
-    });
+      const at = (path: string) => clean(posix.join(directory, path));
+      words.forEach((word, index) => {
+        const path = clean(word);
+        if (
+          !path.startsWith("-") &&
+          !path.includes("=") &&
+          (path.includes("/") || scriptLike.test(path))
+        ) {
+          files.set(at(path), command);
+        }
+        const names = runnerFiles[path.split("/").at(-1) ?? ""];
+        if (!names) return;
+        let runDirectory = "";
+        let named: string | null = null;
+        for (let option = index + 1; option < words.length; option += 1) {
+          runDirectory = optionValue(words, option, directoryOptions) ?? runDirectory;
+          named = optionValue(words, option, fileOptions) ?? named;
+        }
+        const base = at(runDirectory || ".");
+        for (const name of named ? [named] : names)
+          files.set(clean(posix.join(base, name)), command);
+      });
+    }
   }
   return files;
+}
+
+/** The bodies of the package.json scripts that the gate commands run, directly or through others. */
+export function reachedScripts(
+  gateCommands: readonly string[],
+  scripts: Record<string, string>,
+): string[] {
+  const words = (command: string) => command.split(/[^\w:.-]+/).filter(Boolean);
+  const reached = new Set<string>();
+  const pending = gateCommands.flatMap(words);
+  while (pending.length > 0) {
+    const word = pending.pop() ?? "";
+    if (reached.has(word) || !Object.hasOwn(scripts, word)) continue;
+    reached.add(word);
+    for (const hook of [`pre${word}`, `post${word}`])
+      if (Object.hasOwn(scripts, hook)) pending.push(hook);
+    pending.push(...words(scripts[word] ?? ""));
+  }
+  return [...reached].map((name) => scripts[name] ?? "");
+}
+
+/**
+ * The files that gate files load in turn: a Makefile's include, a shell script's source or
+ * dot, followed from `files` as they are at the base, a few levels deep.
+ */
+export async function includedFiles(
+  files: Map<string, string>,
+  read: (path: string) => Promise<string | null>,
+): Promise<Map<string, string>> {
+  const all = new Map(files);
+  let frontier = [...files.keys()];
+  for (let depth = 0; depth < 4 && frontier.length > 0; depth += 1) {
+    const next: string[] = [];
+    for (const path of frontier) {
+      const text = await read(path);
+      if (text === null) continue;
+      const directory = posix.dirname(path);
+      for (const match of text.matchAll(/^\s*(?:-?include|sinclude|source|\.)\s+([^\s;&|]+)/gm)) {
+        const included = clean(posix.join(directory, match[1] ?? ""));
+        if (included === "" || all.has(included)) continue;
+        all.set(included, all.get(path) ?? "");
+        next.push(included);
+      }
+    }
+    frontier = next;
+  }
+  return all;
 }

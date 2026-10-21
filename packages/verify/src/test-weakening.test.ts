@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { changedGateScripts, findTestWeakening, gateFiles } from "./test-weakening.ts";
+import {
+  changedGateScripts,
+  findTestWeakening,
+  gateFiles,
+  includedFiles,
+  reachedScripts,
+} from "./test-weakening.ts";
 import { parseChangedLines } from "./unified-diff.ts";
 
 const added = (...texts: string[]) => texts.map((text, index) => ({ line: index + 1, text }));
@@ -376,20 +382,49 @@ describe("gateFiles", () => {
       "sh scripts/lint.sh",
       "./check.py --strict",
       "make -C web test",
+      "make --directory=api -f ci.mk check",
       "just ci",
+      "cd tools && sh ./run.sh",
       "bun run test",
       "NODE_ENV=test bunx vitest run",
     ]);
     expect([...files.keys()].sort()).toEqual([
       ".justfile",
       "Justfile",
+      "api/ci.mk",
       "check.py",
+      "ci.mk",
       "justfile",
       "scripts/lint.sh",
+      "tools/run.sh",
       "web/GNUmakefile",
       "web/Makefile",
       "web/makefile",
     ]);
     expect(files.get("scripts/lint.sh")).toBe("sh scripts/lint.sh");
+  });
+
+  test("follows the package.json scripts a gate runs and the files gate files include", async () => {
+    const scripts = {
+      test: "bun run lint && bun test",
+      lint: "sh scripts/lint.sh",
+      build: "sh build.sh",
+    };
+    expect(reachedScripts(["bun run test"], scripts).sort()).toEqual([
+      "bun run lint && bun test",
+      "sh scripts/lint.sh",
+    ]);
+    const base: Record<string, string> = {
+      Makefile: "include rules/common.mk\ntest:\n\tsh ./scripts/test.sh\n",
+      "rules/common.mk": "-include local.mk\n",
+      "scripts/lint.sh": ". ./lib.sh\nlint\n",
+    };
+    const files = await includedFiles(
+      gateFiles(["make test", "sh scripts/lint.sh"]),
+      async (path) => base[path] ?? null,
+    );
+    expect([...files.keys()]).toContain("rules/common.mk");
+    expect([...files.keys()]).toContain("rules/local.mk");
+    expect([...files.keys()]).toContain("scripts/lib.sh");
   });
 });

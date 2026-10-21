@@ -14,6 +14,8 @@ import {
   changedGateScripts,
   findTestWeakening,
   gateFiles,
+  includedFiles,
+  reachedScripts,
   type TestWeakening,
 } from "./test-weakening.ts";
 import { parseChangedLines } from "./unified-diff.ts";
@@ -120,7 +122,11 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
     }),
   );
   violations.push(...scriptChanges.flat());
-  const runByGates = gateFiles(gateCommands);
+  const rootScripts = scriptsOf(await showFile(cwd, mergeBase, "package.json"));
+  const runByGates = await includedFiles(
+    gateFiles([...gateCommands, ...reachedScripts(gateCommands, rootScripts)]),
+    (path: string) => showFile(cwd, mergeBase, path).catch(() => null),
+  );
   for (const file of files) {
     const command = runByGates.get(file.path);
     if (command) violations.push({ kind: "gate-file", path: file.path, command });
