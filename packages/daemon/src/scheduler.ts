@@ -201,6 +201,16 @@ export class Scheduler {
     }
   }
 
+  /**
+   * Starts other work for a task, such as the check at Complete, within the same concurrency as
+   * runs, since it runs the repository's tests too. Returns false when it cannot start now.
+   */
+  startWork(ref: string, work: () => Promise<void>): boolean {
+    if (this.active.has(ref) || this.active.size >= this.factory.concurrency) return false;
+    this.start(ref, "task", work);
+    return true;
+  }
+
   /** Looks for work to start; calls while one look is running are folded into one more. */
   tick(): void {
     if (this.ticking) {

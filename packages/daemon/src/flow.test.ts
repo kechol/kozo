@@ -108,7 +108,12 @@ async function factoryOf(
     (line) => console.error(line),
     options.now,
   );
-  const reconciler = new Reconciler(store, runner, (line) => console.error(line));
+  const reconciler = new Reconciler(
+    store,
+    runner,
+    (line) => console.error(line),
+    (ref, work) => scheduler.startWork(ref, work),
+  );
   return {
     repo,
     home,
@@ -452,6 +457,7 @@ describe("the minimal path", () => {
     );
     const { ref, task } = await toHandoff(env);
     await env.reconciler.reconcile();
+    await env.scheduler.idle();
     expect(env.store.state.tasks[task]?.stage).toBe("handoff");
     await env.repo.git(
       "merge",
@@ -462,6 +468,7 @@ describe("the minimal path", () => {
       "kozo/K-1-t1",
     );
     await env.reconciler.reconcile();
+    await env.scheduler.idle();
     expect(env.store.state.tasks[task]?.stage).toBe("complete");
     expect(env.store.state.items[ref]?.stage).toBe("complete");
     expect(await env.repo.git("worktree", "list")).not.toContain("K-1-t1");
@@ -476,6 +483,7 @@ describe("the minimal path", () => {
     await env.repo.git("merge", "--no-ff", "--quiet", "-m", "merge", "kozo/K-1-t1");
     await env.repo.commit({ "src/debug.ts": "console.log('left over');\n" }, "debug");
     await env.reconciler.reconcile();
+    await env.scheduler.idle();
     expect(env.store.state.tasks[task]?.stage).toBe("complete");
     expect(env.store.state.items[ref]).toMatchObject({ stage: "triage", hold: null });
     const notes = await Bun.file(join(env.home.items, ref, "notes.jsonl")).text();
@@ -508,15 +516,18 @@ describe("the minimal path", () => {
       expect(await Bun.spawn(["git", ...args], { cwd: worktree, env: human }).exited).toBe(0);
     }
     await env.reconciler.reconcile();
+    await env.scheduler.idle();
     expect(env.store.state.tasks[task]?.stage).toBe("reviewing");
     await env.settle();
     expect(env.store.state.tasks[task]?.stage).toBe("handoff");
     await env.reconciler.reconcile();
+    await env.scheduler.idle();
     expect(env.store.state.tasks[task]?.stage).toBe("handoff");
 
     await env.repo.git("worktree", "remove", "--force", worktree);
     await env.repo.git("branch", "-D", "kozo/K-1-t1");
     await env.reconciler.reconcile();
+    await env.scheduler.idle();
     expect(env.store.state.tasks[task]?.hold).toMatchObject({
       kind: "attention",
       reason: "kozo/K-1-t1 was deleted without a merge",

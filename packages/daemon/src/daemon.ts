@@ -121,7 +121,12 @@ export class Daemon {
       },
     });
     const server = serveApi(app, port);
-    const reconciler = new Reconciler(store, runner, (line) => console.error(line));
+    const reconciler = new Reconciler(
+      store,
+      runner,
+      (line) => console.error(line),
+      (ref, work) => scheduler.startWork(ref, work),
+    );
     await reconciler.recover();
     let reconciling = Promise.resolve();
     let ticks = 0;

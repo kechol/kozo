@@ -38,7 +38,7 @@ async function merged(repository: string, branch: string, target: string): Promi
 /**
  * Follows what happens to the factory's work outside kozod: on start, runs that kozod left
  * running are lost and resume from their checkpoints; every minute, a task awaiting a merge is
- * completed once its branch is merged, held for attention when its branch is deleted unmerged,
+ * completed once its branch is merged, by a check that takes a slot like any run, held for attention when its branch is deleted unmerged,
  * and sent back to Reviewing when a human committed to it.
  */
 export class Reconciler {
@@ -46,6 +46,11 @@ export class Reconciler {
     private readonly store: EventStore,
     private readonly runner: Runner,
     private readonly report: (message: string) => void = () => {},
+    /** Starts the check at Complete within the factory's concurrency; false means later. */
+    private readonly startWork: (ref: string, work: () => Promise<void>) => boolean = (_, work) => {
+      void work();
+      return true;
+    },
   ) {}
 
   /** Marks the runs that were running when kozod stopped as lost; their tasks resume later. */
@@ -99,7 +104,8 @@ export class Reconciler {
       return;
     }
     if (await merged(repository, branch, target)) {
-      await this.runner.complete(task.ref);
+      // A task whose check cannot start now is merged still, and the next pass starts it.
+      this.startWork(task.ref, () => this.runner.complete(task.ref));
       return;
     }
     const verified = this.verifiedHead(task);
