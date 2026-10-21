@@ -2,13 +2,17 @@ import type { AgentName, Event } from "@kozo/core";
 import type { ZodType } from "zod";
 import type { SandboxPaths } from "./task-sandbox.ts";
 
-type RecordType =
-  | "session.started"
-  | "agent.message"
-  | "tool.call"
-  | "tool.result"
-  | "instruction.delivered"
-  | "cost.tick";
+/** The event types a worker may send; kozod records nothing else from it. */
+export const recordTypes = [
+  "session.started",
+  "agent.message",
+  "tool.call",
+  "tool.result",
+  "guard.denied",
+  "instruction.delivered",
+  "cost.tick",
+] as const;
+type RecordType = (typeof recordTypes)[number];
 
 /** What an agent session reports while it runs; kozod wraps each one in an event envelope. */
 export type AgentRecord = {

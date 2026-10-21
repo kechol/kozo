@@ -141,12 +141,12 @@ describe("runSession", () => {
       { tool: "Read", input: { file_path: "/etc/hosts" }, output: "" },
       { fail: "done" },
     ]);
-    expect(results(messages).map((output) => String(output).split(":")[0])).toEqual([
-      "refused",
-      "refused",
-      "refused",
-      "refused",
-    ]);
+    expect(results(messages)).toEqual([]);
+    const denied = messages.flatMap((message) =>
+      "record" in message && message.record.type === "guard.denied" ? [message.record.data] : [],
+    );
+    expect(denied.map((data) => data.tool)).toEqual(["Bash", "Edit", "Write", "Read"]);
+    expect(denied.every((data) => data.reason.length > 0)).toBe(true);
   });
 
   test("queued instructions are delivered once each", async () => {

@@ -1,7 +1,7 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { runFiles } from "@kozo/core";
-import type { AgentOutcome, Blocked } from "@kozo/worker";
+import { type AgentOutcome, type Blocked, recordTypes } from "@kozo/worker";
 import type { EventStore } from "./event-store.ts";
 import type { LaunchedSession } from "./launcher.ts";
 
@@ -55,7 +55,12 @@ export async function pumpSession(
       } else if ("blocked" in message) {
         blocked = message.blocked;
       } else if ("record" in message) {
-        const { record } = message;
+        // Only the record types a worker may send, and only their type and data, become events.
+        const record = {
+          type: message.record.type,
+          data: message.record.data,
+        } as typeof message.record;
+        if (!(recordTypes as readonly string[]).includes(record.type)) continue;
         if (record.type === "cost.tick") {
           const added = Math.max(0, record.data.usd - costUsd);
           costUsd = record.data.usd;

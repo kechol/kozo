@@ -129,6 +129,8 @@ export const eventSchema = z
     event("node.exit", z.strictObject({ ok: z.boolean(), summary: text.optional() })),
     event("agent.message", z.strictObject({ agent: agentNameSchema, text })),
     event("tool.call", z.strictObject({ call_id: text, tool: text, input: z.unknown() })),
+    /** A tool call the guard refused before it ran; the agent gets the reason instead. */
+    event("guard.denied", z.strictObject({ call_id: text, tool: text, reason: text })),
     event(
       "tool.result",
       z

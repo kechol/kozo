@@ -100,10 +100,7 @@ describe("abuse", () => {
       expect(calls).toBeGreaterThanOrEqual(attempts.length);
       // The guard refuses the git, alias and file tool attempts before they run; the sandbox
       // stops the redirections and the read of the token.
-      const refused = records.filter(
-        (record) =>
-          record.type === "tool.result" && String(record.data.output).startsWith("refused:"),
-      ).length;
+      const refused = records.filter((record) => record.type === "guard.denied").length;
       expect(refused).toBeGreaterThanOrEqual(10);
     },
     300_000,

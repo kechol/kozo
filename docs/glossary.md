@@ -83,6 +83,7 @@
 | child run | A run in a separate session, such as review, that is grouped under its parent run. | `parent_run` | sub-run | - |
 | decision log | The per-run file in which the agent records, one line each, what it chose and why. | `decisions.md` in the run directory, `kozo_note` | - | - |
 | deterministic node | A blueprint node that kozod executes without a model. | `D` | - | - |
+| guard | The check in the worker that decides every tool call of a session before it runs and refuses the ones that leave the worktree, the scope or the allowed commands. | `guardToolCall`, `guard.denied` | filter, hook | - |
 | instruction queue | The per-run file of human instructions that reach the agent at turn boundaries. | `queue.jsonl` | mailbox, message queue | - |
 | run | One agent attempt in a new session, identified as `r-<nnnn>`. | `run_id` | attempt, job, session | - |
 | run report | The JSON that the worker writes at the end of a run in the schema that the brief specifies. | `report.json` | - | - |

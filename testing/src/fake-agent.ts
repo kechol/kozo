@@ -87,12 +87,17 @@ export function fakeAgent(script: FakeScript): FakeAgent {
             type: "tool.call",
             data: { call_id, tool: step.tool, input: step.input },
           });
-          request.record({
-            type: "tool.result",
-            data: decision.allow
-              ? { call_id, is_error: step.error ?? false, output: step.output }
-              : { call_id, is_error: true, output: `refused: ${decision.reason}` },
-          });
+          request.record(
+            decision.allow
+              ? {
+                  type: "tool.result",
+                  data: { call_id, is_error: step.error ?? false, output: step.output },
+                }
+              : {
+                  type: "guard.denied",
+                  data: { call_id, tool: step.tool, reason: decision.reason },
+                },
+          );
         } else if ("use" in step) {
           calls += 1;
           const call_id = `fake-${calls}`;

@@ -68,12 +68,8 @@ export function claudeAgent(executable: string): CodingAgent {
           data: { call_id: input.tool_use_id, tool: input.tool_name, input: input.tool_input },
         });
         request.record({
-          type: "tool.result",
-          data: {
-            call_id: input.tool_use_id,
-            is_error: true,
-            output: `refused: ${decision.reason}`,
-          },
+          type: "guard.denied",
+          data: { call_id: input.tool_use_id, tool: input.tool_name, reason: decision.reason },
         });
         return {
           hookSpecificOutput: {
