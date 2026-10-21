@@ -123,13 +123,17 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
   );
   violations.push(...scriptChanges.flat());
   const rootScripts = scriptsOf(await showFile(cwd, mergeBase, "package.json"));
+  const baseFiles = (await git(cwd, ["ls-tree", "-r", "--name-only", "-z", mergeBase]))
+    .split("\0")
+    .filter(Boolean);
   const runByGates = await includedFiles(
     gateFiles([...gateCommands, ...reachedScripts(gateCommands, rootScripts)]),
     (path: string) => showFile(cwd, mergeBase, path).catch(() => null),
+    baseFiles,
   );
   for (const file of files) {
-    const command = runByGates.get(file.path);
-    if (command) violations.push({ kind: "gate-file", path: file.path, command });
+    const gate = runByGates.get(file.path);
+    if (gate) violations.push({ kind: "gate-file", path: file.path, command: gate.command });
   }
 
   for (const violation of violations) log(`kozo: ${describe(violation)}\n`);

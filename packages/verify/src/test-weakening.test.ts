@@ -391,7 +391,10 @@ describe("gateFiles", () => {
     expect([...files.keys()].sort()).toEqual([
       ".justfile",
       "Justfile",
+      "api/GNUmakefile",
+      "api/Makefile",
       "api/ci.mk",
+      "api/makefile",
       "check.py",
       "ci.mk",
       "justfile",
@@ -401,7 +404,13 @@ describe("gateFiles", () => {
       "web/Makefile",
       "web/makefile",
     ]);
-    expect(files.get("scripts/lint.sh")).toBe("sh scripts/lint.sh");
+    expect(files.get("scripts/lint.sh")?.command).toBe("sh scripts/lint.sh");
+    expect([...gateFiles(["(cd web && make test)", "echo $(sh ./gen.sh)"]).keys()].sort()).toEqual([
+      "gen.sh",
+      "web/GNUmakefile",
+      "web/Makefile",
+      "web/makefile",
+    ]);
   });
 
   test("follows the package.json scripts a gate runs and the files gate files include", async () => {
@@ -415,14 +424,16 @@ describe("gateFiles", () => {
       "sh scripts/lint.sh",
     ]);
     const base: Record<string, string> = {
-      Makefile: "include rules/common.mk\ntest:\n\tsh ./scripts/test.sh\n",
+      Makefile: "include rules/common.mk rules/*.inc\ntest:\n\tsh ./scripts/test.sh\n",
       "rules/common.mk": "-include local.mk\n",
       "scripts/lint.sh": ". ./lib.sh\nlint\n",
     };
     const files = await includedFiles(
       gateFiles(["make test", "sh scripts/lint.sh"]),
       async (path) => base[path] ?? null,
+      ["rules/a.inc", "rules/b.inc", "Makefile"],
     );
+    expect([...files.keys()]).toContain("rules/a.inc");
     expect([...files.keys()]).toContain("rules/common.mk");
     expect([...files.keys()]).toContain("rules/local.mk");
     expect([...files.keys()]).toContain("scripts/lib.sh");
