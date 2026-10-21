@@ -33,3 +33,12 @@ describe("protectedPathMatcher", () => {
     expect(matches("app/other/page.tsx")).toBe(false);
   });
 });
+
+describe("globMatcher on a literal path with glob syntax", () => {
+  test("matches the path spelled exactly like it, and nothing under it", () => {
+    const matches = globMatcher(["src/app/products/[slug]/page.tsx"]);
+    expect(matches("src/app/products/[slug]/page.tsx")).toBe(true);
+    expect(matches("src/app/products/s/page.tsx")).toBe(true);
+    expect(matches("src/app/products/[slug]/page.tsx/x")).toBe(false);
+  });
+});

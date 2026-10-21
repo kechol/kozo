@@ -63,15 +63,20 @@ export async function resolveRange(cwd: string, base: string, head: string) {
  * would loosen a check. A pattern without glob syntax names a file or a directory and also
  * covers everything under it, so a scope of `src/cart` means `src/cart/**`. A pattern with glob
  * syntax keeps its exact meaning, so `src/*.test.ts` does not make every file under a directory
- * named `src/a.test.ts` a test.
+ * named `src/a.test.ts` a test; it also matches the one path spelled exactly like it, so that a
+ * route such as `app/[slug]/page.tsx`, whose brackets read as glob syntax, names its own file.
  */
 export function globMatcher(patterns: readonly string[]) {
+  const exact = new Set<string>();
   const globs = patterns.flatMap((pattern) => {
-    if (/[*?[\]{}!\\]/.test(pattern)) return [new Bun.Glob(pattern)];
     const trimmed = pattern.replace(/\/+$/, "");
+    if (/[*?[\]{}!\\]/.test(pattern)) {
+      exact.add(trimmed);
+      return [new Bun.Glob(pattern)];
+    }
     return [new Bun.Glob(trimmed), new Bun.Glob(`${trimmed}/**`)];
   });
-  return (path: string) => globs.some((glob) => glob.match(path));
+  return (path: string) => exact.has(path) || globs.some((glob) => glob.match(path));
 }
 
 /**
