@@ -1,13 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { kozoHome } from "@kozo/core";
 import { gitRepository, tempDirectory } from "@kozo/testing";
-import {
-  claimTask,
-  factoryGitEnvironment,
-  releaseTask,
-  taskBranch,
-  worktreePath,
-} from "./worktrees.ts";
+import { factoryGitEnvironment } from "@kozo/worker";
+import { claimTask, releaseTask, taskBranch, worktreePath } from "./worktrees.ts";
 
 describe("task branches", () => {
   test("are named from the task reference", () => {

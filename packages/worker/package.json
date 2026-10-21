@@ -5,6 +5,12 @@
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
-    "@kozo/core": "workspace:*"
+    "@anthropic-ai/claude-agent-sdk": "0.3.304",
+    "@kozo/core": "workspace:*",
+    "@kozo/verify": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@kozo/testing": "workspace:*"
   }
 }

@@ -4,22 +4,6 @@ import { type KozoHome, parseReference } from "@kozo/core";
 import { GitError, git } from "@kozo/verify";
 import { defaultBranch } from "./repository.ts";
 
-/**
- * The environment that makes git commits in a worktree the factory's own: authored by kozo
- * and unsigned, whatever the owner's configuration says.
- */
-export const factoryGitEnvironment: Record<string, string> = {
-  GIT_AUTHOR_NAME: "kozo",
-  GIT_AUTHOR_EMAIL: "kozo@localhost.invalid",
-  GIT_COMMITTER_NAME: "kozo",
-  GIT_COMMITTER_EMAIL: "kozo@localhost.invalid",
-  GIT_CONFIG_COUNT: "2",
-  GIT_CONFIG_KEY_0: "commit.gpgsign",
-  GIT_CONFIG_VALUE_0: "false",
-  GIT_CONFIG_KEY_1: "tag.gpgsign",
-  GIT_CONFIG_VALUE_1: "false",
-};
-
 function taskParts(task: string) {
   const reference = parseReference(task);
   if (reference?.kind !== "task") throw new Error(`${task} is not a task reference`);

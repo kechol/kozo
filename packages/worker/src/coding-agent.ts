@@ -1,4 +1,5 @@
 import type { AgentName, Event } from "@kozo/core";
+import type { ZodType } from "zod";
 
 type RecordType =
   | "agent.message"
@@ -16,6 +17,17 @@ export interface Instruction {
   /** The instruction's line in the run's queue, counted from 0. */
   seq: number;
   text: string;
+}
+
+export type GuardDecision = { allow: true } | { allow: false; reason: string };
+
+/** A tool that runs in the worker's own process, offered to the agent beside the built-in ones. */
+export interface AgentTool {
+  name: string;
+  description: string;
+  /** A zod object shape of the tool's input. */
+  input: Record<string, ZodType>;
+  run(input: Record<string, unknown>): Promise<string>;
 }
 
 export interface AgentRequest {
@@ -36,6 +48,13 @@ export interface AgentRequest {
   record(record: AgentRecord): void;
   /** Aborted when kozod stops the run; the session ends as soon as it can. */
   signal: AbortSignal;
+  /** Decides each tool call before it runs; a refusal reaches the agent as its reason. */
+  guard?(tool: string, input: unknown): Promise<GuardDecision>;
+  /** Asked when the agent tries to finish; a message sends it back to work with that message. */
+  beforeStop?(): Promise<string | null>;
+  tools?: AgentTool[];
+  /** Variables added to the session's environment, such as the factory's git identity. */
+  env?: Record<string, string>;
 }
 
 export type AgentOutcome =

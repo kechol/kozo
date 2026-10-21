@@ -7,6 +7,7 @@
   "dependencies": {
     "@kozo/core": "workspace:*",
     "@kozo/verify": "workspace:*",
+    "@kozo/worker": "workspace:*",
     "hono": "4.13.13",
     "zod": "^4.6.7"
   },

@@ -67,6 +67,16 @@ const sessionEnvironment = [
   "CLAUDE_CONFIG_DIR",
 ];
 
+/** The variables of `source` that a session may see: what claude needs to run and to sign in. */
+export function sessionEnvironmentFrom(source: Record<string, string | undefined>) {
+  return Object.fromEntries(
+    sessionEnvironment.flatMap((name) => {
+      const value = source[name];
+      return value === undefined ? [] : [[name, value]];
+    }),
+  ) as Record<string, string>;
+}
+
 /**
  * A judge that runs the user's own `claude` through the Agent SDK. The session has no tools and
  * starts in an empty directory, so content in the prompt can only influence the answer.
@@ -88,8 +98,8 @@ export function claudeJudge(executable: string): Judge {
 // in Claude Code's own process and could read outside the worktree.
 const verifyTools = ["Bash"];
 
-// Credentials a verify session never needs; the sandbox denies reading them from the shell.
-const credentialPaths = [
+// Credentials a session never needs; the sandbox denies reading them from the shell.
+export const credentialPaths = [
   ".ssh",
   ".aws",
   ".gnupg",
@@ -154,14 +164,7 @@ async function runSession(
     env?: Record<string, string>;
   },
 ): Promise<SessionAnswer> {
-  const env = {
-    ...Object.fromEntries(
-      sessionEnvironment
-        .filter((name) => process.env[name] !== undefined)
-        .map((name) => [name, process.env[name]]),
-    ),
-    ...extra,
-  };
+  const env = { ...sessionEnvironmentFrom(process.env), ...extra };
   try {
     let answer: SessionAnswer | undefined;
     for await (const message of query({
