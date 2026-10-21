@@ -181,9 +181,10 @@ function summarize(repositories: RepositoryData[]) {
       (pr) =>
         Date.parse(pr.mergedAt) >= since.getTime() && Date.parse(pr.mergedAt) < until.getTime(),
     );
-    const repoChanges = inWindow.filter((pr) => classify(pr) === "change");
-    bot += inWindow.filter((pr) => classify(pr) === "bot").length;
-    release += inWindow.filter((pr) => classify(pr) === "release").length;
+    const kinds = Object.groupBy(inWindow, classify);
+    const repoChanges = kinds.change ?? [];
+    bot += kinds.bot?.length ?? 0;
+    release += kinds.release?.length ?? 0;
     changes.push(...repoChanges);
     // Matched per repository, since pull request numbers repeat across repositories.
     for (const link of findDefectLinks(repoChanges, pullRequests, commits)) {
