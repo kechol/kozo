@@ -451,7 +451,13 @@ export class Runner {
     let prompt = "";
     // The diff's own code runs in prepare, the gates and prove, so they get no credentials.
     const environment = commandEnvironmentFrom(process.env);
-    let existingTests: string[] = [];
+    // Computed for every attempt, wherever it starts: the guard and the sandbox protect these.
+    const listed = (await git(repository.path, ["ls-tree", "-r", "--name-only", repository.tip]))
+      .split("\n")
+      .filter(Boolean);
+    const existingTests = charter.existing_tests_protected
+      ? listed.filter(globMatcher(constraints.tests))
+      : [];
 
     const enter = async (node: Node, kind: "D" | "A") => {
       const head = await git(worktree, ["rev-parse", "HEAD"]).then(
@@ -536,12 +542,6 @@ export class Runner {
         }
         case "brief": {
           await enter(node, "D");
-          const listed = (await git(worktree, ["ls-tree", "-r", "--name-only", repository.tip]))
-            .split("\n")
-            .filter(Boolean);
-          existingTests = charter.existing_tests_protected
-            ? listed.filter(globMatcher(constraints.tests))
-            : [];
           const inScope = listed.filter(globMatcher(current.scope)).slice(0, 40);
           const file = await readItemFile(this.home, item.ref);
           const decisions = current.runs
@@ -613,8 +613,7 @@ export class Runner {
         }
         case "implement": {
           await enter(node, "A");
-          if (prompt === "")
-            prompt = await Bun.file(runFiles(this.home, current.runs.at(-2) ?? run).brief).text();
+          if (prompt === "") prompt = await this.lastBrief(current, run);
           const refsBefore = await this.refs(repository.path, branch);
           const processesBefore = await runningProcesses();
           const result = await this.session(
@@ -1009,6 +1008,16 @@ export class Runner {
     await this.moveTask(task, "building", run);
     await this.endRun(run, "succeeded");
     return { kind: "retry", failure: why };
+  }
+
+  /** The brief of the task's last implement run before `run`, for a run that resumes at implement. */
+  private async lastBrief(task: TaskState, run: string): Promise<string> {
+    for (const ref of [...task.runs].reverse()) {
+      if (ref === run || this.store.state.runs[ref]?.agent !== "implement") continue;
+      const file = Bun.file(runFiles(this.home, ref).brief);
+      if (await file.exists()) return await file.text();
+    }
+    throw new RunnerError(`${task.ref} has no brief to resume its implement node with`);
   }
 
   /** `kozo gates` as the agent runs it in its sandbox: the level and the base are fixed. */

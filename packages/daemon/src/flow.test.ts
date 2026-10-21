@@ -68,13 +68,21 @@ const noVerifier: Verifier = {
 async function factoryOf(
   script: (request: AgentRequest) => FakeStep[],
   judge: Judge = judgeWith("accept"),
+  options: { charter?: (text: string) => string; factory?: string; now?: () => Date } = {},
 ) {
   const repo = await gitRepository();
-  await repo.commit(suiteBase, "the suite shop");
+  const charter = suiteBase[".kozo/charter.yml"] ?? "";
+  await repo.commit(
+    { ...suiteBase, ".kozo/charter.yml": options.charter ? options.charter(charter) : charter },
+    "the suite shop",
+  );
   const dir = await tempDirectory();
   const home = kozoHome(dir.path);
   await mkdir(home.factory, { recursive: true });
-  await Bun.write(join(home.factory, "factory.yml"), `repositories:\n  - { path: ${repo.path} }\n`);
+  await Bun.write(
+    join(home.factory, "factory.yml"),
+    `repositories:\n  - { path: ${repo.path} }\n${options.factory ?? ""}`,
+  );
   const factory = await loadFactory(home);
   const store = await EventStore.open(home);
   const agent = fakeAgent(script);
@@ -86,7 +94,13 @@ async function factoryOf(
     model: "fake",
   });
   const control = new ControlPlane(home, store, factory, runner);
-  const scheduler = new Scheduler(store, runner, factory, (line) => console.error(line));
+  const scheduler = new Scheduler(
+    store,
+    runner,
+    factory,
+    (line) => console.error(line),
+    options.now,
+  );
   return {
     repo,
     home,
@@ -326,5 +340,91 @@ describe("the minimal path", () => {
       `${taskRef} is already cancelled`,
     );
     await expect(env.control.act(taskRef, task, "retry", {})).rejects.toThrow("is cancelled");
+  }, 120_000);
+
+  test("a spent daily budget holds new work for capacity until the next day", async () => {
+    let now = new Date();
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ spend: 0.5 }, { answer: plan }] : implement()),
+      judgeWith("accept"),
+      { factory: "budget: { daily_usd: 0.4 }\n", now: () => now },
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const taskRef = `${ref}/t1`;
+    expect(env.store.state.tasks[taskRef]?.hold).toMatchObject({
+      kind: "capacity",
+      reason: "the daily budget of 0.4 USD is spent",
+    });
+    now = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    await env.settle();
+    expect(env.store.state.tasks[taskRef]).toMatchObject({ stage: "handoff", hold: null });
+  }, 120_000);
+
+  test("tasks awaiting a merge at the Charter's limit stop new triage and hold waiting tasks", async () => {
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+      judgeWith("accept"),
+      { charter: (text) => text.replace("max_awaiting_merge: 3", "max_awaiting_merge: 1") },
+    );
+    const item = (number: number) => ({ kind: "item", item: { repo: null, number } }) as const;
+    await env.control.addItem({ title: "First", class: "docs" });
+    await env.settle();
+    await env.control.act("K-1", item(1), "approve", {});
+    await env.settle();
+    expect(env.store.state.tasks["K-1/t1"]?.stage).toBe("handoff");
+    await env.control.addItem({ title: "Second", class: "docs" });
+    await env.settle();
+    expect(env.store.state.items["K-2"]).toMatchObject({ stage: "triage", hold: null });
+    expect(env.agent.requests.map((request) => request.agent)).toEqual(["triage", "implement"]);
+    await env.control.act(
+      "K-1/t1",
+      { kind: "task", item: { repo: null, number: 1 }, task: 1 },
+      "close",
+      {
+        done: true,
+      },
+    );
+    await env.settle();
+    expect(env.store.state.items["K-2"]?.stage).toBe("planning");
+  }, 180_000);
+
+  test("a repository whose Charter is no longer ready starts nothing and says why", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: plan }] : implement(),
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    const charter = suiteBase[".kozo/charter.yml"] ?? "";
+    await env.repo.commit({
+      ".kozo/charter.yml": charter.replace("status: ready", "status: incomplete"),
+    });
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    expect(env.store.state.tasks[`${ref}/t1`]?.hold).toMatchObject({
+      kind: "capacity",
+      reason: expect.stringContaining("incomplete, not ready"),
+    });
+    expect(env.agent.requests.map((request) => request.agent)).toEqual(["triage"]);
+  }, 120_000);
+
+  test("triage's work class cannot raise the autonomy level above the one asked for", async () => {
+    await using env = await factoryOf(
+      (request) =>
+        request.agent === "triage"
+          ? [{ answer: { ...plan, plan: { ...plan.plan, class: "docs" } } }]
+          : implement(),
+      judgeWith("accept"),
+      { charter: (text) => text.replace("docs: L2", "docs: L3") },
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock" });
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    expect(env.store.state.items[ref]).toMatchObject({
+      stage: "planning",
+      hold: { kind: "approval", reason: "plan approval" },
+    });
   }, 120_000);
 });
