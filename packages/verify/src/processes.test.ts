@@ -23,8 +23,8 @@ describe("stopProcessesIn", () => {
     const script = `${dir.path}/stop.ts`;
     await Bun.write(
       script,
-      `import { runningProcesses, stopProcessesIn } from ${JSON.stringify(`${import.meta.dir}/processes.ts`)};\n` +
-        "console.log(JSON.stringify(await stopProcessesIn(process.cwd(), await runningProcesses())));\n",
+      `import { stopProcessesIn } from ${JSON.stringify(`${import.meta.dir}/processes.ts`)};\n` +
+        "console.log(JSON.stringify(await stopProcessesIn(process.cwd(), new Map())));\n",
     );
     // A shell in the directory starts the script, as a human's terminal or a tool would.
     const shell = Bun.spawn(
@@ -54,6 +54,19 @@ describe("stopProcessesIn", () => {
     } finally {
       inside.kill();
       outside.kill();
+    }
+  });
+
+  test("stops a process whose ID was listed for a process that started at another time", async () => {
+    await using dir = await tempDirectory();
+    const reused = sleeper(dir.path);
+    await listed(reused.pid);
+    try {
+      const before = new Map([[reused.pid, { parent: 1, started: "an earlier process" }]]);
+      expect(await stopProcessesIn(dir.path, before)).toEqual([reused.pid]);
+      expect(await reused.exited).not.toBe(0);
+    } finally {
+      reused.kill();
     }
   });
 

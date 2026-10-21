@@ -13,7 +13,7 @@ import { resolveRef } from "./changes.ts";
 import { guarded } from "./command.ts";
 import { GitError, showFile } from "./git.ts";
 import { parseAnswer, type SessionAnswer, SessionError, type Verifier } from "./judge.ts";
-import { runningProcesses, stopProcessesIn } from "./processes.ts";
+import { ProcessError, runningProcesses, stopProcessesIn } from "./processes.ts";
 import { updateVerdictFile } from "./verdict-file.ts";
 
 export const verifyAgent = parseAgentDefinition(verifyDefinition);
@@ -41,7 +41,7 @@ export type VerifyResult =
  * at the tip of `base`, like the Charter, so the diff under check cannot rewrite it.
  */
 export async function runVerify(options: VerifyOptions): Promise<VerifyResult> {
-  return await guarded(options.log, [GitError, SessionError], () => verify(options));
+  return await guarded(options.log, [GitError, SessionError, ProcessError], () => verify(options));
 }
 
 async function verify(options: VerifyOptions): Promise<VerifyResult> {
