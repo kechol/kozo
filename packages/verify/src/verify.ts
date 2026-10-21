@@ -12,7 +12,13 @@ import { parseAgentDefinition, parseSkill } from "./agent-definition.ts";
 import { resolveRef } from "./changes.ts";
 import { guarded } from "./command.ts";
 import { GitError, showFile } from "./git.ts";
-import { parseAnswer, type SessionAnswer, SessionError, type Verifier } from "./judge.ts";
+import {
+  defuseSections,
+  parseAnswer,
+  type SessionAnswer,
+  SessionError,
+  type Verifier,
+} from "./judge.ts";
 import { ProcessError, runningProcesses, stopProcessesIn } from "./processes.ts";
 import { updateVerdictFile } from "./verdict-file.ts";
 
@@ -91,17 +97,21 @@ async function verify(options: VerifyOptions): Promise<VerifyResult> {
   return { status: "verified", record };
 }
 
-/** Builds the verify agent's prompt; the procedure is the repository's, read at the base tip. */
+/**
+ * Builds the verify agent's prompt; the procedure is the repository's, read at the base tip. The
+ * goal and conditions come from a request, so nothing in them may close a section.
+ */
 export function verifyPrompt(goal: string, doneWhen: readonly string[], procedure: string): string {
+  const defuse = (text: string) => defuseSections(text, ["instructions", "verify-app"]);
   return [
     "<instructions>",
-    `GOAL: ${goal}`,
+    `GOAL: ${defuse(goal)}`,
     "DONE_WHEN:",
-    ...doneWhen.map((condition) => `- ${condition}`),
+    ...doneWhen.map((condition) => `- ${defuse(condition)}`),
     "</instructions>",
     "",
     "<verify-app>",
-    procedure.trimEnd(),
+    defuse(procedure).trimEnd(),
     "</verify-app>",
   ].join("\n");
 }

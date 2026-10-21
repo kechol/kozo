@@ -31,6 +31,14 @@ export interface Verifier {
 
 export class SessionError extends Error {}
 
+/**
+ * Escapes the closing tags of a prompt's sections inside text that fills one of them, so that
+ * text from a request or a diff cannot end its section and pose as the next.
+ */
+export function defuseSections(text: string, sections: readonly string[]): string {
+  return text.replace(new RegExp(`</(${sections.join("|")})`, "gi"), "<\\/$1");
+}
+
 /** Checks a session's output against the judgment schema it was asked to answer with. */
 export function parseAnswer<T>(schema: z.ZodType<T>, name: string, output: unknown): T {
   const judgment = schema.safeParse(output);

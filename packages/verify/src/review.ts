@@ -6,7 +6,7 @@ import { parseAgentDefinition } from "./agent-definition.ts";
 import { diffCommand, resolveRange } from "./changes.ts";
 import { guarded } from "./command.ts";
 import { GitError, git } from "./git.ts";
-import { type Judge, parseAnswer, SessionError } from "./judge.ts";
+import { defuseSections, type Judge, parseAnswer, SessionError } from "./judge.ts";
 import { updateVerdictFile } from "./verdict-file.ts";
 
 export const reviewAgent = parseAgentDefinition(reviewDefinition);
@@ -67,7 +67,7 @@ async function review(options: ReviewOptions): Promise<ReviewRecord> {
  * anything in it that would close its section is defused first.
  */
 export function reviewPrompt(goal: string, doneWhen: readonly string[], diff: string): string {
-  const defuse = (text: string) => text.replace(/<\/(instructions|diff)/gi, "<\\/$1");
+  const defuse = (text: string) => defuseSections(text, ["instructions", "diff"]);
   const conditions = doneWhen.map((condition) => `- ${defuse(condition)}`).join("\n");
   return [
     "<instructions>",
