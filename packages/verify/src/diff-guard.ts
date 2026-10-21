@@ -1,14 +1,10 @@
 import { type BaseDocumentsProblem, readBaseDocuments } from "./base-documents.ts";
+import { type ChangedFile, changedFiles, diffCommand, literal, resolveCommit } from "./changes.ts";
 import { GitError, git, showFile } from "./git.ts";
 import { changedGateScripts, findTestWeakening, type TestWeakening } from "./test-weakening.ts";
 import { parseChangedLines } from "./unified-diff.ts";
 
-export interface ChangedFile {
-  path: string;
-  change: "added" | "modified" | "deleted";
-  /** Added plus deleted lines; zero for binary files. */
-  lines: number;
-}
+export type { ChangedFile };
 
 export type Violation =
   | { kind: "lines"; changed: number; limit: number }
@@ -17,7 +13,7 @@ export type Violation =
   | { kind: "protected-path"; path: string; pattern: string }
   | { kind: "existing-test"; path: string; change: "modified" | "deleted" }
   | TestWeakening
-  | { kind: "gate-script"; script: string };
+  | { kind: "gate-script"; path: string; script: string };
 
 export type DiffGuardResult =
   | {
@@ -66,7 +62,8 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
   }
   const { charter, constraints } = documents;
 
-  const files = await changedFiles(cwd, mergeBase, headCommit);
+  const diff = await diffCommand(cwd);
+  const files = await changedFiles(cwd, diff, mergeBase, headCommit);
   const lines = files.reduce((sum, file) => sum + file.lines, 0);
   const limits = { lines: charter.limits.max_changed_lines, files: charter.limits.max_files };
   const violations: Violation[] = [];
@@ -98,45 +95,29 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
       .filter((file) => isTest(file.path))
       .map(async (file) => ({
         path: file.path,
-        existed: file.change !== "added",
+        change: file.change,
         lines: parseChangedLines(
-          await git(cwd, [...diffFlags, "-U0", mergeBase, headCommit, "--", literal(file.path)]),
+          await git(cwd, [...diff, "-U0", mergeBase, headCommit, "--", literal(file.path)]),
         ),
       })),
   );
   violations.push(...findTestWeakening(testChanges));
-  if (files.some((file) => file.path === "package.json")) {
-    const gateCommands = Object.values(constraints.gates).map((gate) => gate.run);
+  // Workspace packages count too: a gate such as `pnpm -r test` runs their scripts by name.
+  const gateCommands = Object.values(constraints.gates).map((gate) => gate.run);
+  for (const file of files.filter(({ path }) => /(?:^|\/)package\.json$/.test(path))) {
     const [baseScripts, headScripts] = await Promise.all(
       [mergeBase, headCommit].map(async (commit) =>
-        scriptsOf(await showFile(cwd, commit, "package.json")),
+        scriptsOf(await showFile(cwd, commit, file.path)),
       ),
     );
     for (const script of changedGateScripts(gateCommands, baseScripts ?? {}, headScripts ?? {})) {
-      violations.push({ kind: "gate-script", script });
+      violations.push({ kind: "gate-script", path: file.path, script });
     }
   }
 
   for (const violation of violations) log(`kozo: ${describe(violation)}\n`);
   const status = violations.length === 0 ? "pass" : "fail";
   return { status, base: mergeBase, documentsAt: baseTip, files, lines, limits, violations };
-}
-
-// Options that keep the developer's diff configuration, such as colour, external diff tools,
-// text conversion or relative paths, from changing what git prints.
-const diffFlags = [
-  "-c",
-  "core.quotePath=false",
-  "diff",
-  "--no-color",
-  "--no-ext-diff",
-  "--no-textconv",
-  "--no-relative",
-  "--no-renames",
-];
-
-function literal(path: string) {
-  return `:(literal)${path}`;
 }
 
 function scriptsOf(text: string | null): Record<string, string> {
@@ -153,43 +134,6 @@ function scriptsOf(text: string | null): Record<string, string> {
     // An unreadable package.json counts as having no scripts, so every gate script differs.
     return {};
   }
-}
-
-async function resolveCommit(cwd: string, ref: string) {
-  return (await git(cwd, ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`])).trim();
-}
-
-/** Lists the files that `head` changes relative to `base`, a rename counting as two files. */
-async function changedFiles(cwd: string, base: string, head: string): Promise<ChangedFile[]> {
-  const range = [base, head, "--"];
-  const [nameStatus, numstat] = await Promise.all([
-    git(cwd, [...diffFlags, "--name-status", "-z", ...range]),
-    git(cwd, [...diffFlags, "--numstat", "-z", ...range]),
-  ]);
-
-  const lines = new Map<string, number>();
-  for (const record of numstat.split("\0")) {
-    if (record === "") continue;
-    // A path may itself contain tabs, so only the first two separate the counts.
-    const first = record.indexOf("\t");
-    const second = record.indexOf("\t", first + 1);
-    if (first < 0 || second < 0) throw new GitError(`unexpected numstat record: ${record}`);
-    const [added, deleted] = [record.slice(0, first), record.slice(first + 1, second)];
-    // Binary files report "-" for both counts.
-    lines.set(record.slice(second + 1), (Number(added) || 0) + (Number(deleted) || 0));
-  }
-
-  const fields = nameStatus.split("\0");
-  const files: ChangedFile[] = [];
-  for (let index = 0; index + 1 < fields.length; index += 2) {
-    const status = fields[index] ?? "";
-    const path = fields[index + 1] ?? "";
-    const change = status === "A" ? "added" : status === "D" ? "deleted" : "modified";
-    const count = lines.get(path);
-    if (count === undefined) throw new GitError(`no line count for ${path}`);
-    files.push({ path, change, lines: count });
-  }
-  return files;
 }
 
 function describe(violation: Violation): string {
@@ -209,7 +153,7 @@ function describe(violation: Violation): string {
     case "weakened-test":
       return `${violation.path} weakens its tests: ${violation.reason}`;
     case "gate-script":
-      return `the package.json script "${violation.script}" that a gate runs was changed`;
+      return `the script "${violation.script}" in ${violation.path}, which a gate runs, was changed`;
   }
 }
 

@@ -238,8 +238,45 @@ describe("runDiffGuard on weakened tests", () => {
         reason: "strict matchers replaced by weak ones",
       },
       { kind: "disabled-test", path: "src/new.test.ts", line: 1, marker: "only" },
-      { kind: "gate-script", script: "test" },
+      { kind: "gate-script", path: "package.json", script: "test" },
     ]);
-    expect(log).toContain('the package.json script "test" that a gate runs was changed');
+    expect(log).toContain('the script "test" in package.json, which a gate runs, was changed');
+  });
+});
+
+describe("runDiffGuard against evasion", () => {
+  test("a .gitattributes entry cannot hide a test file's lines", async () => {
+    const repo = await gitRepository();
+    await using _ = repo;
+    const base = await repo.commit({
+      [charterPath]: charter.replace(
+        "existing_tests_protected: true",
+        "existing_tests_protected: false",
+      ),
+      [constraintsPath]: constraints,
+      ".gitattributes": "*.test.ts binary\n",
+      "src/cart.test.ts": "test('total', () => {});\n",
+    });
+    await repo.commit({ "src/cart.test.ts": "test.skip('total', () => {});\n" });
+    const { result } = await guard(repo.path, base);
+    expect(result.status === "fail" && result.lines).toBe(2);
+    expect(kinds(result)).toEqual(["disabled-test"]);
+  });
+
+  test("scripts in a workspace package.json are covered", async () => {
+    const repo = await gitRepository();
+    await using _ = repo;
+    const base = await repo.commit({
+      [charterPath]: charter,
+      [constraintsPath]: constraints.replace('run: "true"', 'run: "pnpm -r test"'),
+      "packages/core/package.json": JSON.stringify({ scripts: { test: "vitest run" } }),
+    });
+    await repo.commit({
+      "packages/core/package.json": JSON.stringify({ scripts: { test: "true" } }),
+    });
+    const { result } = await guard(repo.path, base);
+    expect("violations" in result && result.violations).toEqual([
+      { kind: "gate-script", path: "packages/core/package.json", script: "test" },
+    ]);
   });
 });

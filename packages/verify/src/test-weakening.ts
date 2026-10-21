@@ -26,50 +26,63 @@ const strictMatcher =
 const weakMatcher =
   /\.(?:toBeTruthy|toBeFalsy|toBeDefined)\s*\(|\.not\.toThrow\s*\(|\bexpect\.(?:anything|any)\s*\(|\bassert(?:\.ok)?\s*\(/g;
 const control = /^\s*(?:if\s*\(|try\s*\{|\}?\s*catch\b|\}?\s*else\b)/;
+// A bare return ends a test before the assertions after it; returning a value is ordinary code.
+const earlyReturn = /^\s*(?:if\s*\(.*\)\s*)?return\s*;?\s*$/;
 
 export interface TestFileChange {
   path: string;
+  change: "added" | "modified" | "deleted";
   lines: ChangedLines;
-  /** Whether the file existed at the base, so that it had assertions to lose. */
-  existed: boolean;
 }
 
 /**
  * Finds markers that disable tests among the added lines of the test files, and, in test files
  * that existed at the base, assertions that were dropped, loosened or put under a condition.
- * Lines that leave one test file and arrive in another, as in a moved or renamed file, cancel
- * out, so that moving a test is not mistaken for removing or adding one.
+ * Lines cancel out only where moving them cannot hide anything: within one modified file, and
+ * from deleted files into added ones, as in a rename. An added file that receives lines from a
+ * deleted one is then checked as if it had existed.
  */
 export function findTestWeakening(changes: readonly TestFileChange[]): TestWeakening[] {
-  const removedEverywhere = changes.flatMap(({ lines }) => lines.removed.filter(isCode));
-  const addedEverywhere = changes.flatMap(({ lines }) =>
-    lines.added.map(({ text }) => text).filter(isCode),
-  );
-  const shared = commonCounts(removedEverywhere, addedEverywhere);
-  const removedBudget = new Map(shared);
-  const addedBudget = new Map(shared);
-  // The shallowest indentation at which each removed assertion stood.
-  const removedAssertions = new Map<string, number>();
-  for (const text of removedEverywhere.filter((line) => hasAssertion.test(line))) {
-    const depth = indentation(text);
-    removedAssertions.set(
-      text.trim(),
-      Math.min(depth, removedAssertions.get(text.trim()) ?? depth),
-    );
-  }
+  const code = (change: TestFileChange) => ({
+    added: change.lines.added.filter(({ text }) => isCode(text)),
+    removed: change.lines.removed.filter(isCode),
+  });
+  const movedOut = changes.filter((c) => c.change === "deleted").flatMap((c) => code(c).removed);
+  const movedIn = changes
+    .filter((c) => c.change === "added")
+    .flatMap((c) => code(c).added.map(({ text }) => text));
+  const moveBudget = commonCounts(movedOut, movedIn);
+  const deletedBudget = new Map(moveBudget);
 
   const found: TestWeakening[] = [];
-  for (const { path, lines, existed } of changes) {
-    const added = lines.added.filter(({ text }) => isCode(text));
-    const removed = lines.removed.filter(isCode);
-    const newAdded = added.filter(({ text }) => !take(addedBudget, text));
-    const newRemoved = removed.filter((text) => !take(removedBudget, text));
+  for (const change of changes) {
+    const { path } = change;
+    const { added, removed } = code(change);
+    let newAdded = added;
+    let newRemoved = removed;
+    let checked = change.change !== "added";
+    let before = removed;
+    if (change.change === "modified") {
+      const own = commonCounts(
+        removed,
+        added.map(({ text }) => text),
+      );
+      const ownRemoved = new Map(own);
+      newAdded = added.filter(({ text }) => !take(own, text));
+      newRemoved = removed.filter((text) => !take(ownRemoved, text));
+    } else if (change.change === "deleted") {
+      newRemoved = removed.filter((text) => !take(deletedBudget, text));
+    } else {
+      newAdded = added.filter(({ text }) => !take(moveBudget, text));
+      checked = newAdded.length < added.length;
+      before = movedOut;
+    }
 
     for (const { line, text } of newAdded) {
       const hit = markers.find(([, pattern]) => pattern.test(text));
       if (hit) found.push({ kind: "disabled-test", path, line, marker: hit[0] });
     }
-    if (!existed) continue;
+    if (!checked) continue;
 
     const addedTexts = newAdded.map(({ text }) => text);
     const lost = count(newRemoved, assertion);
@@ -88,8 +101,9 @@ export function findTestWeakening(changes: readonly TestFileChange[]): TestWeake
       found.push({ kind: "weakened-test", path, reason: "strict matchers replaced by weak ones" });
     }
     // An assertion that reappears deeper, next to a new branch, was moved under a condition.
+    const depths = shallowestAssertions(before);
     const reappeared = added.some(
-      ({ text }) => indentation(text) > (removedAssertions.get(text.trim()) ?? Infinity),
+      ({ text }) => indentation(text) > (depths.get(text.trim()) ?? Number.POSITIVE_INFINITY),
     );
     const newBranches =
       addedTexts.filter((text) => control.test(text)).length >
@@ -97,8 +111,21 @@ export function findTestWeakening(changes: readonly TestFileChange[]): TestWeake
     if (reappeared && newBranches) {
       found.push({ kind: "weakened-test", path, reason: "assertions moved under a condition" });
     }
+    if (addedTexts.some((text) => earlyReturn.test(text))) {
+      found.push({ kind: "weakened-test", path, reason: "an early return was added" });
+    }
   }
   return found;
+}
+
+/** The shallowest indentation at which each assertion line stood. */
+function shallowestAssertions(texts: readonly string[]) {
+  const depths = new Map<string, number>();
+  for (const text of texts.filter((line) => hasAssertion.test(line))) {
+    const depth = indentation(text);
+    depths.set(text.trim(), Math.min(depth, depths.get(text.trim()) ?? depth));
+  }
+  return depths;
 }
 
 function count(texts: readonly string[], pattern: RegExp) {
@@ -136,8 +163,10 @@ function isCode(text: string) {
   return text.trim() !== "" && !isComment(text);
 }
 
+// Only a line that is a comment as a whole counts, so that code after a short block comment is
+// still checked. A # comment needs a space after it, which JavaScript private fields lack.
 function isComment(text: string) {
-  return /^\s*(?:\/\/|\/\*|\*|#(?!\[))/.test(text);
+  return /^\s*(?:\/\/|\*(?!\/)|#(?:\s|!|$)|\/\*(?:(?!\*\/).)*\*\/\s*$)/.test(text);
 }
 
 /**
