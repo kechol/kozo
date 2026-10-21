@@ -17,8 +17,19 @@ import {
   writeVerifyVerdict,
 } from "@kozo/verify";
 import pkg from "../package.json" with { type: "json" };
+import {
+  add,
+  down,
+  FactoryExit,
+  FactoryUsageError,
+  ls,
+  show,
+  status,
+  up,
+  verb,
+} from "./factory-commands.ts";
 
-export const ExitCode = { success: 0, failure: 1, usage: 2, awaitingHuman: 3 } as const;
+export const ExitCode = FactoryExit;
 
 /** The model review and verify sessions use unless --model names another. */
 const defaultSessionModel = "claude-sonnet-5-5";
@@ -34,6 +45,27 @@ export interface Output {
 const USAGE = `Usage: kozo <command>
 
 Commands:
+  up | down [--json]
+      Start kozod in the background, or stop it
+  status [--line] [--json]
+      kozod's state, mode, runs, the inbox count and today's cost; --line
+      prints one line for a status bar
+  add <text> [--repo <path>] [--class <class>] [-f <file>] [--json]
+      Add an item; the first line is its title and the rest, with the
+      file's text, its body
+  ls [inbox|items|tasks|runs] [--json]
+      List what waits for you (the default) or every item, task or run
+  show <ref> [-f] [--json]
+      Show an item, task or run; -f follows its events
+  say <ref> <text>          Answer a question or instruct a run or task
+  approve <item> [text]     Approve a start or a plan
+  reject <item> <reason>    Reject a plan
+  pause [ref] [--now] | resume [ref]
+      Stop or resume the whole factory, or one item, task or run
+  retry <ref> [text]        Retry a task from its checkpoint or an item
+  close <ref> --done | --cancel <reason>
+      Complete an item or task that needed no change, or cancel it
+
   gates [--level fast|full|deep] [--base <ref>] [--json]
       Run the gates of one level (default full); with --base, take the
       constraints from the tip of <ref> instead of the worktree
@@ -57,6 +89,10 @@ Commands:
 Options:
   --version  Print the version
 
+A <ref> of an item is K-<n> or <repo>#<n>, of a task <item>/t<n> and of a
+run r-<nnnn>. Exit codes: 0 success, 1 failure, 2 usage error, 3 waiting
+for a human, 4 not found.
+
 A <ref> after --base or --head is a full commit ID, HEAD, a full ref such
 as refs/remotes/origin/main, or a branch name, read as refs/heads/<name>.`;
 
@@ -79,9 +115,19 @@ export async function run(
     if (command === "prove") return await prove(rest, out, cwd);
     if (command === "review") return await review(rest, out, cwd);
     if (command === "verify") return await verify(rest, out, cwd);
+    if (command === "up") return await up(rest, out);
+    if (command === "down") return await down(rest, out);
+    if (command === "status") return await status(rest, out);
+    if (command === "add") return await add(rest, out);
+    if (command === "ls") return await ls(rest, out);
+    if (command === "show") return await show(rest, out);
+    const verbs = ["say", "approve", "reject", "pause", "resume", "retry", "close"] as const;
+    const named = verbs.find((name) => name === command);
+    if (named) return await verb(named, rest, out);
   } catch (error) {
     const fromParseArgs = String((error as { code?: unknown }).code).startsWith("ERR_PARSE_ARGS");
-    if (error instanceof UsageError || fromParseArgs) return usage(out, (error as Error).message);
+    const usageError = error instanceof UsageError || error instanceof FactoryUsageError;
+    if (usageError || fromParseArgs) return usage(out, (error as Error).message);
     throw error;
   }
   return usage(out, command === undefined ? undefined : `unknown command '${command}'`);

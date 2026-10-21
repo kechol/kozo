@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { chmod, stat } from "node:fs/promises";
-import type { KozoHome } from "./home.ts";
+import type { KozoHome } from "@kozo/core";
 
 const tokenPattern = /^[0-9a-f]{64}$/;
 

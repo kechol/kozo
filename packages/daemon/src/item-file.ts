@@ -1,8 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { type WorkClass, workClassSchema } from "@kozo/core";
+import { type KozoHome, type WorkClass, workClassSchema } from "@kozo/core";
 import { z } from "zod";
-import type { KozoHome } from "./home.ts";
 
 export interface ItemFile {
   repository: string;

@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { chmod, cp, stat } from "node:fs/promises";
+import { kozoHome } from "@kozo/core";
 import { recordedLogs, type TempDirectory, tempDirectory } from "@kozo/testing";
 import { CommandError, type Commands, createApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
 import { EventStore } from "./event-store.ts";
-import { kozoHome } from "./home.ts";
 
 const port = 7420;
 const token = "a".repeat(64);

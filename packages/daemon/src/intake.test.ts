@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { kozoHome } from "@kozo/core";
 import { exampleCharter, gitRepository, tempDirectory } from "@kozo/testing";
 import { ControlPlane } from "./control-plane.ts";
 import { EventStore } from "./event-store.ts";
 import { builtInFactory, loadFactory } from "./factory-config.ts";
-import { kozoHome } from "./home.ts";
 import { formatItemFile, parseItemFile, readItemFile } from "./item-file.ts";
 import { defaultBranch, readCharter } from "./repository.ts";
 
@@ -128,7 +128,11 @@ describe("ControlPlane.addItem", () => {
       title: "Reject a blank quantity",
       body: "Adding an empty quantity creates a broken line.",
     });
-    expect(result).toEqual({ ref: "K-1", message: "added K-1; it waits for your start approval" });
+    expect(result).toEqual({
+      ref: "K-1",
+      message: "added K-1; it waits for your start approval",
+      awaitingHuman: true,
+    });
     expect(await readItemFile(env.home, "K-1")).toMatchObject({
       repository: env.repo.path,
       title: "Reject a blank quantity",

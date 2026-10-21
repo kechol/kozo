@@ -6,6 +6,7 @@ export type { ParseResult } from "./document.ts";
 export * from "./event.ts";
 export * from "./event-log.ts";
 export * from "./factory.ts";
+export * from "./home.ts";
 export * from "./plan.ts";
 export * from "./reference.ts";
 export * from "./run-report.ts";

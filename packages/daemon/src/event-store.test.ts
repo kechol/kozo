@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { cp } from "node:fs/promises";
 import { join } from "node:path";
-import { StateError } from "@kozo/core";
+import { kozoHome, StateError } from "@kozo/core";
 import { recordedLogs, tempDirectory } from "@kozo/testing";
 import { EventLogError, EventStore } from "./event-store.ts";
-import { kozoHome } from "./home.ts";
 
 const created = {
   type: "item.created",

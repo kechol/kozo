@@ -1,9 +1,8 @@
 import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { type AddItem, autonomyLevel, type Factory, isClosed } from "@kozo/core";
-import { CommandError } from "./api.ts";
+import { type AddItem, autonomyLevel, type Factory, isClosed, type KozoHome } from "@kozo/core";
+import { CommandError, type VerbResult } from "./api.ts";
 import type { EventStore } from "./event-store.ts";
-import type { KozoHome } from "./home.ts";
 import { itemPath, writeItemFile } from "./item-file.ts";
 import { readCharter } from "./repository.ts";
 
@@ -41,7 +40,7 @@ export class ControlPlane {
    * Intake: registers a local item after the Charter and duplicate checks. An item at L1 waits
    * for a start approval; any other goes on to Triage.
    */
-  async addItem(body: AddItem): Promise<{ ref: string; message: string }> {
+  async addItem(body: AddItem): Promise<{ ref: string } & VerbResult> {
     const repository = this.repositoryFor(body.repository);
     const charter = await readCharter(repository);
     if (!charter.ok) throw new CommandError(422, `not accepted: ${charter.reason}`);
@@ -77,7 +76,11 @@ export class ControlPlane {
         item: ref,
         data: { target: "item", hold: "approval", reason: "start approval" },
       });
-      return { ref, message: `added ${ref}; it waits for your start approval` };
+      return {
+        ref,
+        message: `added ${ref}; it waits for your start approval`,
+        awaitingHuman: true,
+      };
     }
     await this.store.append({
       type: "stage.changed",

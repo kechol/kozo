@@ -7,12 +7,13 @@ import {
   eventSchema,
   type FactoryState,
   formatReference,
+  type KozoHome,
   mergeLogs,
   parseEventLog,
   parseReference,
   replay,
+  runFiles,
 } from "@kozo/core";
-import { type KozoHome, runFiles } from "./home.ts";
 import { IndexDb } from "./index-db.ts";
 
 type Data<T extends EventType> = Extract<Event, { type: T }>["data"];

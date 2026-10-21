@@ -1,11 +1,10 @@
 import { mkdir, rm } from "node:fs/promises";
-import { apiPort } from "@kozo/core";
+import { apiPort, type KozoHome, kozoHome } from "@kozo/core";
 import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
 import { ControlPlane } from "./control-plane.ts";
 import { EventStore } from "./event-store.ts";
 import { loadFactory } from "./factory-config.ts";
-import { type KozoHome, kozoHome } from "./home.ts";
 
 export interface DaemonOptions {
   home?: KozoHome;

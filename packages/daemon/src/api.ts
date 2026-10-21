@@ -43,7 +43,7 @@ export interface VerbResult {
 
 /** What kozod does for each write; the API only checks and routes requests to these. */
 export interface Commands {
-  addItem(body: AddItem): Promise<{ ref: string; message: string }>;
+  addItem(body: AddItem): Promise<{ ref: string } & VerbResult>;
   act(ref: string, reference: Reference, verb: Verb, body: unknown): Promise<VerbResult>;
   pauseFactory(): Promise<VerbResult>;
   resumeFactory(): Promise<VerbResult>;

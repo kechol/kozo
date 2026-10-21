@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { kozoHome } from "@kozo/core";
 import { tempDirectory } from "@kozo/testing";
 import { Daemon } from "./daemon.ts";
-import { kozoHome } from "./home.ts";
 
 describe("Daemon", () => {
   test("serves the local API on 127.0.0.1 with the home's token, and only once per home", async () => {

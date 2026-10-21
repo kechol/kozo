@@ -1,7 +1,6 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { type Factory, factorySchema } from "@kozo/core";
-import type { KozoHome } from "./home.ts";
+import { type Factory, factorySchema, type KozoHome } from "@kozo/core";
 
 /** The factory kozod runs when `factory.yml` is absent: local mode and no repositories yet. */
 export const builtInFactory: Factory = {
