@@ -60,6 +60,9 @@
     "testing": {
       "name": "@kozo/testing",
       "version": "0.0.0",
+      "dependencies": {
+        "@kozo/core": "workspace:*",
+      },
     },
   },
   "packages": {
