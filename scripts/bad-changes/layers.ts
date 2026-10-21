@@ -15,14 +15,29 @@ export interface LayerOutcome {
   review?: string;
 }
 
-/** Whether each layer let the change through; anything else means the layer caught it. */
+/**
+ * Whether each layer rejected the change. An error or a misconfiguration is neither a pass nor a
+ * catch; `failedToRun` lists the layers that ended that way, so they are reported apart.
+ */
 export function caughtBy(outcome: LayerOutcome) {
   return {
-    gates: outcome.gates !== "pass",
-    "diff-guard": outcome.diffGuard !== "pass",
-    prove: outcome.prove !== "pass",
-    review: outcome.review !== undefined && outcome.review !== "accept",
+    gates: outcome.gates === "fail",
+    "diff-guard": outcome.diffGuard === "fail",
+    prove: outcome.prove.startsWith("fail:"),
+    review: outcome.review === "revise" || outcome.review === "escalate",
   };
+}
+
+export function failedToRun(outcome: LayerOutcome): string[] {
+  const statuses = {
+    gates: outcome.gates,
+    "diff-guard": outcome.diffGuard,
+    prove: outcome.prove,
+    review: outcome.review,
+  };
+  return Object.entries(statuses)
+    .filter(([, status]) => status === "error" || status === "MISCONFIGURED")
+    .map(([layer]) => layer);
 }
 
 /**

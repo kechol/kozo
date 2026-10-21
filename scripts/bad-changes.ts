@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { claudeJudge } from "../packages/verify/src/index.ts";
 import { badChanges, goodChange } from "../testing/src/index.ts";
-import { caughtBy, type LayerOutcome, runLayers } from "./bad-changes/layers.ts";
+import { caughtBy, failedToRun, type LayerOutcome, runLayers } from "./bad-changes/layers.ts";
 
 // Usage: bun run scripts/bad-changes.ts --model claude-sonnet-5-5 [--model ...]
 //          [--out .output/bad-changes]
@@ -77,7 +77,7 @@ for (const [model, rows] of Object.entries(report)) {
       `- bad changes caught by some layer: ${caught.length}/${bad.length}`,
       `- review-only cases caught by review: ${reviewCaught.length}/${reviewCases.length}`,
       `- bad changes review rejected on its own: ${reviewFlagged.length}/${bad.length}`,
-      `- review errors: ${rows.filter((row) => row.outcome.review === "error").length}`,
+      `- cases where a layer failed to run: ${rows.filter((row) => failedToRun(row.outcome).length > 0).length}`,
       `- cost: $${cost.toFixed(4)}`,
       "",
       "| case | expected layer | gates | diff-guard | prove | review | cost |",
