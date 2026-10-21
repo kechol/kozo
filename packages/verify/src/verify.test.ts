@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { symlink } from "node:fs/promises";
+import { link, symlink } from "node:fs/promises";
 import { verdictFileSchema } from "@kozo/core";
 import { gitRepository, tempDirectory } from "@kozo/testing";
 import { parseSkill } from "./agent-definition.ts";
@@ -114,6 +114,17 @@ describe("runVerify", () => {
     const { result, log } = await verify(repo.path, base, fakeVerifier(pass).verifier);
     expect(result.status).toBe("error");
     expect(log).toContain("is outside the worktree");
+  });
+
+  test("evidence hard-linked to a file elsewhere is refused", async () => {
+    const { repo, base } = await repository();
+    await using _ = repo;
+    await using outside = await tempDirectory({ "secret.txt": "secret" });
+    await Bun.write(`${repo.path}/.output/verify/.keep`, "");
+    await link(`${outside.path}/secret.txt`, `${repo.path}/.output/verify/01-notice.png`);
+    const { result, log } = await verify(repo.path, base, fakeVerifier(pass).verifier);
+    expect(result.status).toBe("error");
+    expect(log).toContain("is not a regular file with a single link");
   });
 });
 

@@ -139,7 +139,8 @@ export async function writeVerifyVerdict(
       throw new SessionError(`evidence file ${path} changed while it was copied`);
     try {
       const opened = await handle.stat();
-      if (!opened.isFile() || opened.ino !== identity.ino || opened.dev !== identity.dev) {
+      const same = opened.ino === identity.ino && opened.dev === identity.dev;
+      if (!opened.isFile() || opened.nlink !== 1 || !same) {
         throw new SessionError(`evidence file ${path} changed while it was copied`);
       }
       const target = join(dir, "evidence", inside);
@@ -171,7 +172,10 @@ async function resolveEvidence(cwd: string, path: string) {
     throw new SessionError(`evidence file ${path} is outside the worktree`);
   }
   const identity = await stat(source);
-  if (!identity.isFile()) throw new SessionError(`evidence file ${path} is not a regular file`);
+  // A hard link would let a file elsewhere on the machine pose as one inside the worktree.
+  if (!identity.isFile() || identity.nlink !== 1) {
+    throw new SessionError(`evidence file ${path} is not a regular file with a single link`);
+  }
   return { source, inside, identity };
 }
 
