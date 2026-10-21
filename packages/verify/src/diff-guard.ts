@@ -5,6 +5,7 @@ import {
   diffCommand,
   globMatcher,
   literal,
+  protectedPathMatcher,
   resolveRange,
 } from "./changes.ts";
 import { guarded } from "./command.ts";
@@ -73,7 +74,7 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
   const inScope = scope && globMatcher(scope);
   const protectedGlobs = charter.protected_paths.map((pattern) => ({
     pattern,
-    matches: globMatcher([pattern]),
+    matches: protectedPathMatcher(pattern),
   }));
   const isTest = globMatcher(constraints.tests);
   for (const file of files) {

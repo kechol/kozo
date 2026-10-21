@@ -59,11 +59,11 @@ export async function resolveRange(cwd: string, base: string, head: string) {
 }
 
 /**
- * Whether a path matches any of the globs. A pattern without glob syntax names a file or a
- * directory and also covers everything under it, so `db/migrations` and `db/migrations/` mean
- * `db/migrations/**`, as a person writing a protected path or a scope means them. A pattern with
- * glob syntax keeps its exact meaning, so `src/*.test.ts` does not make every file under a
- * directory named `src/a.test.ts` a test.
+ * Whether a path matches any of the globs, for scopes and test globs, where matching too much
+ * would loosen a check. A pattern without glob syntax names a file or a directory and also
+ * covers everything under it, so a scope of `src/cart` means `src/cart/**`. A pattern with glob
+ * syntax keeps its exact meaning, so `src/*.test.ts` does not make every file under a directory
+ * named `src/a.test.ts` a test.
  */
 export function globMatcher(patterns: readonly string[]) {
   const globs = patterns.flatMap((pattern) => {
@@ -72,6 +72,19 @@ export function globMatcher(patterns: readonly string[]) {
     return [new Bun.Glob(trimmed), new Bun.Glob(`${trimmed}/**`)];
   });
   return (path: string) => globs.some((glob) => glob.match(path));
+}
+
+/**
+ * Whether a path falls under a protected path. Matching errs toward protecting: the pattern
+ * matches both as a glob and as a literal path, each covering everything under it, so a
+ * directory written with or without a trailing slash, a glob such as `src/*`, and a route such
+ * as `app/[id]` whose brackets would read as glob syntax are all protected with what they hold.
+ */
+export function protectedPathMatcher(pattern: string) {
+  const trimmed = pattern.replace(/\/+$/, "");
+  const globs = [new Bun.Glob(trimmed), new Bun.Glob(`${trimmed}/**`)];
+  return (path: string) =>
+    path === trimmed || path.startsWith(`${trimmed}/`) || globs.some((glob) => glob.match(path));
 }
 
 /** Lists the files that `head` changes relative to `base`, a rename counting as two files. */

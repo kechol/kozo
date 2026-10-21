@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { globMatcher } from "./changes.ts";
+import { globMatcher, protectedPathMatcher } from "./changes.ts";
 
 describe("globMatcher", () => {
   test("a path without glob syntax covers the file or directory it names", () => {
@@ -15,5 +15,21 @@ describe("globMatcher", () => {
     expect(matches("src/cart.test.ts")).toBe(true);
     expect(matches("tests/support.ts")).toBe(true);
     expect(matches("src/a.test.ts/impl.ts")).toBe(false);
+  });
+});
+
+describe("protectedPathMatcher", () => {
+  test("a glob also protects everything under what it matches", () => {
+    const matches = protectedPathMatcher("src/*");
+    expect(matches("src/a.ts")).toBe(true);
+    expect(matches("src/auth/session.ts")).toBe(true);
+    expect(matches("lib/a.ts")).toBe(false);
+  });
+
+  test("a path with brackets is protected as written", () => {
+    const matches = protectedPathMatcher("app/[id]");
+    expect(matches("app/[id]/page.tsx")).toBe(true);
+    expect(matches("app/i/page.tsx")).toBe(true);
+    expect(matches("app/other/page.tsx")).toBe(false);
   });
 });
