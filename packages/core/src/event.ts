@@ -33,6 +33,8 @@ const envelope = {
   ts: z.iso.datetime(),
   /** The SHA-256 of the previous line of the same log, null on its first line. */
   prev: sha256.nullable(),
+  /** The local API write that made the event, null for kozod's own decisions. */
+  api_call: z.uuid().nullable(),
   /** Null for events outside any run, which kozod keeps in its own log. */
   run_id: runReferenceSchema.nullable(),
   parent_run: runReferenceSchema.nullable(),
@@ -84,9 +86,15 @@ export const eventSchema = z
     ),
     event(
       "stage.changed",
-      z.strictObject({ target, from: stageSchema.nullable(), to: stageSchema }),
+      z.strictObject({
+        target,
+        from: stageSchema.nullable(),
+        to: stageSchema,
+        by: actor,
+        reason: text,
+      }),
     ),
-    event("hold.set", z.strictObject({ target, hold: holdKindSchema, reason: text })),
+    event("hold.set", z.strictObject({ target, hold: holdKindSchema, by: actor, reason: text })),
     event(
       "hold.cleared",
       z.strictObject({ target, hold: holdKindSchema, by: actor, reason: text.optional() }),

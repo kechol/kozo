@@ -394,7 +394,13 @@ export class Runner {
     await this.store.append({
       type: "stage.changed",
       item: itemRef,
-      data: { target: "item", from: "triage", to: "planning" },
+      data: {
+        target: "item",
+        from: "triage",
+        to: "planning",
+        by: "kozod",
+        reason: `the plan needs an approval at ${level}`,
+      },
     });
     await this.hold("item", itemRef, null, "approval", "plan approval");
   }
@@ -419,11 +425,11 @@ export class Runner {
       item,
       task,
       ...(run ? { run_id: run, parent_run: this.store.state.runs[run]?.parent ?? null } : {}),
-      data: { target, hold, reason: reason.slice(0, 2000) },
+      data: { target, hold, by: "kozod", reason: reason.slice(0, 2000) },
     } as NewEvent);
   }
 
-  private async moveTask(task: TaskState, to: Stage, run: string | null) {
+  private async moveTask(task: TaskState, to: Stage, run: string | null, reason: string) {
     const current = this.store.state.tasks[task.ref];
     if (!current || current.stage === to) return;
     await this.store.append({
@@ -431,7 +437,7 @@ export class Runner {
       item: current.item,
       task: current.ref,
       ...(run ? { run_id: run } : {}),
-      data: { target: "task", from: current.stage, to },
+      data: { target: "task", from: current.stage, to, by: "kozod", reason: reason.slice(0, 2000) },
     });
   }
 
@@ -818,7 +824,7 @@ export class Runner {
             return await stopHere("failed", "diff-guard refused the diff");
           }
           await exit(node, true);
-          await this.moveTask(current, "reviewing", run);
+          await this.moveTask(current, "reviewing", run, "gates, prove and diff-guard passed");
           break;
         }
         case "review": {
@@ -885,7 +891,12 @@ export class Runner {
           }
           if (next.stage === "building") {
             await exit(node, false, `revise: ${review.record.summary}`);
-            await this.moveTask(current, "building", run);
+            await this.moveTask(
+              current,
+              "building",
+              run,
+              `review asked for a revision: ${review.record.summary}`,
+            );
             await this.endRun(run, "succeeded");
             return {
               kind: "retry",
@@ -981,7 +992,12 @@ export class Runner {
               );
               return await stopHere("succeeded");
             }
-            await this.moveTask(current, "building", run);
+            await this.moveTask(
+              current,
+              "building",
+              run,
+              `verify found DONE_WHEN unmet: ${verify.record.summary}`,
+            );
             await this.endRun(run, "succeeded");
             return {
               kind: "retry",
@@ -993,7 +1009,7 @@ export class Runner {
         }
         case "handoff": {
           await enter(node, "D");
-          await this.moveTask(current, "handoff", run);
+          await this.moveTask(current, "handoff", run, "the checks of its risk tier passed");
           await this.writeHandoffReport(item.ref, current, run, repository.branch, worktree);
           await exit(node, true);
           break;
@@ -1077,7 +1093,7 @@ export class Runner {
       await this.endRun(run, "failed", "final verification failed");
       return { kind: "done" };
     }
-    await this.moveTask(task, "building", run);
+    await this.moveTask(task, "building", run, why);
     await this.endRun(run, "succeeded");
     return { kind: "retry", failure: why };
   }
@@ -1229,7 +1245,12 @@ export class Runner {
             ? { level, status: "fail", failed: result.failed }
             : { level, status: "MISCONFIGURED", reason: result.reason },
     });
-    await this.moveTask(task, "complete", null);
+    await this.moveTask(
+      task,
+      "complete",
+      null,
+      `merged into ${repository.branch}; the ${level} gates ${result.status === "pass" ? "passed" : "failed"} there`,
+    );
     await releaseTask(this.home, repository.path, taskRef, { deleteBranch: false });
     const owner = this.store.state.items[item.ref];
     if (!owner || owner.tasks.some((ref) => this.store.state.tasks[ref]?.stage !== "complete"))
@@ -1237,7 +1258,13 @@ export class Runner {
     await this.store.append({
       type: "stage.changed",
       item: item.ref,
-      data: { target: "item", from: owner.stage, to: "complete" },
+      data: {
+        target: "item",
+        from: owner.stage,
+        to: "complete",
+        by: "kozod",
+        reason: "every task is complete",
+      },
     });
     if (result.status !== "pass") {
       await this.store.append({
@@ -1251,7 +1278,13 @@ export class Runner {
       await this.store.append({
         type: "stage.changed",
         item: item.ref,
-        data: { target: "item", from: "complete", to: "triage" },
+        data: {
+          target: "item",
+          from: "complete",
+          to: "triage",
+          by: "kozod",
+          reason: "the check after the merge failed, a post-merge defect",
+        },
       });
     }
   }

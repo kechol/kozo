@@ -97,6 +97,7 @@ export class Reconciler {
           data: {
             target: "task",
             hold: "attention",
+            by: "kozod",
             reason: `${branch} was deleted without a merge`,
           },
         });
@@ -119,7 +120,13 @@ export class Reconciler {
         type: "stage.changed",
         item: item.ref,
         task: task.ref,
-        data: { target: "task", from: "handoff", to: "reviewing" },
+        data: {
+          target: "task",
+          from: "handoff",
+          to: "reviewing",
+          by: "kozod",
+          reason: `a human committed to ${branch}`,
+        },
       });
     }
   }

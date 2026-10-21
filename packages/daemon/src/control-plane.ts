@@ -92,7 +92,7 @@ export class ControlPlane {
       await this.store.append({
         type: "hold.set",
         item: ref,
-        data: { target: "item", hold: "approval", reason: "start approval" },
+        data: { target: "item", hold: "approval", by: "kozod", reason: "start approval" },
       });
       return {
         ref,
@@ -103,7 +103,13 @@ export class ControlPlane {
     await this.store.append({
       type: "stage.changed",
       item: ref,
-      data: { target: "item", from: "intake", to: "triage" },
+      data: {
+        target: "item",
+        from: "intake",
+        to: "triage",
+        by: "kozod",
+        reason: "its autonomy level needs no start approval",
+      },
     });
     return { ref, message: `added ${ref}; it goes to Triage` };
   }
@@ -158,7 +164,7 @@ export class ControlPlane {
       type: "hold.set",
       item,
       task,
-      data: { target: kind, hold, reason },
+      data: { target: kind, hold, by: "human", reason },
     } as NewEvent);
   }
 
@@ -172,14 +178,15 @@ export class ControlPlane {
     });
   }
 
-  private async move(kind: "item" | "task", ref: string, to: Stage) {
+  /** Moves an item or a task as a human asked, with the command that asked as the reason. */
+  private async move(kind: "item" | "task", ref: string, to: Stage, reason: string) {
     const { subject, item, task } = this.subject(ref, kind);
     if (subject.stage === to) return;
     await this.store.append({
       type: "stage.changed",
       item,
       task,
-      data: { target: kind, from: subject.stage, to },
+      data: { target: kind, from: subject.stage, to, by: "human", reason },
     } as NewEvent);
   }
 
@@ -192,7 +199,7 @@ export class ControlPlane {
     await this.clearHold("item", ref, body.text);
     if (body.text) await this.note(ref, ref, "approval", body.text);
     if (start) {
-      await this.move("item", ref, "triage");
+      await this.move("item", ref, "triage", "kozo approve");
       return { message: `approved the start of ${ref}; it goes to Triage` };
     }
     if (!item.draft) throw new CommandError(409, `${ref} has no plan to approve`);
@@ -213,7 +220,7 @@ export class ControlPlane {
     }
     await this.clearHold("item", ref, body.reason);
     await this.note(ref, ref, "rejection", body.reason);
-    await this.move("item", ref, "triage");
+    await this.move("item", ref, "triage", `kozo reject: ${body.reason}`);
     return { message: `rejected the plan of ${ref}; Triage drafts it again with your reason` };
   }
 
@@ -295,7 +302,8 @@ export class ControlPlane {
       throw new CommandError(409, `${ref} is held by ${subject.hold.kind}`);
     }
     await this.clearHold(kind, ref, body.text);
-    if (kind === "item" && subject.stage === "planning") await this.move("item", ref, "triage");
+    if (kind === "item" && subject.stage === "planning")
+      await this.move("item", ref, "triage", "kozo retry");
     return {
       message:
         kind === "task"
@@ -319,9 +327,9 @@ export class ControlPlane {
       if (running) this.runner?.stopSession(running);
       if ("done" in body) {
         await this.clearHold("task", task);
-        await this.move("task", task, "complete");
+        await this.move("task", task, "complete", "kozo close --done");
       } else {
-        await this.move("task", task, "cancelled");
+        await this.move("task", task, "cancelled", `kozo close --cancel: ${body.cancel}`);
         await this.runner?.release(task, true);
       }
     }
@@ -332,7 +340,12 @@ export class ControlPlane {
       const owner = this.store.state.items[item];
       if (owner && !isClosed(owner.stage)) {
         if ("done" in body) await this.clearHold("item", item);
-        await this.move("item", item, "done" in body ? "complete" : "cancelled");
+        await this.move(
+          "item",
+          item,
+          "done" in body ? "complete" : "cancelled",
+          "done" in body ? "kozo close --done" : `kozo close --cancel: ${body.cancel}`,
+        );
       }
     }
     return {

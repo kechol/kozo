@@ -27,7 +27,7 @@ describe("EventStore", () => {
     await store.append({
       type: "stage.changed",
       item: "K-1",
-      data: { target: "item", from: "intake", to: "triage" },
+      data: { target: "item", from: "intake", to: "triage", by: "kozod", reason: "test" },
     });
     await store.append({
       type: "run.started",
@@ -61,7 +61,7 @@ describe("EventStore", () => {
       store.append({
         type: "stage.changed",
         item: "K-1",
-        data: { target: "item", from: "intake", to: "planning" },
+        data: { target: "item", from: "intake", to: "planning", by: "kozod", reason: "test" },
       }),
     ).rejects.toThrow(StateError);
     await expect(store.append({ ...created, item: "nope" } as never)).rejects.toThrow();
@@ -70,7 +70,7 @@ describe("EventStore", () => {
     await store.append({
       type: "stage.changed",
       item: "K-1",
-      data: { target: "item", from: "intake", to: "triage" },
+      data: { target: "item", from: "intake", to: "triage", by: "kozod", reason: "test" },
     });
     expect((await lines(home.eventsLog)).map((event) => event.seq)).toEqual([0, 1]);
     store.close();
@@ -106,7 +106,7 @@ describe("EventStore", () => {
     await store.append({
       type: "stage.changed",
       item: "K-1",
-      data: { target: "item", from: "complete", to: "triage" },
+      data: { target: "item", from: "complete", to: "triage", by: "kozod", reason: "test" },
     });
     store.close();
     const reopened = await EventStore.open(home);

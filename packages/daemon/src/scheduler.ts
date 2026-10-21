@@ -93,6 +93,7 @@ export class Scheduler {
             data: {
               target,
               hold: "attention",
+              by: "kozod",
               reason: `kozod could not run it: ${message}`.slice(0, 2000),
             },
           } as NewEvent)
@@ -190,7 +191,7 @@ export class Scheduler {
           type: "hold.set",
           item: task.item,
           task: task.ref,
-          data: { target: "task", hold: "capacity", reason: stop },
+          data: { target: "task", hold: "capacity", by: "kozod", reason: stop },
         });
         continue;
       }

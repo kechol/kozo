@@ -101,6 +101,21 @@ describe("Daemon", () => {
     while (first.store.state.items["K-1"]?.hold?.reason !== "plan approval") await Bun.sleep(20);
     await post("/api/refs/K-1/approve", {});
     while (first.store.state.items["K-1"]?.stage !== "building") await Bun.sleep(20);
+    // Each API write tags its own events; what the scheduler starts afterwards is untagged.
+    const calls = first.store.db
+      .query<{ type: string; call: string | null }, []>(
+        "select type, json_extract(line, '$.api_call') as call from events order by id",
+      )
+      .all();
+    const added = calls.find((event) => event.type === "item.created")?.call;
+    const approved = calls.find((event) => event.type === "plan.accepted")?.call;
+    expect(added).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7/);
+    expect(approved).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7/);
+    expect(calls.filter((event) => event.call === approved).map((event) => event.type)).toEqual([
+      "hold.cleared",
+      "plan.accepted",
+    ]);
+    expect(calls.find((event) => event.type === "run.started")?.call).toBeNull();
     while (first.store.state.tasks["K-1/t1"]?.checkpoint?.node !== "implement") await Bun.sleep(20);
     await first.stop();
 

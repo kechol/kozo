@@ -370,7 +370,7 @@ export function eventLine(event: {
   const data = event.data;
   const summary =
     event.type === "stage.changed"
-      ? `${data.target} ${data.from} → ${data.to}`
+      ? `${data.target} ${data.from} → ${data.to}: ${data.reason}`
       : event.type === "hold.set" || event.type === "hold.cleared"
         ? `${data.target} ${data.hold}${data.reason ? `: ${data.reason}` : ""}`
         : event.type === "agent.message"

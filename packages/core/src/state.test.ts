@@ -36,9 +36,17 @@ function planned(write = eventWriter(), accepted = plan()): Event[] {
   const item = { item: "K-1" };
   return [
     write("item.created", { repository: "~/src/app", title: "Fix", source: "local" }, item),
-    write("stage.changed", { target: "item", from: "intake", to: "triage" }, item),
+    write(
+      "stage.changed",
+      { target: "item", from: "intake", to: "triage", by: "kozod", reason: "test" },
+      item,
+    ),
     write("plan.proposed", { plan: accepted }, item),
-    write("stage.changed", { target: "item", from: "triage", to: "planning" }, item),
+    write(
+      "stage.changed",
+      { target: "item", from: "triage", to: "planning", by: "kozod", reason: "test" },
+      item,
+    ),
     write("plan.accepted", { plan: accepted, by: "human" }, item),
   ];
 }
@@ -58,12 +66,36 @@ describe("replay", () => {
     const task = { item: "K-1", task: "K-1/t1" };
     const state = replay([
       ...planned(write),
-      write("stage.changed", { target: "task", from: "building", to: "reviewing" }, task),
-      write("stage.changed", { target: "task", from: "reviewing", to: "building" }, task),
-      write("stage.changed", { target: "task", from: "building", to: "reviewing" }, task),
-      write("stage.changed", { target: "task", from: "reviewing", to: "handoff" }, task),
-      write("stage.changed", { target: "task", from: "handoff", to: "complete" }, task),
-      write("stage.changed", { target: "item", from: "building", to: "complete" }, task),
+      write(
+        "stage.changed",
+        { target: "task", from: "building", to: "reviewing", by: "kozod", reason: "test" },
+        task,
+      ),
+      write(
+        "stage.changed",
+        { target: "task", from: "reviewing", to: "building", by: "kozod", reason: "test" },
+        task,
+      ),
+      write(
+        "stage.changed",
+        { target: "task", from: "building", to: "reviewing", by: "kozod", reason: "test" },
+        task,
+      ),
+      write(
+        "stage.changed",
+        { target: "task", from: "reviewing", to: "handoff", by: "kozod", reason: "test" },
+        task,
+      ),
+      write(
+        "stage.changed",
+        { target: "task", from: "handoff", to: "complete", by: "kozod", reason: "test" },
+        task,
+      ),
+      write(
+        "stage.changed",
+        { target: "item", from: "building", to: "complete", by: "kozod", reason: "test" },
+        task,
+      ),
     ]);
     expect(state.tasks["K-1/t1"]).toMatchObject({ stage: "complete", revisions: 1 });
     expect(state.items["K-1"]?.stage).toBe("complete");
@@ -162,7 +194,11 @@ describe("replay", () => {
     expect(() =>
       replay([
         write("item.created", { repository: "~/src/app", title: "Fix", source: "local" }, item),
-        write("stage.changed", { target: "item", from: "intake", to: "planning" }, item),
+        write(
+          "stage.changed",
+          { target: "item", from: "intake", to: "planning", by: "kozod", reason: "test" },
+          item,
+        ),
       ]),
     ).toThrow(StateError);
     const later = eventWriter();
@@ -171,7 +207,7 @@ describe("replay", () => {
         ...planned(later),
         later(
           "stage.changed",
-          { target: "task", from: "reviewing", to: "handoff" },
+          { target: "task", from: "reviewing", to: "handoff", by: "kozod", reason: "test" },
           {
             item: "K-1",
             task: "K-1/t1",
@@ -186,19 +222,35 @@ describe("replay", () => {
     const task = { item: "K-1", task: "K-1/t1" };
     const held = [
       ...planned(write),
-      write("hold.set", { target: "task", hold: "question", reason: "which label?" }, task),
+      write(
+        "hold.set",
+        { target: "task", hold: "question", by: "kozod", reason: "which label?" },
+        task,
+      ),
     ];
     expect(() =>
       replay([
         ...held,
-        write("stage.changed", { target: "task", from: "building", to: "reviewing" }, task),
+        write(
+          "stage.changed",
+          { target: "task", from: "building", to: "reviewing", by: "kozod", reason: "test" },
+          task,
+        ),
       ]),
     ).toThrow("held by question");
     const write2 = eventWriter();
     const cancelled = replay([
       ...planned(write2),
-      write2("hold.set", { target: "task", hold: "question", reason: "which label?" }, task),
-      write2("stage.changed", { target: "task", from: "building", to: "cancelled" }, task),
+      write2(
+        "hold.set",
+        { target: "task", hold: "question", by: "kozod", reason: "which label?" },
+        task,
+      ),
+      write2(
+        "stage.changed",
+        { target: "task", from: "building", to: "cancelled", by: "kozod", reason: "test" },
+        task,
+      ),
     ]);
     expect(cancelled.tasks["K-1/t1"]?.stage).toBe("cancelled");
   });
@@ -222,8 +274,16 @@ describe("itemStage", () => {
     const t1 = { item: "K-1", task: "K-1/t1" };
     const state = replay([
       ...planned(write, plan(2)),
-      write("stage.changed", { target: "task", from: "building", to: "reviewing" }, t1),
-      write("stage.changed", { target: "task", from: "reviewing", to: "handoff" }, t1),
+      write(
+        "stage.changed",
+        { target: "task", from: "building", to: "reviewing", by: "kozod", reason: "test" },
+        t1,
+      ),
+      write(
+        "stage.changed",
+        { target: "task", from: "reviewing", to: "handoff", by: "kozod", reason: "test" },
+        t1,
+      ),
     ]);
     const item = state.items["K-1"];
     if (!item) throw new Error("expected the item");
@@ -233,7 +293,11 @@ describe("itemStage", () => {
     const later = replay([
       ...planned(write2, plan(2)),
       ...[t1, t2].map((task) =>
-        write2("stage.changed", { target: "task", from: "building", to: "reviewing" }, task),
+        write2(
+          "stage.changed",
+          { target: "task", from: "building", to: "reviewing", by: "kozod", reason: "test" },
+          task,
+        ),
       ),
     ]);
     const laterItem = later.items["K-1"];
@@ -284,7 +348,7 @@ describe("holds", () => {
     expect(() =>
       replay([
         ...created,
-        write("hold.set", { target: "item", hold: "capacity", reason: "x" }, item),
+        write("hold.set", { target: "item", hold: "capacity", by: "kozod", reason: "x" }, item),
       ]),
     ).toThrow("a item cannot be held by capacity");
     const write2 = eventWriter();
@@ -292,7 +356,7 @@ describe("holds", () => {
     expect(() =>
       replay([
         ...planned(write2),
-        write2("hold.set", { target: "task", hold: "approval", reason: "x" }, task),
+        write2("hold.set", { target: "task", hold: "approval", by: "kozod", reason: "x" }, task),
       ]),
     ).toThrow("a task cannot be held by approval");
   });
@@ -302,16 +366,27 @@ describe("holds", () => {
     const task = { item: "K-1", task: "K-1/t1" };
     const held = [
       ...planned(write),
-      write("hold.set", { target: "task", hold: "question", reason: "which label?" }, task),
+      write(
+        "hold.set",
+        { target: "task", hold: "question", by: "kozod", reason: "which label?" },
+        task,
+      ),
     ];
     expect(() =>
-      replay([...held, write("hold.set", { target: "task", hold: "paused", reason: "x" }, task)]),
+      replay([
+        ...held,
+        write("hold.set", { target: "task", hold: "paused", by: "kozod", reason: "x" }, task),
+      ]),
     ).toThrow("already held by question");
     const write2 = eventWriter();
     expect(() =>
       replay([
         ...planned(write2),
-        write2("hold.set", { target: "task", hold: "question", reason: "which?" }, task),
+        write2(
+          "hold.set",
+          { target: "task", hold: "question", by: "kozod", reason: "which?" },
+          task,
+        ),
         write2("hold.cleared", { target: "task", hold: "attention", by: "human" }, task),
       ]),
     ).toThrow("not held by attention");
@@ -322,10 +397,22 @@ describe("holds", () => {
     const task = { item: "K-1", task: "K-1/t1" };
     const state = replay([
       ...planned(write),
-      write("stage.changed", { target: "task", from: "building", to: "reviewing" }, task),
-      write("hold.set", { target: "task", hold: "question", reason: "which label?" }, task),
+      write(
+        "stage.changed",
+        { target: "task", from: "building", to: "reviewing", by: "kozod", reason: "test" },
+        task,
+      ),
+      write(
+        "hold.set",
+        { target: "task", hold: "question", by: "kozod", reason: "which label?" },
+        task,
+      ),
       write("hold.cleared", { target: "task", hold: "question", by: "human" }, task),
-      write("stage.changed", { target: "task", from: "reviewing", to: "handoff" }, task),
+      write(
+        "stage.changed",
+        { target: "task", from: "reviewing", to: "handoff", by: "kozod", reason: "test" },
+        task,
+      ),
     ]);
     expect(state.tasks["K-1/t1"]).toMatchObject({ stage: "handoff", hold: null });
   });
@@ -335,7 +422,11 @@ describe("holds", () => {
     const item = { item: "K-1" };
     const state = replay([
       write("item.created", { repository: "~/src/app", title: "Fix", source: "local" }, item),
-      write("hold.set", { target: "item", hold: "approval", reason: "start approval" }, item),
+      write(
+        "hold.set",
+        { target: "item", hold: "approval", by: "kozod", reason: "start approval" },
+        item,
+      ),
     ]);
     expect(expiredApprovals(state, new Date("2026-10-07T23:59:00.000Z"))).toEqual([]);
     expect(expiredApprovals(state, new Date("2026-10-08T00:00:01.000Z")).map((i) => i.ref)).toEqual(
@@ -355,7 +446,7 @@ describe("holds", () => {
     expect(startBlocker(state, second)).toBe("K-1/t2 waits for K-1/t1");
     const held = replay([
       ...base,
-      write("hold.set", { target: "task", hold: "capacity", reason: "budget" }, t1),
+      write("hold.set", { target: "task", hold: "capacity", by: "kozod", reason: "budget" }, t1),
     ]);
     const heldFirst = held.tasks["K-1/t1"];
     if (heldFirst) expect(startBlocker(held, heldFirst)).toBe("K-1/t1 is held by capacity");

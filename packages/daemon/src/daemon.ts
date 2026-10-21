@@ -91,18 +91,19 @@ export class Daemon {
     });
     const control = new ControlPlane(home, store, factory, runner);
     const scheduler = new Scheduler(store, runner, factory, (line) => console.error(line));
-    const ticking =
-      <A extends unknown[], R>(command: (...args: A) => Promise<R>) =>
+    // Each write is one API call; the work the scheduler starts after it is kozod's own.
+    const apiCall =
+      <A extends unknown[], R>(command: (...args: A) => Promise<R>, tick = true) =>
       async (...args: A) => {
-        const result = await command(...args);
-        scheduler.tick();
+        const result = await store.during(Bun.randomUUIDv7(), () => command(...args));
+        if (tick) scheduler.tick();
         return result;
       };
     const commands: Commands = {
-      addItem: ticking((body) => control.addItem(body)),
-      act: ticking((ref, reference, verb, body) => control.act(ref, reference, verb, body)),
-      pauseFactory: () => control.pauseFactory(),
-      resumeFactory: ticking(() => control.resumeFactory()),
+      addItem: apiCall((body) => control.addItem(body)),
+      act: apiCall((ref, reference, verb, body) => control.act(ref, reference, verb, body)),
+      pauseFactory: apiCall(() => control.pauseFactory(), false),
+      resumeFactory: apiCall(() => control.resumeFactory()),
       rebuildIndex: async () => {
         await store.rebuildIndex();
         return { message: "rebuilt kozo.db from the event logs" };

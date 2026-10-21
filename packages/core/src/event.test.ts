@@ -5,6 +5,7 @@ const envelope = {
   v: 1,
   ts: "2026-10-19T09:14:02.311Z",
   prev: null,
+  api_call: null,
   run_id: "r-0193",
   parent_run: null,
   item: "app#212",
@@ -45,8 +46,14 @@ const examples: Record<EventType, unknown> = {
   "factory.changed": { paused: true, reason: "kozo pause" },
   "log.sealed": { run: "r-0193", lines: 58, last: "a".repeat(64) },
   "run.changed": { from: "running", to: "failed", reason: "max_turns" },
-  "stage.changed": { target: "task", from: "building", to: "reviewing" },
-  "hold.set": { target: "item", hold: "approval", reason: "plan approval" },
+  "stage.changed": {
+    target: "task",
+    from: "building",
+    to: "reviewing",
+    by: "kozod",
+    reason: "test",
+  },
+  "hold.set": { target: "item", hold: "approval", by: "kozod", reason: "plan approval" },
   "hold.cleared": { target: "item", hold: "approval", by: "human" },
   "note.added": { kind: "answer", text: "Show Sold out for zero." },
   "plan.proposed": { plan },
@@ -96,11 +103,11 @@ describe("parseEvent", () => {
     expect(issuesOf(line("checkpoint", { head: null, extra: 1 }))[0]).toStartWith(
       'data: Unrecognized key: "extra"',
     );
-    expect(issuesOf(line("hold.set", { target: "item", hold: "approval" }))[0]).toStartWith(
-      "data.reason:",
-    );
     expect(
-      issuesOf(line("hold.set", { target: "item", hold: "blocked", reason: "x" }))[0],
+      issuesOf(line("hold.set", { target: "item", hold: "approval", by: "kozod" }))[0],
+    ).toStartWith("data.reason:");
+    expect(
+      issuesOf(line("hold.set", { target: "item", hold: "blocked", by: "kozod", reason: "x" }))[0],
     ).toStartWith("data.hold:");
   });
 
@@ -144,6 +151,15 @@ describe("parseEvent", () => {
     expect(issuesOf(line("gates.result", { level: "full", status: "fail" }))[0]).toStartWith(
       "data.failed:",
     );
+  });
+
+  test("api_call is a UUID or null", () => {
+    expect(issuesOf(line("checkpoint", { head: null }, { api_call: "call-1" }))[0]).toStartWith(
+      "api_call:",
+    );
+    expect(
+      parseEvent(line("checkpoint", { head: null }, { api_call: Bun.randomUUIDv7() })).ok,
+    ).toBe(true);
   });
 
   test("prev is a SHA-256 or null", () => {

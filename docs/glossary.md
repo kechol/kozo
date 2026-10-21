@@ -36,6 +36,7 @@
 
 | Term | Definition | Code | Avoid | Former name |
 |---|---|---|---|---|
+| API call | One write to the local API, identified by a UUIDv7 that every event it makes carries. | `api_call` | request | - |
 | CLI | The stateless `kozo` command through which humans and scripts call the local API. | `kozo`, `packages/cli` | - | - |
 | control plane | The plane, run by kozod, that routes stages, checks plans and the Charter, claims tasks, and applies backpressure and budgets. | `packages/daemon` | - | - |
 | dashboard | The local web UI with the inbox, the board and the detail view, which holds no state and calls only the local API. | `packages/dashboard` | console, web app | - |

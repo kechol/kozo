@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, open, readdir } from "node:fs/promises";
 import { dirname, relative } from "node:path";
 import {
@@ -71,6 +72,7 @@ export class EventStore {
   private lastMs: number;
   private queue: Promise<unknown> = Promise.resolve();
   private readonly listeners = new Set<Listener>();
+  private readonly apiCalls = new AsyncLocalStorage<string>();
   private lastRun = 0;
   private lastItem = 0;
 
@@ -166,6 +168,7 @@ export class EventStore {
       v: 1,
       ts: new Date(now).toISOString(),
       prev: this.logs.get(log)?.last ?? null,
+      api_call: this.apiCalls.getStore() ?? null,
       run_id: event.run_id ?? null,
       parent_run: event.parent_run ?? null,
       item: event.item ?? null,
@@ -195,6 +198,14 @@ export class EventStore {
     const id = this.index.record(line, next);
     for (const listener of this.listeners) listener(line, id);
     return line;
+  }
+
+  /**
+   * Runs `work` for one local API write, so that every event it appends carries the write's
+   * `api_call` ID. Work that kozod starts on its own afterwards runs outside it.
+   */
+  during<T>(apiCall: string, work: () => Promise<T>): Promise<T> {
+    return this.apiCalls.run(apiCall, work);
   }
 
   /** Calls `listener` with every event appended from now on and its index ID. */
