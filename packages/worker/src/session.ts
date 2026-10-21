@@ -76,9 +76,10 @@ async function queued(path: string, delivered: number): Promise<Instruction[]> {
 }
 
 /**
- * Whether a Bash result of the gates command ends with a passing KOZO_GATES line. kozo gates
- * prints that line last, after every gate's own output, so a test that prints a passing line
- * of its own cannot pose as the result.
+ * Whether a Bash result of the gates command exited cleanly and ends with a passing KOZO_GATES
+ * line, which kozo gates prints after every gate's own output. Stop-check only keeps the agent
+ * working: a gate that went out of its way to fake this line could still end the session, and
+ * kozod's own gates after the session decide whether the change passes.
  */
 function passed(output: unknown, level: string): boolean {
   const stdout =
