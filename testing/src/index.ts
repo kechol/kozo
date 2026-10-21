@@ -1,5 +1,7 @@
 export * from "./bad-changes.ts";
 export * from "./documents.ts";
 export * from "./events.ts";
+export * from "./fake-agent.ts";
 export * from "./git-repository.ts";
+export * from "./replay.ts";
 export * from "./temp-directory.ts";

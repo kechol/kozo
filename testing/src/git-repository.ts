@@ -9,7 +9,7 @@ export interface GitRepository extends TempDirectory {
 }
 
 // The developer's own git configuration, such as commit signing or hooks, never reaches tests.
-const isolated = {
+export const testGitEnvironment = {
   ...process.env,
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_NOSYSTEM: "1",
@@ -25,7 +25,7 @@ export async function gitRepository(): Promise<GitRepository> {
   const git = async (...args: string[]) => {
     const child = Bun.spawn(["git", ...args], {
       cwd: directory.path,
-      env: isolated,
+      env: testGitEnvironment,
       stdout: "pipe",
       stderr: "pipe",
     });

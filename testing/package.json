@@ -5,6 +5,7 @@
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
-    "@kozo/core": "workspace:*"
+    "@kozo/core": "workspace:*",
+    "@kozo/worker": "workspace:*"
   }
 }

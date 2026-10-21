@@ -56,12 +56,16 @@
     "packages/worker": {
       "name": "@kozo/worker",
       "version": "0.0.0",
+      "dependencies": {
+        "@kozo/core": "workspace:*",
+      },
     },
     "testing": {
       "name": "@kozo/testing",
       "version": "0.0.0",
       "dependencies": {
         "@kozo/core": "workspace:*",
+        "@kozo/worker": "workspace:*",
       },
     },
   },
