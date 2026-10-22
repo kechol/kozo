@@ -23,6 +23,10 @@ export const holdKindSchema = z.enum([
 ]);
 export type HoldKind = z.infer<typeof holdKindSchema>;
 
+/** The reasons of the two approval holds, by which kozod tells a start from a plan approval. */
+export const startApprovalReason = "start approval";
+export const planApprovalReason = "plan approval";
+
 export const runStateSchema = z.enum([
   "queued",
   "running",

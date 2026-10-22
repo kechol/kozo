@@ -6,9 +6,11 @@ import {
   isClosed,
   type KozoHome,
   type NoteKind,
+  planApprovalReason,
   type Reference,
   runFiles,
   type Stage,
+  startApprovalReason,
   type Verb,
   type verbBodySchemas,
 } from "@kozo/core";
@@ -111,7 +113,7 @@ export class ControlPlane {
       await this.store.append({
         type: "hold.set",
         item: ref,
-        data: { target: "item", hold: "approval", by: "kozod", reason: "start approval" },
+        data: { target: "item", hold: "approval", by: "kozod", reason: startApprovalReason },
       });
       return false;
     }
@@ -210,7 +212,7 @@ export class ControlPlane {
     const item = this.store.state.items[ref];
     if (subject.hold?.kind !== "approval" || !item)
       return { message: `${ref} is not waiting for an approval` };
-    const start = subject.hold.reason === "start approval";
+    const start = subject.hold.reason === startApprovalReason;
     await this.clearHold("item", ref, body.text);
     if (start) {
       if (body.text) await this.note(ref, ref, "approval", body.text);
@@ -232,7 +234,7 @@ export class ControlPlane {
 
   private async reject(ref: string, body: Body<"reject">): Promise<VerbResult> {
     const { subject } = this.subject(ref, "item");
-    if (subject.hold?.kind !== "approval" || subject.hold.reason !== "plan approval") {
+    if (subject.hold?.kind !== "approval" || subject.hold.reason !== planApprovalReason) {
       return { message: `${ref} is not waiting for a plan approval` };
     }
     await this.clearHold("item", ref, body.reason);

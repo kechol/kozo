@@ -16,6 +16,7 @@ import {
   type KozoHome,
   numberAfter,
   type Plan,
+  planApprovalReason,
   planNeeded,
   planSchema,
   type RunReport,
@@ -84,6 +85,9 @@ import {
   triageCheckoutPath,
   worktreePath,
 } from "./worktrees.ts";
+
+// A draft that fails its checks gets one more session, told why, before a human looks.
+const draftRounds = 2;
 
 export interface RunnerDeps {
   launcher: Launcher;
@@ -339,9 +343,8 @@ export class Runner {
     const checkout = triageCheckoutPath(this.home, repository.path, itemRef);
     await detachedCheckout(this.home, repository.path, checkout, repository.tip);
     try {
-      // A draft that fails its checks gets one more session, told why, before a human looks.
       let refused: string[] = [];
-      for (let round = 1; round <= 2; round += 1) {
+      for (let round = 1; round <= draftRounds; round += 1) {
         const drafted = await this.draftPlan(
           itemRef,
           agent,
@@ -357,7 +360,7 @@ export class Runner {
         }
         if (drafted.plan && agent === "triage")
           await this.afterTriage(itemRef, drafted.plan, repository.charter, file.class);
-        else if (drafted.plan) await this.hold(itemRef, null, "approval", "plan approval");
+        else if (drafted.plan) await this.hold(itemRef, null, "approval", planApprovalReason);
         return;
       }
     } catch (error) {
@@ -480,7 +483,7 @@ export class Runner {
       }
     }
     if (proposed === null || issues.length > 0) {
-      if (round < 2) {
+      if (round < draftRounds) {
         await this.endRun(run, "failed", "kozod refused the plan draft");
         return { refused: issues };
       }
@@ -528,7 +531,7 @@ export class Runner {
         reason: `the plan needs an approval at ${level}`,
       },
     });
-    await this.hold(itemRef, null, "approval", "plan approval");
+    await this.hold(itemRef, null, "approval", planApprovalReason);
   }
 
   /** Holds the task, or the item when `task` is null, unless it is held already. */
@@ -1348,6 +1351,7 @@ export class Runner {
       );
     }
     const report = reports.findLast((entry) => entry !== null) ?? null;
+    const outOfScope = report?.out_of_scope ?? [];
     const verdict = {
       review: verdicts.findLast((entry) => entry.review)?.review,
       verify: verdicts.findLast((entry) => entry.verify)?.verify,
@@ -1374,10 +1378,8 @@ export class Runner {
       "",
       "## Out of scope",
       "",
-      ...((report?.out_of_scope ?? []).length > 0
-        ? (report?.out_of_scope ?? []).map(
-            (note) => `- ${note.path ? `${note.path}: ` : ""}${note.note}`,
-          )
+      ...(outOfScope.length > 0
+        ? outOfScope.map((note) => `- ${note.path ? `${note.path}: ` : ""}${note.note}`)
         : ["Nothing noted."]),
       "",
       "## Why it is safe",

@@ -251,11 +251,10 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
     },
     async checks(repository, pull) {
       // gh pr checks exits 8 while checks are pending; the output still lists them.
-      const raw = await json<GitHubCheck[]>(
+      return await json<GitHubCheck[]>(
         ["pr", "checks", String(pull), `--repo=${repository}`, "--json=name,bucket"],
         [8],
       );
-      return raw.map(({ name, bucket }) => ({ name, bucket }));
     },
     async permission(repository, login) {
       // A login outside GitHub's alphabet, such as a bot's `name[bot]`, has no permission to ask
