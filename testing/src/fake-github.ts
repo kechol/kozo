@@ -132,6 +132,10 @@ export function fakeGitHub(): FakeGitHub {
       calls.push(`checks ${repository} #${pull}`);
       return [...(this.checksOf.get(pull) ?? [])];
     },
+    async login() {
+      calls.push("login");
+      return "kozo";
+    },
     async push(clone, branch, commit) {
       calls.push(`push ${clone} ${branch}`);
       withLoss("push", () => {

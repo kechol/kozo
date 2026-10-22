@@ -61,6 +61,16 @@ describe("ghAllowed", () => {
                 headRefName: "kozo/x/12-t1",
                 headRefOid: "abc",
                 mergeCommit: null,
+                isCrossRepository: false,
+              },
+              {
+                number: 4,
+                url: "u",
+                state: "MERGED",
+                headRefName: "kozo/x/12-t1",
+                headRefOid: "def",
+                mergeCommit: { oid: "fff" },
+                isCrossRepository: true,
               },
             ])
           : "[]",
@@ -79,6 +89,9 @@ describe("ghAllowed", () => {
       body: "Part of #12",
     });
     await github.checks("me/app", 3);
+    expect((await github.pullsFor("me/app", "kozo/x/12-t1")).map((pull) => pull.number)).toEqual([
+      3,
+    ]);
     for (const { args } of calls)
       expect({ args, allowed: ghAllowed(args) }).toMatchObject({ allowed: true });
     expect(calls.find((call) => call.args[1] === "comment")).toEqual({
@@ -119,15 +132,26 @@ describe("pushes and comments whose response is lost", () => {
     const bodies = () =>
       (github.repositories.get("me/app")?.issues[0]?.comments ?? []).map((comment) => comment.body);
 
+    const post = (body: string) =>
+      upsertComment(github, "kozo", "me/app", issue, "kozo:status", body);
+    github.repositories.get("me/app")?.issues[0]?.comments.push({
+      id: 1,
+      author: "someone",
+      body: "I can write <!-- kozo:status --> too",
+    });
+
     github.lose("comment", "before");
-    await expect(upsertComment(github, "me/app", issue, "kozo:status", "Triage")).rejects.toThrow();
-    expect(bodies()).toEqual([]);
+    await expect(post("Triage")).rejects.toThrow();
+    expect(bodies()).toHaveLength(1);
 
     github.lose("comment", "after");
-    await upsertComment(github, "me/app", issue, "kozo:status", "Triage");
-    await upsertComment(github, "me/app", issue, "kozo:status", "Triage");
-    await upsertComment(github, "me/app", issue, "kozo:status", "Building");
-    expect(bodies()).toEqual(["Building\n\n<!-- kozo:status -->"]);
+    await post("Triage");
+    await post("Triage");
+    await post("Building");
+    expect(bodies()).toEqual([
+      "I can write <!-- kozo:status --> too",
+      "Building\n\n<!-- kozo:status -->",
+    ]);
   });
 });
 

@@ -180,9 +180,10 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
         `--repo=${repository}`,
         `--head=${head}`,
         "--state=all",
-        "--json=number,url,state,headRefName,headRefOid,mergeCommit",
+        "--json=number,url,state,headRefName,headRefOid,mergeCommit,isCrossRepository",
       ]);
-      return raw.map(pullOf);
+      // A fork can name its branch like a task branch; only the repository's own branch counts.
+      return raw.filter((pull) => !pull.isCrossRepository).map(pullOf);
     },
     async checks(repository, pull) {
       // gh pr checks exits 8 while checks are pending; the output still lists them.
@@ -191,6 +192,18 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
         [8],
       );
       return raw.map(({ name, bucket }) => ({ name, bucket }));
+    },
+    async login() {
+      const raw = await json<{ hosts: Record<string, { active: boolean; login: string }[]> }>([
+        "auth",
+        "status",
+        "--active",
+        "--hostname=github.com",
+        "--json=hosts",
+      ]);
+      const login = raw.hosts["github.com"]?.find((account) => account.active)?.login;
+      if (!login) throw new GhError("gh is not signed in to github.com", 0);
+      return login;
     },
     async push(clone, branch, commit) {
       await gitWithGh(clone, [
@@ -231,6 +244,7 @@ interface RawPull {
   headRefName: string;
   headRefOid: string;
   mergeCommit: { oid: string } | null;
+  isCrossRepository: boolean;
 }
 
 const issueOf = (raw: RawIssue): GitHubIssue => ({
@@ -276,10 +290,12 @@ export async function pushConfirmed(
 /**
  * Posts kozod's comment marked `marker` on an Issue, or edits it when it is already there. A
  * comment whose response was lost is looked for before the error goes on, so that the next try
- * edits it instead of posting it twice.
+ * edits it instead of posting it twice. Only comments by `self`, kozod's own login, count: anyone
+ * can write the marker into a comment of theirs.
  */
 export async function upsertComment(
   github: GitHub,
+  self: string,
   repository: GitHubRepository,
   issue: number,
   marker: string,
@@ -288,7 +304,9 @@ export async function upsertComment(
   const tag = `<!-- ${marker} -->`;
   const text = `${body}\n\n${tag}`;
   const find = async () =>
-    (await github.comments(repository, issue)).find((comment) => comment.body.includes(tag));
+    (await github.comments(repository, issue)).find(
+      (comment) => comment.author === self && comment.body.endsWith(tag),
+    );
   const existing = await find();
   if (existing) {
     if (existing.body !== text) await github.editComment(repository, existing.id, text);
