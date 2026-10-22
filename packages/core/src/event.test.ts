@@ -52,6 +52,11 @@ const examples: Record<EventType, unknown> = {
     instructions_sha: "c".repeat(64),
   },
   "item.created": { repository: "~/src/app", title: "Low stock notice", source: "local" },
+  "item.edited": {
+    title: "Low stock notice for 0 units",
+    request_sha: "d".repeat(64),
+    trusted: true,
+  },
   "factory.created": { factory_id: "k3x9q2" },
   "factory.changed": { paused: true, reason: "kozo pause" },
   "log.sealed": { run: "r-0193", lines: 58, last: "a".repeat(64) },

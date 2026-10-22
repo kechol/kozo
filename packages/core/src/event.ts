@@ -107,6 +107,17 @@ export const eventSchema = z
         source: z.enum(["local", "github", "automation"]),
       }),
     ),
+    /** The request changed at its source, and its new text is what runs read from now on. */
+    event(
+      "item.edited",
+      z.strictObject({
+        title: text,
+        /** The SHA-256 of the new request, its title and body, as runs read it. */
+        request_sha: sha256,
+        /** Whether the Issue's author may write; an untrusted edit waits for a human first. */
+        trusted: z.boolean(),
+      }),
+    ),
     /** The factory's ID, drawn once at its first start and written into branch names. */
     event("factory.created", z.strictObject({ factory_id: factoryIdSchema })),
     event("factory.changed", z.strictObject({ paused: z.boolean(), reason: text })),

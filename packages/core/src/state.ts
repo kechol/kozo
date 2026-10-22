@@ -266,6 +266,12 @@ export function applyEvent(state: FactoryState, event: Event): void {
       };
       return;
     }
+    case "item.edited": {
+      const subject = required(item, `item ${event.item}`);
+      subject.title = event.data.title;
+      subject.updatedAt = event.ts;
+      return;
+    }
     case "stage.changed": {
       const subject = subjectOf(event.data.target);
       if (subject.stage !== event.data.from) {

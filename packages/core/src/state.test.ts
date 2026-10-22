@@ -159,6 +159,16 @@ describe("replay", () => {
     ).toThrow("task K-1/t9 does not exist");
   });
 
+  test("an edit renames its item, which must exist", () => {
+    const write = eventWriter();
+    const edit = { title: "Fix 0 too", request_sha: "d".repeat(64), trusted: false };
+    const state = replay([...planned(write), write("item.edited", edit, { item: "K-1" })]);
+    expect(state.items["K-1"]?.title).toBe("Fix 0 too");
+    expect(() => replay([eventWriter()("item.edited", edit, { item: "K-9" })])).toThrow(
+      "item K-9 does not exist",
+    );
+  });
+
   test("a factory is created once, and new tasks are numbered after the highest", () => {
     const write = eventWriter();
     const state = replay([write("factory.created", { factory_id: "k3x9q2" }), ...planned(write)]);

@@ -278,6 +278,12 @@ export class GitHubSync {
       });
     }
     const edited = { ...file, title, body: issue.body };
+    // The record comes before the file, so that no request text runs read goes unrecorded.
+    await this.store.append({
+      type: "item.edited",
+      item: ref,
+      data: { title, request_sha: sha256(requestText(edited)), trusted },
+    });
     await writeItemFile(this.home, ref, edited);
     if (!trusted && !waiting) return true;
     const runner = this.control.runner;

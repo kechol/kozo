@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { kozoHome } from "@kozo/core";
+import { kozoHome, sha256 } from "@kozo/core";
 import {
   exampleCharter,
   fakeGitHub,
@@ -331,6 +331,26 @@ describe("GitHubSync", () => {
     for (const number of [edited, untrusted]) {
       expect((await readItemFile(env.home, `shop#${number}`)).body).toBe("Also cover 0 units.");
     }
+    const edits = (await Bun.file(env.home.eventsLog).text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .filter((event) => event.type === "item.edited")
+      .map((event) => [event.item, event.data]);
+    expect(edits).toEqual([
+      [
+        `shop#${edited}`,
+        { title: "Edited", request_sha: sha256("# Edited\n\nAlso cover 0 units."), trusted: true },
+      ],
+      [
+        `shop#${untrusted}`,
+        {
+          title: "Untrusted",
+          request_sha: sha256("# Untrusted\n\nAlso cover 0 units."),
+          trusted: false,
+        },
+      ],
+    ]);
 
     // An item kozod completed closes its Issue, once.
     await env.control.act(
