@@ -3,7 +3,13 @@ import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { tempDirectory } from "@kozo/testing";
 import { runCommand } from "./command.ts";
-import { type CommandSandbox, platformConfine, seatbelt, seatbeltProfile } from "./sandbox.ts";
+import {
+  type CommandSandbox,
+  packageCaches,
+  platformConfine,
+  seatbelt,
+  seatbeltProfile,
+} from "./sandbox.ts";
 
 const empty: CommandSandbox = {
   denyRead: [],
@@ -12,6 +18,14 @@ const empty: CommandSandbox = {
   denyWrite: [],
   network: "local",
 };
+
+describe("packageCaches", () => {
+  test("holds the lock directories pnpm keeps in /tmp whatever TMPDIR says", () => {
+    expect(packageCaches).toContain(
+      `/private/tmp/pnpm-store-operation-locks-${process.getuid?.()}`,
+    );
+  });
+});
 
 describe("seatbeltProfile", () => {
   test("denies by default, quotes paths and leaves out empty lists", () => {
