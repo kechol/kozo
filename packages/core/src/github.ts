@@ -45,6 +45,16 @@ export interface GitHub {
   /** Open Issues, optionally only those with every one of `labels`. */
   issues(repository: GitHubRepository, labels?: readonly string[]): Promise<GitHubIssue[]>;
   comments(repository: GitHubRepository, issue: number): Promise<GitHubComment[]>;
+  /** Whether an Issue is open, and why it was closed. */
+  issueState(
+    repository: GitHubRepository,
+    issue: number,
+  ): Promise<{
+    state: "open" | "closed";
+    reason: "completed" | "not_planned" | "duplicate" | null;
+  }>;
+  /** Closes an Issue as completed, which kozod does only once its item is complete. */
+  closeIssue(repository: GitHubRepository, issue: number): Promise<void>;
   comment(repository: GitHubRepository, issue: number, body: string): Promise<void>;
   editComment(repository: GitHubRepository, comment: number, body: string): Promise<void>;
   label(

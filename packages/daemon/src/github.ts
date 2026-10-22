@@ -46,6 +46,15 @@ const permissionEndpoint =
 
 /** Whether kozod may run gh with `args`. */
 export function ghAllowed(args: readonly string[]): boolean {
+  // kozod closes an Issue only as completed, after it checked the item's DONE_WHEN.
+  if (args[0] === "issue" && args[1] === "close") {
+    return (
+      args.length === 5 &&
+      /^[0-9]+$/.test(args[2] ?? "") &&
+      (args[3] ?? "").startsWith("--repo=") &&
+      args[4] === "--reason=completed"
+    );
+  }
   // A pull request's body is the one thing kozod edits on it: no title, base, state or reviewer.
   if (args[0] === "pr" && args[1] === "edit") {
     return (
@@ -139,6 +148,26 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
         "--json=comments",
       ]);
       return raw.comments.flatMap(commentOf);
+    },
+    async issueState(repository, issue) {
+      const raw = await json<{ state: string; stateReason: string | null }>([
+        "issue",
+        "view",
+        String(issue),
+        `--repo=${repository}`,
+        "--json=state,stateReason",
+      ]);
+      const reason = (raw.stateReason ?? "").toLowerCase();
+      return {
+        state: raw.state.toLowerCase() === "open" ? "open" : "closed",
+        reason:
+          reason === "completed" || reason === "not_planned" || reason === "duplicate"
+            ? reason
+            : null,
+      };
+    },
+    async closeIssue(repository, issue) {
+      await gh(["issue", "close", String(issue), `--repo=${repository}`, "--reason=completed"]);
     },
     async comment(repository, issue, body) {
       await gh(["issue", "comment", String(issue), `--repo=${repository}`, "--body-file=-"], {

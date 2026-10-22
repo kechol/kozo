@@ -13,6 +13,7 @@ export type Loss = "after" | "before";
 
 interface FakeIssue extends GitHubIssue {
   comments: GitHubComment[];
+  stateReason?: "completed" | "not_planned" | "duplicate" | null;
 }
 
 export interface FakeGitHub extends GitHub {
@@ -95,6 +96,20 @@ export function fakeGitHub(): FakeGitHub {
     async comments(repository, issue) {
       calls.push(`comments ${repository} #${issue}`);
       return issueOf(repository, issue).comments.map((comment) => ({ ...comment }));
+    },
+    async issueState(repository, issue) {
+      calls.push(`issueState ${repository} #${issue}`);
+      const found = issueOf(repository, issue);
+      return {
+        state: found.state,
+        reason: found.state === "open" ? null : (found.stateReason ?? null),
+      };
+    },
+    async closeIssue(repository, issue) {
+      calls.push(`closeIssue ${repository} #${issue}`);
+      const found = issueOf(repository, issue);
+      found.state = "closed";
+      found.stateReason = "completed";
     },
     async comment(repository, issue, body) {
       calls.push(`comment ${repository} #${issue}`);

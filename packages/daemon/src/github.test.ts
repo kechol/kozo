@@ -29,6 +29,7 @@ describe("ghAllowed", () => {
       ["api", "--method", "GET", "repos/me/app/collaborators/someone/permission"],
       ["pr", "edit", "3", "--repo=me/app", "--body-file=-"],
       ["api", "--method", "GET", "--paginate", "--slurp", "repos/me/app/issues/12/events"],
+      ["issue", "close", "12", "--repo=me/app", "--reason=completed"],
     ]) {
       expect({ args, allowed: ghAllowed(args) }).toEqual({ args, allowed: true });
     }
@@ -36,6 +37,8 @@ describe("ghAllowed", () => {
       ["pr", "merge", "3"],
       ["pr", "review", "3", "--approve"],
       ["issue", "close", "12"],
+      ["issue", "close", "12", "--repo=me/app", "--reason=not planned"],
+      ["issue", "close", "12", "--repo=me/app", "--comment=done"],
       ["repo", "delete", "me/app"],
       ["auth", "token"],
       ["secret", "list"],

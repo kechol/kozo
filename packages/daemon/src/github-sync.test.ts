@@ -44,6 +44,7 @@ async function setup() {
     store,
     github,
     sync,
+    control,
     labels: (number: number) =>
       github.repositories.get("me/shop")?.issues.find((issue) => issue.number === number)?.labels,
     async [Symbol.asyncDispose]() {
@@ -205,5 +206,50 @@ describe("GitHubSync", () => {
       `${task} is ready for you to review and merge: ${pull?.url}`,
     );
     expect(comments()[0]).toContain(`| ${task} | handoff | ${pull?.url} |`);
+
+    if (pull) pull.state = "closed";
+    await env.sync.poll();
+    expect(env.store.state.tasks[task]?.hold).toMatchObject({
+      kind: "attention",
+      reason: `${pull?.url} was closed without a merge`,
+    });
+  });
+
+  test("follows Issues closed, edited and completed on GitHub", async () => {
+    await using env = await setup();
+    await env.sync.register();
+    env.github.permissions.set("me/shop owner", "admin");
+    const issues = () => env.github.repositories.get("me/shop")?.issues ?? [];
+    const [done, dropped, edited] = ["Done", "Dropped", "Edited"].map((title) =>
+      env.github.addIssue("me/shop", { title, createdAt: afterRegistration() }),
+    );
+    await env.sync.poll();
+    for (const [number, reason] of [
+      [done, "completed"],
+      [dropped, "not_planned"],
+    ] as const) {
+      const issue = issues().find((entry) => entry.number === number);
+      if (issue) Object.assign(issue, { state: "closed", stateReason: reason });
+    }
+    const target = issues().find((entry) => entry.number === edited);
+    if (target) target.body = "Also cover 0 units.";
+    await env.sync.poll();
+    expect(env.store.state.items[`shop#${done}`]?.stage).toBe("complete");
+    expect(env.store.state.items[`shop#${dropped}`]?.stage).toBe("cancelled");
+    expect((await readItemFile(env.home, `shop#${edited}`)).body).toBe("Also cover 0 units.");
+
+    // An item kozod completed closes its Issue, once.
+    await env.control.act(
+      `shop#${edited}`,
+      { kind: "item", item: { repo: "shop", number: edited ?? 0 } },
+      "close",
+      { done: true },
+    );
+    await env.sync.poll();
+    await env.sync.poll();
+    expect(env.github.calls.filter((call) => call.startsWith("closeIssue"))).toEqual([
+      `closeIssue me/shop #${edited}`,
+    ]);
+    expect(issues().find((entry) => entry.number === edited)?.state).toBe("closed");
   });
 });

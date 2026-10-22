@@ -339,12 +339,32 @@ export class ControlPlane {
     kind: "item" | "task",
     body: Body<"close">,
   ): Promise<VerbResult> {
-    const { subject, item } = this.subject(ref, kind);
+    const { subject } = this.subject(ref, kind);
     if (isClosed(subject.stage)) return { message: `${ref} is already ${subject.stage}` };
     const done = "done" in body;
-    const [to, reason] = done
-      ? (["complete", "kozo close --done"] as const)
-      : (["cancelled", `kozo close --cancel: ${body.cancel}`] as const);
+    await this.closeWork(
+      ref,
+      kind,
+      done ? "complete" : "cancelled",
+      done ? "kozo close --done" : `kozo close --cancel: ${body.cancel}`,
+    );
+    return {
+      message: "done" in body ? `closed ${ref} as done` : `cancelled ${ref}: ${body.cancel}`,
+    };
+  }
+
+  /**
+   * Moves an item and its open tasks, or one task, to Complete or Cancelled for a human: stops
+   * their sessions, clears their holds and removes a cancelled task's branch. The item follows a
+   * task once every task of it is closed.
+   */
+  async closeWork(
+    ref: string,
+    kind: "item" | "task",
+    to: "complete" | "cancelled",
+    reason: string,
+  ): Promise<void> {
+    const { item } = this.subject(ref, kind);
     const tasks = kind === "item" ? (this.store.state.items[ref]?.tasks ?? []) : [ref];
     for (const task of tasks) {
       const state = this.store.state.tasks[task];
@@ -353,7 +373,7 @@ export class ControlPlane {
       if (running) this.runner?.stopSession(running);
       await this.clearHold("task", task);
       await this.move("task", task, to, reason);
-      if (!done) await this.runner?.release(task, true);
+      if (to === "cancelled") await this.runner?.release(task, true);
     }
     if (
       kind === "item" ||
@@ -365,9 +385,6 @@ export class ControlPlane {
         await this.move("item", item, to, reason);
       }
     }
-    return {
-      message: "done" in body ? `closed ${ref} as done` : `cancelled ${ref}: ${body.cancel}`,
-    };
   }
 
   async pauseFactory(): Promise<VerbResult> {
