@@ -28,6 +28,7 @@ import { installBody, quiet, statusBody } from "./github-report.ts";
 import { enqueue } from "./instructions.ts";
 import { readItemFile, requestText, writeItemFile } from "./item-file.ts";
 import { baseOf, readCharter } from "./repository.ts";
+import { awaitingMerge } from "./scheduler.ts";
 import { detachedCheckout, removeCheckout, taskBranch, worktreePath } from "./worktrees.ts";
 
 /** The label a human adds to an Issue to approve its start. */
@@ -203,7 +204,7 @@ export class GitHubSync {
       await this.forIssue(ref, async () => {
         await this.mirror(github, ref, issue);
         await this.publish(path, github, ref, issue.number);
-        await this.followPulls(path, github, ref);
+        await this.followPulls(path, github, ref, issue.number);
         await this.closeWhenComplete(github, ref, issue.number);
       });
     }
@@ -352,24 +353,52 @@ export class GitHubSync {
    * Follows each handed-off task's pull request: closed without a merge, it holds the task for
    * attention; open, it may carry a human's commits, a change request or failing checks.
    */
-  private async followPulls(path: string, github: string, ref: string) {
+  private async followPulls(path: string, github: string, ref: string, issue: number) {
     const item = this.store.state.items[ref];
     if (!item) return;
     const pulls = this.pulls(ref);
     for (const task of item.tasks) {
       const state = this.store.state.tasks[task];
       const url = pulls.get(task);
-      if (state?.stage !== "handoff" || state.hold || !url) continue;
+      // Only a task whose last run passed final verification, with that head on GitHub: one
+      // going through Reviewing to Handoff again would be judged by its earlier head.
+      if (!state || !awaitingMerge(this.store.state, state) || state.hold || !url) continue;
+      const head = this.written(ref, task, "push").at(-1)?.split(" ")[1];
+      if (head === undefined || head !== this.ready(task)?.head) continue;
       const branch = taskBranch(this.store.factoryId, task);
       const pull = (await this.github.pullsFor(github, branch)).find((entry) => entry.url === url);
       if (pull?.state === "closed") {
-        await this.holdTask(ref, task, `${url} was closed without a merge`);
+        const reason = `${url} was closed without a merge`;
+        // `kozo retry` after this hold asks for a new pull request of the same head.
+        if (this.heldFor(task, reason)) await this.handOff(path, github, issue, ref, task, true);
+        else await this.holdTask(ref, task, reason);
         continue;
       }
-      const head = this.written(ref, task, "push").at(-1)?.split(" ")[1];
-      if (pull?.state === "open" && head)
-        await this.followPull(path, github, ref, task, pull, head);
+      if (pull?.state === "open") await this.followPull(path, github, ref, task, pull, head);
     }
+  }
+
+  /** Whether kozod has held `task` for `reason` before. */
+  private heldFor(task: string, reason: string): boolean {
+    return (
+      this.store.db
+        .query<{ found: number }, [string, string]>(
+          "select 1 as found from events where task = ? and type = 'hold.set' and json_extract(line, '$.data.reason') = ? limit 1",
+        )
+        .get(task, reason) !== null
+    );
+  }
+
+  /** The branch, head and report of the task's last final verification that passed. */
+  private ready(task: string): { branch: string; head: string; report: string } | null {
+    const row = this.store.db
+      .query<{ line: string }, [string]>(
+        "select line from events where task = ? and type = 'handoff.ready' order by id desc limit 1",
+      )
+      .get(task);
+    return row
+      ? (JSON.parse(row.line) as { data: { branch: string; head: string; report: string } }).data
+      : null;
   }
 
   /**
@@ -514,21 +543,23 @@ Answer here or with \`kozo say ${subject.ref} <answer>\`.`,
   }
 
   /**
-   * Publishes a task's last verified head once: pushes its branch, opens its pull request or
-   * rewrites the open one's body with the handoff report, and says so on the Issue.
+   * Publishes a task's last verified head once, or `again` after its pull request was closed:
+   * pushes its branch, opens its pull request or rewrites the open one's body with the handoff
+   * report, and says so on the Issue.
    */
-  private async handOff(path: string, github: string, issue: number, item: string, task: string) {
+  private async handOff(
+    path: string,
+    github: string,
+    issue: number,
+    item: string,
+    task: string,
+    again = false,
+  ) {
     if (this.store.state.tasks[task]?.stage !== "handoff") return;
-    const ready = this.store.db
-      .query<{ line: string }, [string]>(
-        "select line from events where task = ? and type = 'handoff.ready' order by id desc limit 1",
-      )
-      .get(task);
+    const ready = this.ready(task);
     if (!ready) return;
-    const { branch, head, report } = (
-      JSON.parse(ready.line) as { data: { branch: string; head: string; report: string } }
-    ).data;
-    if (this.written(item, task, "handoff").includes(head)) return;
+    const { branch, head, report } = ready;
+    if (!again && this.written(item, task, "handoff").includes(head)) return;
     await pushConfirmed(this.github, path, branch, head);
     await this.wrote(item, task, "push", `${branch} ${head}`);
     const text = await Bun.file(join(this.home.root, report))

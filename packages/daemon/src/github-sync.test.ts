@@ -63,6 +63,40 @@ async function setup(label?: string) {
   };
 }
 
+/** Starts a run of the task's blueprint, as the runner would. */
+async function blueprintRun(store: EventStore, item: string, task: string) {
+  const run = store.nextRun();
+  await store.append({
+    type: "run.started",
+    run_id: run,
+    item,
+    task,
+    data: {
+      agent: "implement",
+      model: "fake",
+      mode: "github",
+      charter_commit: "c",
+      factory_commit: null,
+      kozo_version: "0.0.0",
+      runtime: "sdk",
+      request_sha: "0".repeat(64),
+    },
+  });
+  return run;
+}
+
+/** Records a run of the task's blueprint that passed final verification. */
+async function passedRun(store: EventStore, item: string, task: string) {
+  const run = await blueprintRun(store, item, task);
+  await store.append({
+    type: "run.changed",
+    run_id: run,
+    item,
+    task,
+    data: { from: "running", to: "succeeded" },
+  });
+}
+
 describe("GitHubSync", () => {
   test("trusts only a writer's Issue opened after registration, and skips bots", async () => {
     await using env = await setup();
@@ -190,6 +224,7 @@ describe("GitHubSync", () => {
       });
     }
     await Bun.write(join(env.home.root, "items", ref, "handoff-t1.md"), "# Report\n\nCloses #9.\n");
+    await passedRun(env.store, ref, task);
     await env.store.append({
       type: "handoff.ready",
       item: ref,
@@ -221,6 +256,19 @@ describe("GitHubSync", () => {
       kind: "attention",
       reason: `${pull?.url} was closed without a merge`,
     });
+    // kozo retry asks for a new pull request of the same head instead of the same hold again.
+    await env.control.act(
+      task,
+      { kind: "task", item: { repo: "shop", number }, task: 1 },
+      "retry",
+      {},
+    );
+    await env.sync.poll();
+    await env.sync.poll();
+    const reopened = env.github.repositories.get("me/shop")?.pulls[1];
+    expect(reopened?.state).toBe("open");
+    expect(env.store.state.tasks[task]?.hold).toBeNull();
+    expect(comments().at(-1)).toContain(reopened?.url ?? "-");
   });
 
   test("installs kozo's files as one pull request with the ruleset to apply", async () => {
@@ -469,6 +517,7 @@ describe("GitHubSync", () => {
           data: { target: "task", from: a, to: b, by: "kozod", reason: "checks passed" },
         });
       }
+      await passedRun(env.store, ref, task);
       await env.store.append({
         type: "handoff.ready",
         item: ref,
@@ -490,6 +539,34 @@ describe("GitHubSync", () => {
       target: task,
       kind: "check",
       text: `The CI checks test failed on ${first.head}.`,
+    });
+    // While a new run takes the task through Handoff to final verification, the failing checks
+    // of the earlier head say nothing about it.
+    const rerun = await blueprintRun(env.store, ref, task);
+    const move = async (from: "building" | "reviewing", to: "reviewing" | "handoff") =>
+      await env.store.append({
+        type: "stage.changed",
+        item: ref,
+        task,
+        data: { target: "task", from, to, by: "kozod", reason: "test" },
+      });
+    await move("building", "reviewing");
+    await move("reviewing", "handoff");
+    await env.sync.poll();
+    expect(env.store.state.tasks[task]).toMatchObject({ stage: "handoff", handoffFixes: 1 });
+    await env.store.append({
+      type: "run.changed",
+      run_id: rerun,
+      item: ref,
+      task,
+      data: { from: "running", to: "failed" },
+    });
+    // A human's move, so that it is not counted as one of kozod's fixes.
+    await env.store.append({
+      type: "stage.changed",
+      item: ref,
+      task,
+      data: { target: "task", from: "handoff", to: "building", by: "human", reason: "test" },
     });
 
     const second = await handOff("building");
