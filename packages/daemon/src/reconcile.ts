@@ -7,11 +7,43 @@ import type { Runner } from "./runner.ts";
 import { awaitingMerge } from "./scheduler.ts";
 import { taskBranch } from "./worktrees.ts";
 
-/** Whether `head` is in `commit`, merged as it is or rebased into patch-equivalent commits. */
+/** The stable patch IDs of the patches that `git <args>` prints, each with its commit. */
+async function patchIds(repository: string, args: readonly string[]): Promise<Map<string, string>> {
+  const patches = Bun.spawn(["git", "-c", "core.fsmonitor=false", ...args], {
+    cwd: repository,
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  const ids = Bun.spawn(["git", "patch-id", "--stable"], {
+    cwd: repository,
+    stdin: patches.stdout,
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  const [output] = await Promise.all([new Response(ids.stdout).text(), patches.exited, ids.exited]);
+  return new Map(
+    output
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => line.split(" ") as [string, string]),
+  );
+}
+
+/**
+ * Whether `head` is in `commit`: merged as it is, rebased into patch-equivalent commits, or
+ * squashed into one commit whose patch is the whole branch's, as GitHub's default merge does.
+ */
 async function contains(repository: string, head: string, commit: string): Promise<boolean> {
   if (await isAncestor(repository, head, commit)) return true;
   const cherry = await git(repository, ["cherry", commit, head]);
-  return cherry.trim() !== "" && !cherry.split("\n").some((line) => line.startsWith("+"));
+  if (cherry.trim() !== "" && !cherry.split("\n").some((line) => line.startsWith("+"))) return true;
+  const base = (await git(repository, ["merge-base", head, commit])).trim();
+  const [branch] = (await patchIds(repository, ["diff", base, head])).keys();
+  if (branch === undefined) return false;
+  return (await patchIds(repository, ["log", "-p", "--no-merges", `${base}..${commit}`])).has(
+    branch,
+  );
 }
 
 /**

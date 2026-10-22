@@ -640,8 +640,17 @@ describe("the minimal path", () => {
   }, 180_000);
 
   test("a squashed merge is found by its patch, and the commit that applied it is recorded", async () => {
+    // Two commits, so that no single one has the squash's patch.
+    const [first, ...rest] = Object.entries(goodChange);
     await using env = await factoryOf((request) =>
-      request.agent === "triage" ? [{ answer: plan }] : implement(),
+      request.agent === "triage"
+        ? [{ answer: plan }]
+        : [
+            { write: Object.fromEntries(first ? [first] : []) },
+            { commit: "test: the low stock wording" },
+            { write: Object.fromEntries(rest) },
+            ...implement().slice(2),
+          ],
     );
     const { task } = await toHandoff(env);
     await env.repo.commit({ "NOTES.txt": "unrelated\n" }, "an unrelated change");
