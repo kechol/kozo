@@ -34,6 +34,8 @@ import {
   wrapRequest,
 } from "@kozo/core";
 import {
+  type Base,
+  baseOf,
   blueprintFor,
   type Confine,
   type Confined,
@@ -72,7 +74,6 @@ import { checkNotes, ownerNotes, taskOwnerNotes } from "./instructions.ts";
 import { type ItemFile, itemDirectory, readItemFile, requestText } from "./item-file.ts";
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { checkPlan } from "./plan-checks.ts";
-import { type Base, baseOf } from "./repository.ts";
 import { atLeast, firstCodeChange, layersFor, onlyDependencyFiles } from "./risk.ts";
 import { type Envelope, pumpSession, type SessionResult } from "./session-pump.ts";
 import {

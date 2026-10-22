@@ -1,3 +1,5 @@
+import type { Factory } from "@kozo/core";
+
 export class GitError extends Error {}
 
 /** Runs git in `cwd` and returns its stdout; a non-zero exit throws a GitError carrying stderr. */
@@ -78,4 +80,25 @@ export async function defaultBranch(repository: string): Promise<string> {
     if ((await branchTip(repository, branch)) !== null) return branch;
   }
   throw new GitError(`${repository} has no main, master or origin/HEAD branch`);
+}
+
+/**
+ * A repository's default branch as kozod and kozo check read it. In GitHub mode merges happen on GitHub, so the
+ * base is origin's branch after a fetch, and no local branch ever has to move.
+ */
+export interface Base {
+  branch: string;
+  /** What git ranges and kozo's commands take: the branch name, or origin's ref. */
+  base: string;
+  /** The full ref, for reading the tip. */
+  ref: string;
+}
+
+export async function baseOf(repository: string, mode: Factory["mode"]): Promise<Base> {
+  const branch = await defaultBranch(repository);
+  if (mode === "github") {
+    const ref = `refs/remotes/origin/${branch}`;
+    return { branch, base: ref, ref };
+  }
+  return { branch, base: branch, ref: `refs/heads/${branch}` };
 }

@@ -1,12 +1,12 @@
 import { stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { kozoHome, parseCharter, parseConstraints } from "@kozo/core";
+import { type Factory, kozoHome, parseCharter, parseConstraints } from "@kozo/core";
 import {
+  baseOf,
   charterPath,
   constraintsPath,
   type Definition,
-  defaultBranch,
   definitionTip,
   GitError,
   git,
@@ -172,8 +172,9 @@ async function checkFactory(): Promise<Check[]> {
     if (!(error instanceof GitError)) throw error;
     checks.push({ name: "factory definition", status: "fail", detail: error.message });
   }
+  const mode = definition?.factory.mode ?? "local";
   for (const repository of definition?.factory.repositories ?? []) {
-    checks.push(...(await repositoryChecks(repository.path)));
+    checks.push(...(await repositoryChecks(repository.path, mode)));
   }
   checks.push(...(await claudeChecks()));
   checks.push({
@@ -185,10 +186,11 @@ async function checkFactory(): Promise<Check[]> {
   return checks;
 }
 
-async function repositoryChecks(path: string): Promise<Check[]> {
+/** A repository's documents at the tip of its base as kozod reads it, origin's in GitHub mode. */
+async function repositoryChecks(path: string, mode: Factory["mode"]): Promise<Check[]> {
   try {
-    const branch = await defaultBranch(path);
-    const tip = (await git(path, ["rev-parse", `refs/heads/${branch}`])).trim();
+    const { ref } = await baseOf(path, mode);
+    const tip = (await git(path, ["rev-parse", ref])).trim();
     return documentChecks(
       path,
       await showFile(path, tip, charterPath),

@@ -18,7 +18,7 @@ import {
   startApprovalReason,
   wrapRequest,
 } from "@kozo/core";
-import { defaultBranch, git, installRepositoryTemplate, isAncestor } from "@kozo/verify";
+import { baseOf, defaultBranch, git, installRepositoryTemplate, isAncestor } from "@kozo/verify";
 import { CommandError, type VerbResult } from "./api.ts";
 import type { ControlPlane } from "./control-plane.ts";
 import type { DefinitionInUse } from "./definition.ts";
@@ -27,7 +27,7 @@ import { pushConfirmed, upsertComment } from "./github.ts";
 import { installBody, quiet, statusBody } from "./github-report.ts";
 import { enqueue } from "./instructions.ts";
 import { readItemFile, requestText, writeItemFile } from "./item-file.ts";
-import { baseOf, readCharter } from "./repository.ts";
+import { readCharter } from "./repository.ts";
 import { awaitingMerge } from "./scheduler.ts";
 import { detachedCheckout, removeCheckout, taskBranch, worktreePath } from "./worktrees.ts";
 

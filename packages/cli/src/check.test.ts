@@ -126,4 +126,31 @@ esac
     );
     expect(child.stdout.toString()).not.toContain("someone@example.com");
   });
+
+  test("reads a repository at origin's default branch in GitHub mode, as kozod does", async () => {
+    await using home = await tempDirectory();
+    await using repo = await gitRepository();
+    await repo.commit({ ".kozo/charter.yml": exampleCharter }, "ready on GitHub");
+    await repo.git("update-ref", "refs/remotes/origin/main", "HEAD");
+    await repo.commit(
+      { ".kozo/charter.yml": exampleCharter.replace("status: ready", "status: incomplete") },
+      "a local commit kozod never reads",
+    );
+    await mkdir(join(home.path, "factory"));
+    await Bun.write(
+      join(home.path, "factory", "factory.yml"),
+      `mode: github\nrepositories:\n  - { path: ${repo.path}, github: me/shop }\n`,
+    );
+    // A claude that fails every call; this test reads only the repository's checks.
+    const claude = join(home.path, "claude");
+    await Bun.write(claude, "#!/bin/sh\nexit 1\n");
+    await chmod(claude, 0o755);
+    const child = Bun.spawnSync(["bun", join(import.meta.dir, "main.ts"), "check", "--json"], {
+      env: { ...testGitEnvironment, KOZO_HOME: home.path, KOZO_CLAUDE: claude },
+    });
+    const report = JSON.parse(child.stdout.toString()) as {
+      checks: { name: string; status: string }[];
+    };
+    expect(report.checks.find((entry) => entry.name === `${repo.path} Charter`)?.status).toBe("ok");
+  });
 });

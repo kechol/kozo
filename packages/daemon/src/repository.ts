@@ -1,26 +1,5 @@
 import { type Charter, type Factory, parseCharter } from "@kozo/core";
-import { charterPath, defaultBranch, git, showFile } from "@kozo/verify";
-
-/**
- * A repository's default branch as kozod reads it. In GitHub mode merges happen on GitHub, so the
- * base is origin's branch after a fetch, and no local branch ever has to move.
- */
-export interface Base {
-  branch: string;
-  /** What git ranges and kozo's commands take: the branch name, or origin's ref. */
-  base: string;
-  /** The full ref, for reading the tip. */
-  ref: string;
-}
-
-export async function baseOf(repository: string, mode: Factory["mode"]): Promise<Base> {
-  const branch = await defaultBranch(repository);
-  if (mode === "github") {
-    const ref = `refs/remotes/origin/${branch}`;
-    return { branch, base: ref, ref };
-  }
-  return { branch, base: branch, ref: `refs/heads/${branch}` };
-}
+import { baseOf, charterPath, git, showFile } from "@kozo/verify";
 
 export type CharterResult =
   | { ok: true; charter: Charter; commit: string }
