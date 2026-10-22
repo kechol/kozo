@@ -6,6 +6,7 @@ import {
   type GitHubPermission,
   type GitHubPull,
   type HoldKind,
+  type ItemState,
   isClosed,
   itemStage,
   type KozoHome,
@@ -174,33 +175,49 @@ export class GitHubSync {
     const issues = [...open.values()];
     for (const issue of issues) {
       const ref = `${name}#${issue.number}`;
-      const item = this.store.state.items[ref];
-      if (issue.labels.includes(pausedLabel)) {
-        await this.pauseFor(github, ref, issue.number);
-        continue;
-      }
-      if (!item) {
-        if (!isBot(issue.author)) await this.take(path, github, ref, issue);
-      } else if (
-        // An approval covers the text it saw, so none is taken in the pass that sees an edit.
-        !(await this.followEdit(github, ref, issue)) &&
-        item.hold?.kind === "approval" &&
-        item.hold.reason === startApprovalReason &&
-        issue.labels.includes(acceptLabel) &&
-        (await this.byWriter(github, issue.number))
-      ) {
-        const reference = parseReference(ref);
-        if (reference) await this.control.act(ref, reference, "approve", {});
-      }
+      await this.forIssue(ref, async () => {
+        const item = this.store.state.items[ref];
+        if (issue.labels.includes(pausedLabel)) {
+          await this.pauseFor(github, ref, issue.number);
+          return;
+        }
+        if (!item) {
+          if (!isBot(issue.author)) await this.take(path, github, ref, issue);
+        } else if (
+          // An approval covers the text it saw, so none is taken in the pass that sees an edit.
+          !(await this.followEdit(github, ref, issue)) &&
+          item.hold?.kind === "approval" &&
+          item.hold.reason === startApprovalReason &&
+          issue.labels.includes(acceptLabel) &&
+          (await this.byWriter(github, issue.number))
+        ) {
+          const reference = parseReference(ref);
+          if (reference) await this.control.act(ref, reference, "approve", {});
+        }
+      });
     }
     await this.followClosedIssues(github, name, closed);
     await this.createLabels(github);
     for (const issue of issues) {
       const ref = `${name}#${issue.number}`;
-      await this.mirror(github, ref, issue);
-      await this.publish(path, github, ref, issue.number);
-      await this.followPulls(path, github, ref);
-      await this.closeWhenComplete(github, ref, issue.number);
+      await this.forIssue(ref, async () => {
+        await this.mirror(github, ref, issue);
+        await this.publish(path, github, ref, issue.number);
+        await this.followPulls(path, github, ref);
+        await this.closeWhenComplete(github, ref, issue.number);
+      });
+    }
+  }
+
+  /**
+   * Runs one Issue's part of a pass and reports a failure, such as an Issue deleted or locked
+   * on GitHub, without keeping the other Issues of the repository from being followed.
+   */
+  private async forIssue(ref: string, step: () => Promise<void>) {
+    try {
+      await step();
+    } catch (error) {
+      this.report(`kozod: following ${ref} failed: ${(error as Error).message}`);
     }
   }
 
@@ -220,9 +237,11 @@ export class GitHubSync {
       const reference = parseReference(item.ref);
       if (reference?.kind !== "item" || reference.item.repo !== name) continue;
       if (open.has(reference.item.number)) continue;
-      const issue = await this.github.issue(github, reference.item.number);
-      if (issue.state === "open") open.set(issue.number, issue);
-      else closed.push(issue);
+      await this.forIssue(item.ref, async () => {
+        const issue = await this.github.issue(github, reference.item.number);
+        if (issue.state === "open") open.set(issue.number, issue);
+        else closed.push(issue);
+      });
     }
     return closed;
   }
@@ -235,35 +254,43 @@ export class GitHubSync {
    * attention, since the author of an Issue can close it but has no say over the work.
    */
   private async followClosedIssues(github: string, name: string, issues: readonly GitHubIssue[]) {
-    for (const { number, reason, author } of issues) {
-      const item = this.store.state.items[`${name}#${number}`];
+    for (const issue of issues) {
+      const item = this.store.state.items[`${name}#${issue.number}`];
       if (!item || isClosed(item.stage)) continue;
-      const cancelled = reason === "not_planned" || reason === "duplicate";
-      const closer = await this.github.closedBy(github, number);
-      const writer =
-        closer !== null && writers.includes(await this.github.permission(github, closer));
-      if (!writer && !(cancelled && closer === author)) {
-        if (!item.hold) {
-          await this.store.append({
-            type: "hold.set",
-            item: item.ref,
-            data: {
-              target: "item",
-              hold: "attention",
-              by: "kozod",
-              reason: `${closer ?? "someone"} closed the Issue but may not ${cancelled ? "cancel" : "complete"} it; kozo close decides`,
-            },
-          });
-        }
-        continue;
-      }
-      await this.control.closeWork(
-        item.ref,
-        "item",
-        cancelled ? "cancelled" : "complete",
-        `the Issue was closed as ${reason ?? "completed"}`,
-      );
+      await this.forIssue(item.ref, () => this.followClose(github, item, issue));
     }
+  }
+
+  private async followClose(
+    github: string,
+    item: ItemState,
+    { number, reason, author }: GitHubIssue,
+  ) {
+    const cancelled = reason === "not_planned" || reason === "duplicate";
+    const closer = await this.github.closedBy(github, number);
+    const writer =
+      closer !== null && writers.includes(await this.github.permission(github, closer));
+    if (!writer && !(cancelled && closer === author)) {
+      if (!item.hold) {
+        await this.store.append({
+          type: "hold.set",
+          item: item.ref,
+          data: {
+            target: "item",
+            hold: "attention",
+            by: "kozod",
+            reason: `${closer ?? "someone"} closed the Issue but may not ${cancelled ? "cancel" : "complete"} it; kozo close decides`,
+          },
+        });
+      }
+      return;
+    }
+    await this.control.closeWork(
+      item.ref,
+      "item",
+      cancelled ? "cancelled" : "complete",
+      `the Issue was closed as ${reason ?? "completed"}`,
+    );
   }
 
   /**

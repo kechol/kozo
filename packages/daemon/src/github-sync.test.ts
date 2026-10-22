@@ -301,6 +301,31 @@ describe("GitHubSync", () => {
     expect(env.store.state.items[`shop#${labelled}`]?.stage).toBe("cancelled");
   });
 
+  test("an Issue that cannot be read does not stop the others from being followed", async () => {
+    await using env = await setup("kozo");
+    await env.sync.register();
+    env.github.permissions.set("me/shop owner", "admin");
+    const gone = env.github.addIssue("me/shop", {
+      title: "Gone",
+      labels: ["kozo"],
+      createdAt: afterRegistration(),
+    });
+    await env.sync.poll();
+    const next = env.github.addIssue("me/shop", {
+      title: "Next",
+      labels: ["kozo"],
+      createdAt: afterRegistration(),
+    });
+    const issues = env.github.repositories.get("me/shop")?.issues ?? [];
+    issues.splice(
+      issues.findIndex((issue) => issue.number === gone),
+      1,
+    );
+    await env.sync.poll();
+    expect(next).not.toBe(gone);
+    expect(env.store.state.items[`shop#${next}`]?.title).toBe("Next");
+  });
+
   test("an edit while a start waits takes kozo:accept off, so the new text needs its own", async () => {
     await using env = await setup();
     await env.sync.register();
