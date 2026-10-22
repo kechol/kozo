@@ -39,7 +39,9 @@ export async function startingDefinition(home: KozoHome, store: EventStore): Pro
 
 /**
  * Applies the definition's tip when it moved and validates; a tip that does not validate is
- * recorded once, reported, and the definition in use stays.
+ * recorded once, reported, and the definition in use stays. So is a tip that changes the mode,
+ * which parts of kozod fix when it starts, such as the local API and work already under way
+ * against one base; it applies at the next start.
  */
 export async function refreshDefinition(
   home: KozoHome,
@@ -57,7 +59,18 @@ export async function refreshDefinition(
   }
   if (tip === null || tip === inUse.current.commit || tip === store.state.definition.refused)
     return;
-  const result = await readDefinition(home.factory, tip);
+  const read = await readDefinition(home.factory, tip);
+  const mode = inUse.current.factory.mode;
+  const result: DefinitionResult =
+    read.ok && read.definition.factory.mode !== mode
+      ? {
+          ok: false,
+          commit: tip,
+          issues: [
+            `factory.yml: mode changes from ${mode} to ${read.definition.factory.mode} only when kozod starts again`,
+          ],
+        }
+      : read;
   if (!result.ok) {
     await recordRefused(store, result);
     report(
