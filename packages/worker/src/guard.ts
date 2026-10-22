@@ -142,7 +142,6 @@ const gitAllowed = new Set([
   "add",
   "am",
   "apply",
-  "bisect",
   "blame",
   "cat-file",
   "check-attr",
@@ -246,8 +245,10 @@ const gitListing: Record<string, (args: string[]) => boolean> = {
     const split = args.indexOf("--");
     if (split === -1) return false;
     const before = args.slice(0, split);
+    // A commit with no path after -- would switch the worktree to it.
+    const commit = positionals(before).length;
     return (
-      positionals(before).length <= 1 &&
+      (commit === 0 || (commit === 1 && split < args.length - 1)) &&
       onlyFlags(
         before.filter((arg) => arg.startsWith("-")),
         ["-q", "--quiet"],
@@ -293,7 +294,123 @@ const gitRefusedReasons: Record<string, string> = {
   "filter-branch": "history outside the task branch is not the run's",
   replace: "the run may change only its task branch",
   submodule: "submodules change what the repository checks out",
+  bisect: "it moves HEAD off the task branch",
 };
+
+// The options of each command that runs another, and whether each takes a value, as the next
+// word or attached (`-n1`, `--max-args=1`). An option missing here could take the command's
+// place as its value, so the guard refuses it. `script` is a value read as a shell script.
+const wrapperOptions: Record<string, Record<string, boolean | "script">> = {
+  command: { "-p": false, "-v": false, "-V": false },
+  builtin: {},
+  exec: { "-c": false, "-l": false, "-a": true },
+  time: { "-p": false },
+  caffeinate: { "-d": false, "-i": false, "-m": false, "-s": false, "-u": false, "-t": true },
+  env: {
+    "-i": false,
+    "--ignore-environment": false,
+    "-0": false,
+    "--null": false,
+    "-v": false,
+    "--debug": false,
+    "-u": true,
+    "--unset": true,
+    "-C": true,
+    "--chdir": true,
+    "-P": true,
+    "-S": "script",
+    "--split-string": "script",
+  },
+  nice: { "-n": true, "--adjustment": true },
+  timeout: {
+    "-s": true,
+    "--signal": true,
+    "-k": true,
+    "--kill-after": true,
+    "-v": false,
+    "--verbose": false,
+    "--preserve-status": false,
+    "--foreground": false,
+  },
+  stdbuf: {
+    "-i": true,
+    "-o": true,
+    "-e": true,
+    "--input": true,
+    "--output": true,
+    "--error": true,
+  },
+  xargs: {
+    "-0": false,
+    "--null": false,
+    "-r": false,
+    "--no-run-if-empty": false,
+    "-t": false,
+    "--verbose": false,
+    "-x": false,
+    "--exit": false,
+    "-n": true,
+    "--max-args": true,
+    "-L": true,
+    "--max-lines": true,
+    "-P": true,
+    "--max-procs": true,
+    "-s": true,
+    "--max-chars": true,
+    "-d": true,
+    "--delimiter": true,
+    "-E": true,
+    "-I": true,
+    "-a": true,
+    "--arg-file": true,
+  },
+};
+
+/**
+ * Splits a wrapper's arguments into the command it runs and a script it reads, refusing an
+ * option the wrapper does not list or one built from an expansion.
+ */
+function wrapped(
+  name: string,
+  args: readonly Word[],
+): { command: Word[]; script: Word | null } | { refused: string } {
+  const options = wrapperOptions[name] ?? {};
+  let script: Word | null = null;
+  let index = 0;
+  while (index < args.length) {
+    const word = args[index] as Word;
+    if (word.dynamic) return { refused: `${name} with an argument built from an expansion` };
+    const text = word.text;
+    if (text === "--") {
+      index += 1;
+      break;
+    }
+    if (!text.startsWith("-") || text === "-") break;
+    if (name === "nice" && /^-\d+$/.test(text)) {
+      index += 1;
+      continue;
+    }
+    const long = text.startsWith("--");
+    const flag = long ? (text.split("=")[0] ?? text) : text.slice(0, 2);
+    const takes = options[flag];
+    const attached = long ? text.includes("=") : text.length > 2;
+    if (takes === undefined || (takes === false && attached)) {
+      return { refused: `${name} ${text}: an option the guard does not know` };
+    }
+    if (takes === false) {
+      index += 1;
+      continue;
+    }
+    const value = attached
+      ? { text: long ? text.slice(flag.length + 1) : text.slice(2), dynamic: false }
+      : args[index + 1];
+    if (!value) return { refused: `${name} ${flag} without its value` };
+    if (value.dynamic) return { refused: `${name} ${flag} with a value built from an expansion` };
+    if (takes === "script") script = value;
+    index += attached ? 1 : 2;
+  }
+  return { command: args.slice(index), script };
+}
 
 interface Analysis {
   policy: TaskPolicy;
@@ -349,7 +466,6 @@ function analyzeGit(args: Word[], context: Analysis): GuardDecision {
   if (dynamicOption !== -1) return refuse(`git ${name}: an argument built from an expansion`);
   const reason = gitRefusedReasons[name];
   if (reason) return refuse(`git ${name}: ${reason}`);
-  if (name === "bisect" && rest[0] === "run") return analyzeCommand(words.slice(1), context);
   if (name === "grep" && rest.some(opensPager)) {
     return refuse("git grep --open-files-in-pager runs another program");
   }
@@ -423,39 +539,17 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
     return allow;
   }
   if (name === "git") return analyzeGit(args, context);
-  if (["command", "builtin", "exec", "time", "caffeinate"].includes(name)) {
-    const offset = args.findIndex((arg) => !arg.text.startsWith("-"));
-    return offset === -1 ? allow : analyzeCommand(args.slice(offset), context);
-  }
-  if (name === "env") {
-    const rest = [...args];
-    while (rest.length > 0) {
-      const text = rest[0]?.text ?? "";
-      if (text === "-S" || text === "--split-string") {
-        const script = rest[1];
-        if (!script || script.dynamic)
-          return refuse("env -S with a string built from an expansion");
-        return analyzeScript(script.text, context);
-      }
-      if (text === "-u" || text === "--unset" || text === "-C" || text === "--chdir")
-        rest.splice(0, 2);
-      else if (text.startsWith("-") || /^[A-Za-z_][A-Za-z0-9_]*=/.test(text)) {
-        if (text.startsWith("GIT_")) return refuse(`${text.split("=")[0]} would redirect git`);
-        rest.shift();
-      } else break;
+  if (name in wrapperOptions) {
+    const parsed = wrapped(name, args);
+    if ("refused" in parsed) return refuse(parsed.refused);
+    if (parsed.script) return analyzeScript(parsed.script.text, context);
+    const rest = [...parsed.command];
+    if (name === "timeout") rest.shift();
+    while (name === "env" && /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[0]?.text ?? "")) {
+      const assignment = rest.shift()?.text ?? "";
+      if (assignment.startsWith("GIT_"))
+        return refuse(`${assignment.split("=")[0]} would redirect git`);
     }
-    return analyzeCommand(rest, context);
-  }
-  if (name === "nice" || name === "timeout" || name === "stdbuf" || name === "xargs") {
-    const rest = [...args];
-    while (
-      rest.length > 0 &&
-      (rest[0]?.text.startsWith("-") || (name === "timeout" && /^\d/.test(rest[0]?.text ?? "")))
-    ) {
-      const option = rest.shift()?.text ?? "";
-      if (/^-(n|s|k|I|L|P|d|E)$/.test(option)) rest.shift();
-    }
-    if (name === "timeout" && /^\d/.test(rest[0]?.text ?? "")) rest.shift();
     return analyzeCommand(rest, context);
   }
   if (name === "eval") {
