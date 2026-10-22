@@ -18,6 +18,8 @@ async function setup() {
     { ".kozo/charter.yml": exampleCharter.replace("default: L1", "default: L2") },
     "start",
   );
+  // GitHub mode reads the base from origin's branch, which a fetch would have brought.
+  await repo.git("update-ref", "refs/remotes/origin/main", "HEAD");
   const dir = await tempDirectory();
   const home = kozoHome(dir.path);
   const loaded = await readDefinition(home.factory, null);

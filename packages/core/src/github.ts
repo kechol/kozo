@@ -70,6 +70,8 @@ export interface GitHub {
   permission(repository: GitHubRepository, login: string): Promise<GitHubPermission>;
   /** Who added `label` to the Issue most recently, or null when nobody has. */
   labelledBy(repository: GitHubRepository, issue: number, label: string): Promise<string | null>;
+  /** Fetches the clone's `origin`, so that origin's branches show what happened on GitHub. */
+  fetch(clone: string): Promise<void>;
   /** Pushes `commit` to `branch` on the clone's `origin`, replacing only what kozo pushed. */
   push(clone: string, branch: string, commit: string): Promise<void>;
   /** The commit `branch` points at on the clone's `origin`, or null when it has none. */

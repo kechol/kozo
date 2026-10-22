@@ -1,7 +1,7 @@
 import { mkdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { type KozoHome, parseReference, sha256 } from "@kozo/core";
-import { branchTip, defaultBranch, GitError, git } from "@kozo/verify";
+import { branchTip, GitError, git } from "@kozo/verify";
 
 function taskParts(task: string) {
   const reference = parseReference(task);
@@ -48,21 +48,19 @@ async function exists(path: string) {
 }
 
 /**
- * Claims a task by creating its branch at the tip of the default branch and checks it out in
- * the task's worktree. A branch that already exists belongs to whoever created it, so only
- * `resume`, for a task this factory already claimed, may reuse it.
+ * Claims a task by creating its branch at `base`, the tip of the repository's base, and checks
+ * it out in the task's worktree. A branch that already exists belongs to whoever created it, so
+ * only `resume`, for a task this factory already claimed, may reuse it.
  */
 export async function claimTask(
   home: KozoHome,
   repository: string,
   task: string,
-  { factory, resume = false }: { factory: string; resume?: boolean },
+  { factory, base, resume = false }: { factory: string; base: string; resume?: boolean },
 ): Promise<Claim> {
   const branch = taskBranch(factory, task);
   const worktree = worktreePath(home, repository, task);
-  const tip = (
-    await git(repository, ["rev-parse", `refs/heads/${await defaultBranch(repository)}`])
-  ).trim();
+  const tip = base;
   const existing = await branchTip(repository, branch);
   if (existing !== null && !resume) {
     return { claimed: false, reason: `${branch} already exists in ${repository}` };

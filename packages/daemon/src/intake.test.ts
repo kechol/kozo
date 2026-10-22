@@ -54,21 +54,21 @@ describe("readCharter", () => {
     await using repo = await gitRepository();
     await repo.commit({ "README.md": "# shop\n" }, "start");
     expect(await defaultBranch(repo.path)).toBe("main");
-    expect(await readCharter(repo.path)).toEqual({
+    expect(await readCharter(repo.path, "local")).toEqual({
       ok: false,
       reason: ".kozo/charter.yml is missing on main",
     });
     await repo.commit({ ".kozo/charter.yml": exampleCharter.replace("ready", "incomplete") });
-    expect(await readCharter(repo.path)).toMatchObject({
+    expect(await readCharter(repo.path, "local")).toMatchObject({
       ok: false,
       reason: expect.stringContaining("incomplete"),
     });
     await repo.commit({ ".kozo/charter.yml": "version: 1\n" });
-    expect(await readCharter(repo.path)).toMatchObject({ ok: false });
+    expect(await readCharter(repo.path, "local")).toMatchObject({ ok: false });
     await repo.commit({ ".kozo/charter.yml": exampleCharter });
     await repo.git("switch", "--quiet", "-c", "feature");
     await repo.commit({ ".kozo/charter.yml": "broken: [" });
-    expect(await readCharter(repo.path)).toMatchObject({ ok: true });
+    expect(await readCharter(repo.path, "local")).toMatchObject({ ok: true });
   });
 });
 

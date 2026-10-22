@@ -1,7 +1,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { apiPort, type KozoHome, kozoHome } from "@kozo/core";
-import { claudeJudge, claudeVerifier, defaultBranch, shellQuote } from "@kozo/verify";
+import { claudeJudge, claudeVerifier, shellQuote } from "@kozo/verify";
 import { type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
 import { ControlPlane } from "./control-plane.ts";
@@ -11,6 +11,7 @@ import { ghGitHub } from "./github.ts";
 import { GitHubSync } from "./github-sync.ts";
 import { type Launcher, processLauncher } from "./launcher.ts";
 import { Reconciler } from "./reconcile.ts";
+import { baseOf } from "./repository.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
 import { taskBranch } from "./worktrees.ts";
@@ -134,13 +135,17 @@ export class Daemon {
         return {
           repository,
           branch: taskBranch(store.factoryId, ref),
-          base: await defaultBranch(repository),
+          base: (await baseOf(repository, definition.current.factory.mode)).base,
         };
       },
     });
     const server = serveApi(app, port);
-    const reconciler = new Reconciler(store, runner, report, (ref, work) =>
-      scheduler.startWork(ref, work),
+    const reconciler = new Reconciler(
+      store,
+      runner,
+      report,
+      (ref, work) => scheduler.startWork(ref, work),
+      () => definition.current.factory.mode,
     );
     await reconciler.recover();
     const github = new GitHubSync(home, store, definition, control, ghGitHub(), report);

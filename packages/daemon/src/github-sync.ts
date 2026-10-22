@@ -95,6 +95,7 @@ export class GitHubSync {
   }
 
   private async pollRepository({ path, github }: Repository & { github: string }) {
+    await this.github.fetch(path);
     const name = github.slice(github.indexOf("/") + 1);
     const issues = await this.github.issues(github);
     for (const issue of issues) {
@@ -250,7 +251,7 @@ Part of #${issue}`;
    * is trusted; any other waits for a start approval whatever the autonomy level.
    */
   private async take(path: string, github: string, ref: string, issue: GitHubIssue) {
-    const charter = await readCharter(path);
+    const charter = await readCharter(path, "github");
     if (!charter.ok) {
       this.report(`kozod: ${ref} is not taken: ${charter.reason}`);
       return;

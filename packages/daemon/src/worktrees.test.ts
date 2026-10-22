@@ -31,7 +31,7 @@ describe("claimTask", () => {
     await repo.git("switch", "--quiet", "-c", "human-work");
     await repo.commit({ "notes.md": "wip\n" }, "wip");
 
-    const claim = await claimTask(home, repo.path, "K-1/t1", { factory });
+    const claim = await claimTask(home, repo.path, "K-1/t1", { factory, base: tip });
     expect(claim).toMatchObject({
       claimed: true,
       branch: "kozo/k3x9q2/K-1-t1",
@@ -42,11 +42,15 @@ describe("claimTask", () => {
     expect(await Bun.file(`${claim.worktree}/README.md`).exists()).toBe(true);
     expect(await Bun.file(`${claim.worktree}/notes.md`).exists()).toBe(false);
 
-    expect(await claimTask(home, repo.path, "K-1/t1", { factory })).toEqual({
+    expect(await claimTask(home, repo.path, "K-1/t1", { factory, base: tip })).toEqual({
       claimed: false,
       reason: `kozo/k3x9q2/K-1-t1 already exists in ${repo.path}`,
     });
-    const resumed = await claimTask(home, repo.path, "K-1/t1", { factory, resume: true });
+    const resumed = await claimTask(home, repo.path, "K-1/t1", {
+      factory,
+      base: tip,
+      resume: true,
+    });
     expect(resumed).toMatchObject({ claimed: true, worktree: claim.worktree, created: false });
   });
 
@@ -54,9 +58,9 @@ describe("claimTask", () => {
     await using repo = await gitRepository();
     await using dir = await tempDirectory();
     const home = kozoHome(dir.path);
-    await repo.commit({ "README.md": "# shop\n" }, "start");
+    const tip = await repo.commit({ "README.md": "# shop\n" }, "start");
     await repo.git("config", "commit.gpgsign", "true");
-    const claim = await claimTask(home, repo.path, "K-1/t1", { factory });
+    const claim = await claimTask(home, repo.path, "K-1/t1", { factory, base: tip });
     if (!claim.claimed) throw new Error("expected a claim");
     await Bun.write(`${claim.worktree}/fix.ts`, "export {};\n");
     const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", ...factoryGitEnvironment };

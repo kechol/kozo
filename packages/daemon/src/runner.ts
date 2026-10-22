@@ -33,7 +33,6 @@ import {
 import {
   commandEnvironmentFrom,
   type Definition,
-  defaultBranch,
   diffGuardLine,
   GitError,
   git,
@@ -65,6 +64,7 @@ import { checkNotes, ownerNotes } from "./instructions.ts";
 import { type ItemFile, itemDirectory, readItemFile, requestText } from "./item-file.ts";
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { checkPlan } from "./plan-checks.ts";
+import { type Base, baseOf } from "./repository.ts";
 import { firstCodeChange, layersFor } from "./risk.ts";
 import { type Envelope, pumpSession, type SessionResult } from "./session-pump.ts";
 import {
@@ -105,9 +105,8 @@ type Attempt = { kind: "done" } | { kind: "retry"; failure: string; rounds: numb
 /** A plan as the triage and plan agents write it, without the fields kozod adds. */
 const draftOf = ({ version: _version, item: _item, ...draft }: Plan) => draft;
 
-interface Repository {
+interface Repository extends Base {
   path: string;
-  branch: string;
   tip: string;
   charter: Charter;
   constraints: Constraints;
@@ -183,15 +182,23 @@ export class Runner {
   }
 
   private async repository(path: string): Promise<Repository> {
-    const branch = await defaultBranch(path);
-    const tip = (await git(path, ["rev-parse", `refs/heads/${branch}`])).trim();
+    const { branch, base, ref } = await baseOf(path, this.deps.definition.current.factory.mode);
+    const tip = (await git(path, ["rev-parse", ref])).trim();
     const documents = await readBaseDocuments(path, tip);
     if (!documents.ok) {
       throw new RunnerError(
         `${path} on ${branch}: ${documents.problem} ${documents.issues.join("; ")}`.trim(),
       );
     }
-    return { path, branch, tip, charter: documents.charter, constraints: documents.constraints };
+    return {
+      path,
+      branch,
+      base,
+      ref,
+      tip,
+      charter: documents.charter,
+      constraints: documents.constraints,
+    };
   }
 
   private async startRun(
@@ -701,6 +708,7 @@ export class Runner {
         case "claim": {
           await enter(node, "D");
           const claim = await claimTask(this.home, repository.path, taskRef, {
+            base: repository.tip,
             factory: this.store.factoryId,
             resume: current.runs.length > 1,
           });
@@ -820,7 +828,7 @@ export class Runner {
             ],
           };
           prompt = renderBrief(brief, {
-            gatesCommand: this.gatesCommand(level, repository.branch),
+            gatesCommand: this.gatesCommand(level, repository.base),
             reportSchema: runReportJsonSchema,
           });
           await exit(node, true);
@@ -857,7 +865,7 @@ export class Runner {
                 protectedPaths: charter.protected_paths,
                 existingTests,
               }),
-              gates: { level, command: this.gatesCommand(level, repository.branch) },
+              gates: { level, command: this.gatesCommand(level, repository.base) },
               requireNote: true,
             },
             envelope,
@@ -912,7 +920,7 @@ export class Runner {
         case "verify-deterministic": {
           await enter(node, "D");
           if (current.risk === "low") {
-            const code = await firstCodeChange(worktree, repository.branch);
+            const code = await firstCodeChange(worktree, repository.base);
             if (code) {
               await this.store.append({
                 ...envelope,
@@ -932,7 +940,7 @@ export class Runner {
             { ...envelope, node },
             level,
             worktree,
-            repository.branch,
+            repository.base,
             join(files.dir, "gates-verify.log"),
           );
           const gates = recorded.result;
@@ -955,7 +963,7 @@ export class Runner {
           if (layers.prove) {
             const prove = await runProve({
               cwd: worktree,
-              base: repository.branch,
+              base: repository.base,
               log: collect,
               env: this.commandEnv,
             });
@@ -964,7 +972,7 @@ export class Runner {
           }
           const guard = await runDiffGuard({
             cwd: worktree,
-            base: repository.branch,
+            base: repository.base,
             head: "HEAD",
             scope: current.scope,
             log: collect,
@@ -998,7 +1006,7 @@ export class Runner {
           );
           const review = await runReview({
             cwd: worktree,
-            base: repository.branch,
+            base: repository.base,
             goal: current.goal,
             doneWhen: current.done_when,
             ownerNotes: ownerWords().map((note) => note.text),
@@ -1077,7 +1085,7 @@ export class Runner {
             );
             verify = await runVerify({
               cwd: worktree,
-              base: repository.branch,
+              base: repository.base,
               goal: current.goal,
               doneWhen: current.done_when,
               ownerNotes: ownerWords().map((note) => note.text),
@@ -1135,15 +1143,13 @@ export class Runner {
         case "handoff": {
           await enter(node, "D");
           await this.moveTask(current, "handoff", run, "the checks of its risk tier passed");
-          await this.writeHandoffReport(item.ref, current, repository.branch, worktree);
+          await this.writeHandoffReport(item.ref, current, repository.base, worktree);
           await exit(node, true);
           break;
         }
         case "final-verify": {
           await enter(node, "D");
-          const latest = (
-            await git(repository.path, ["rev-parse", `refs/heads/${repository.branch}`])
-          ).trim();
+          const latest = (await git(repository.path, ["rev-parse", repository.ref])).trim();
           try {
             await git(worktree, ["-c", "core.hooksPath=/dev/null", "rebase", "--quiet", latest]);
           } catch (error) {
@@ -1157,7 +1163,7 @@ export class Runner {
             { ...envelope, node },
             "deep",
             worktree,
-            repository.branch,
+            repository.base,
             join(files.dir, "gates-final.log"),
           );
           if (deep.status !== "pass") {
@@ -1366,7 +1372,7 @@ export class Runner {
       { item: item.ref, task: taskRef, node: "complete" },
       level,
       worktree,
-      repository.branch,
+      repository.base,
       join(itemDirectory(this.home, item.ref), `check-${taskRef.split("/").at(-1)}.log`),
     );
     await this.moveTask(

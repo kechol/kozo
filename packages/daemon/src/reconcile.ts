@@ -1,7 +1,8 @@
-import { isRunOver, type TaskState } from "@kozo/core";
-import { branchTip, defaultBranch, GitError, git } from "@kozo/verify";
+import { type Factory, isRunOver, type TaskState } from "@kozo/core";
+import { branchTip, GitError, git } from "@kozo/verify";
 import { factoryGitEnvironment } from "@kozo/worker";
 import type { EventStore } from "./event-store.ts";
+import { baseOf } from "./repository.ts";
 import type { Runner } from "./runner.ts";
 import { awaitingMerge } from "./scheduler.ts";
 import { taskBranch } from "./worktrees.ts";
@@ -24,14 +25,7 @@ async function contains(repository: string, head: string, commit: string): Promi
  * Once a commit holds the change, every later one on that line does, so a binary search finds it.
  */
 async function mergingCommit(repository: string, head: string, target: string) {
-  const line = (
-    await git(repository, [
-      "rev-list",
-      "--first-parent",
-      "--max-count=1000",
-      `refs/heads/${target}`,
-    ])
-  )
+  const line = (await git(repository, ["rev-list", "--first-parent", "--max-count=1000", target]))
     .split("\n")
     .filter(Boolean)
     .reverse();
@@ -69,6 +63,8 @@ export class Reconciler {
       void work();
       return true;
     },
+    /** The factory's mode, which decides where a repository's base is. */
+    private readonly mode: () => Factory["mode"] = () => "local",
   ) {}
 
   /** Marks the runs that were running when kozod stopped as lost; their tasks resume later. */
@@ -101,7 +97,7 @@ export class Reconciler {
     if (!item) return;
     const repository = item.repository;
     const branch = taskBranch(this.store.factoryId, task.ref);
-    const target = await defaultBranch(repository);
+    const { branch: target, ref } = await baseOf(repository, this.mode());
     const tip = await branchTip(repository, branch);
     if (tip === null) {
       if (!task.hold) {
@@ -119,7 +115,7 @@ export class Reconciler {
       }
       return;
     }
-    if (await contains(repository, `refs/heads/${branch}`, `refs/heads/${target}`)) {
+    if (await contains(repository, `refs/heads/${branch}`, ref)) {
       if (!task.merged) {
         await this.store.append({
           type: "branch.merged",
@@ -129,7 +125,7 @@ export class Reconciler {
             branch,
             head: tip,
             into: target,
-            ...(await mergingCommit(repository, tip, target)),
+            ...(await mergingCommit(repository, tip, ref)),
           },
         });
       }

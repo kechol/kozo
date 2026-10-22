@@ -200,7 +200,7 @@ export class Scheduler {
     const stops = new Map<string, string | null>();
     const stopOf = async (repository: string) => {
       if (!stops.has(repository)) {
-        const result = await readCharter(repository).catch(
+        const result = await readCharter(repository, this.factory().mode).catch(
           (error: Error): CharterResult => ({ ok: false, reason: error.message }),
         );
         stops.set(repository, this.capacity(repository, result));

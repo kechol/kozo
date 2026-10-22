@@ -273,6 +273,9 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
       if (!login) throw new GhError("gh is not signed in to github.com", 0);
       return login;
     },
+    async fetch(clone) {
+      await gitWithGh(clone, ["fetch", "--quiet", "--prune", "origin"]);
+    },
     async push(clone, branch, commit) {
       await gitWithGh(clone, [
         "push",

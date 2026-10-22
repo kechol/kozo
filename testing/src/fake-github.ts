@@ -162,6 +162,9 @@ export function fakeGitHub(): FakeGitHub {
       calls.push("login");
       return "kozo";
     },
+    async fetch(clone) {
+      calls.push(`fetch ${clone}`);
+    },
     async push(clone, branch, commit) {
       calls.push(`push ${clone} ${branch}`);
       withLoss("push", () => {
