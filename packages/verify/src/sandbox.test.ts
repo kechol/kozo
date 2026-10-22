@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, realpath } from "node:fs/promises";
+import { chmod, lstat, mkdir, realpath, stat, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tempDirectory } from "@kozo/testing";
 import { runCommand } from "./command.ts";
@@ -79,6 +79,34 @@ describe.skipIf(process.platform !== "darwin")("seatbelt", () => {
     const temp = await run('echo x > "$TMPDIR/t" && echo "$TMPDIR"');
     expect(temp.code).toBe(0);
     expect(temp.output).not.toContain(root);
+  });
+
+  test("keeps each writable root in place and takes no root someone could have planted", async () => {
+    await using dir = await tempDirectory();
+    const root = await realpath(dir.path);
+    const work = join(root, "work");
+    const secret = join(root, "secret");
+    const shared = join(root, "shared");
+    await mkdir(work);
+    await mkdir(secret);
+    await mkdir(shared);
+    await chmod(shared, 0o1777);
+    await symlink(secret, join(shared, "planted"));
+    const sandbox = {
+      ...empty,
+      allowWrite: [work, join(shared, "planted"), join(shared, "made"), join(root, "missing")],
+    };
+    const run = (command: string) => confined(root, sandbox, command);
+
+    expect((await run(`echo x > "${work}/a" && rm -rf "${work}"`)).code).not.toBe(0);
+    expect(await Bun.file(join(work, "a")).exists()).toBe(false);
+    expect((await run(`mv "${work}" "${root}/moved"`)).code).not.toBe(0);
+    expect((await stat(work)).isDirectory()).toBe(true);
+    expect((await run(`echo x > "${shared}/planted/b"`)).code).not.toBe(0);
+    expect(await Bun.file(join(secret, "b")).exists()).toBe(false);
+    expect((await run(`echo x > "${shared}/made/c"`)).code).toBe(0);
+    expect((await lstat(join(shared, "made"))).isDirectory()).toBe(true);
+    expect((await run(`mkdir "${root}/missing"`)).code).not.toBe(0);
   });
 
   test("reaches only this machine unless the network is open", async () => {

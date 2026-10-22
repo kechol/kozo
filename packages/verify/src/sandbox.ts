@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -129,6 +129,9 @@ export function seatbeltProfile(sandbox: CommandSandbox): string {
       (path) => `(allow file-read-metadata (literal ${quoted(path)}))`,
     ),
     ...rule("allow file-write*", sandbox.allowWrite),
+    // A writable root itself may not be removed, renamed or replaced, by a link to anywhere, say,
+    // which the next run would resolve and then allow.
+    ...sandbox.allowWrite.map((path) => `(deny file-write* (literal ${quoted(path)}))`),
     '(allow file-write* file-ioctl (literal "/dev/null") (literal "/dev/tty") (regex #"^/dev/fd/"))',
     ...rule("deny file-write*", sandbox.denyWrite),
     ...network,
@@ -169,6 +172,28 @@ export async function platformConfine(): Promise<Confine> {
 const real = (path: string) => realpath(path).catch(() => path);
 
 /**
+ * The roots of `paths` a command may write, as real paths. One that does not exist is left out,
+ * since the command could otherwise make it a link to anywhere. In a directory everyone may
+ * write, such as /tmp, kozod makes the root itself first, and it counts only as a directory of
+ * this user, never a link that someone else put there.
+ */
+async function writableRoots(paths: readonly string[]): Promise<string[]> {
+  const roots: string[] = [];
+  for (const path of paths) {
+    const parent = await stat(dirname(path)).catch(() => null);
+    if (parent && (parent.mode & 0o002) !== 0) {
+      await mkdir(path, { mode: 0o700 }).catch(() => {});
+      const entry = await lstat(path).catch(() => null);
+      if (entry?.isDirectory() && entry.uid === process.getuid?.()) roots.push(path);
+      continue;
+    }
+    const resolved = await realpath(path).catch(() => null);
+    if (resolved !== null) roots.push(resolved);
+  }
+  return roots;
+}
+
+/**
  * Runs `run` with a new temporary directory and `sandbox` resolved to real paths, the directory
  * among the writable ones, and removes the directory afterwards. The directory sits in the
  * system's per-user temporary directory, whose short path leaves room for Unix socket names.
@@ -184,7 +209,7 @@ export async function withSandboxTemp<T>(
       {
         denyRead: await resolve(sandbox.denyRead),
         allowRead: await resolve(sandbox.allowRead),
-        allowWrite: [...(await resolve(sandbox.allowWrite)), temp],
+        allowWrite: [...(await writableRoots(sandbox.allowWrite)), temp],
         denyWrite: await resolve(sandbox.denyWrite),
         network: sandbox.network,
       },
