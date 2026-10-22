@@ -60,12 +60,16 @@ export interface GitHub {
     repository: GitHubRepository,
     pull: { head: string; base: string; title: string; body: string },
   ): Promise<GitHubPull>;
+  /** Rewrites an open pull request's body. */
+  updatePull(repository: GitHubRepository, pull: number, body: string): Promise<void>;
   /** The pull requests from `head` in the repository itself, never from a fork. */
   pullsFor(repository: GitHubRepository, head: string): Promise<GitHubPull[]>;
   checks(repository: GitHubRepository, pull: number): Promise<GitHubCheck[]>;
   /** The login gh acts as on github.com, which kozod's own comments carry as their author. */
   login(): Promise<string>;
   permission(repository: GitHubRepository, login: string): Promise<GitHubPermission>;
+  /** Who added `label` to the Issue most recently, or null when nobody has. */
+  labelledBy(repository: GitHubRepository, issue: number, label: string): Promise<string | null>;
   /** Pushes `commit` to `branch` on the clone's `origin`, replacing only what kozo pushed. */
   push(clone: string, branch: string, commit: string): Promise<void>;
   /** The commit `branch` points at on the clone's `origin`, or null when it has none. */

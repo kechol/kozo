@@ -40,12 +40,30 @@ const listed = new Set([
   "auth status",
 ]);
 const commentEndpoint = /^repos\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/issues\/comments\/[0-9]+$/;
+const eventsEndpoint = /^repos\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/issues\/[0-9]+\/events$/;
 const permissionEndpoint =
   /^repos\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/collaborators\/[A-Za-z0-9-]+\/permission$/;
 
 /** Whether kozod may run gh with `args`. */
 export function ghAllowed(args: readonly string[]): boolean {
+  // A pull request's body is the one thing kozod edits on it: no title, base, state or reviewer.
+  if (args[0] === "pr" && args[1] === "edit") {
+    return (
+      args.length === 5 &&
+      /^[0-9]+$/.test(args[2] ?? "") &&
+      (args[3] ?? "").startsWith("--repo=") &&
+      args[4] === "--body-file=-"
+    );
+  }
   if (args[0] === "api" && args[2] === "GET") {
+    if (args[3] === "--paginate") {
+      return (
+        args.length === 6 &&
+        args[1] === "--method" &&
+        args[4] === "--slurp" &&
+        eventsEndpoint.test(args[5] ?? "")
+      );
+    }
     return args.length === 4 && args[1] === "--method" && permissionEndpoint.test(args[3] ?? "");
   }
   if (args[0] === "api") {
@@ -179,6 +197,11 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
       if (!created) throw new GhError(`no open pull request for ${head} after creating it`, 0);
       return created;
     },
+    async updatePull(repository, pull, body) {
+      await gh(["pr", "edit", String(pull), `--repo=${repository}`, "--body-file=-"], {
+        stdin: body,
+      });
+    },
     async pullsFor(repository, head) {
       const raw = await json<RawPull[]>([
         "pr",
@@ -221,6 +244,22 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
         if (error instanceof GhError) return "none";
         throw error;
       }
+    },
+    async labelledBy(repository, issue, label) {
+      const pages = await json<
+        { event: string; actor: { login: string } | null; label?: { name: string } }[][]
+      >([
+        "api",
+        "--method",
+        "GET",
+        "--paginate",
+        "--slurp",
+        `repos/${repository}/issues/${issue}/events`,
+      ]);
+      const added = pages
+        .flat()
+        .filter((event) => event.event === "labeled" && event.label?.name === label);
+      return added.at(-1)?.actor?.login ?? null;
     },
     async login() {
       const raw = await json<{ hosts: Record<string, { active: boolean; login: string }[]> }>([

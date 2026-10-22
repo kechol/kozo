@@ -27,6 +27,8 @@ describe("ghAllowed", () => {
       ["pr", "checks", "3"],
       ["api", "--method", "PATCH", "repos/me/app/issues/comments/99", "--field", "body=@-"],
       ["api", "--method", "GET", "repos/me/app/collaborators/someone/permission"],
+      ["pr", "edit", "3", "--repo=me/app", "--body-file=-"],
+      ["api", "--method", "GET", "--paginate", "--slurp", "repos/me/app/issues/12/events"],
     ]) {
       expect({ args, allowed: ghAllowed(args) }).toEqual({ args, allowed: true });
     }
@@ -43,6 +45,10 @@ describe("ghAllowed", () => {
       ["api", "--method", "PUT", "repos/me/app/pulls/3/merge", "--field", "body=@-"],
       ["api", "--method", "PATCH", "repos/me/app/issues/comments/99", "--field", "body=x"],
       ["api", "graphql", "-f", "query=mutation"],
+      ["pr", "edit", "3", "--repo=me/app", "--base=release"],
+      ["api", "--method", "GET", "--paginate", "--slurp", "repos/me/app/issues/12/comments"],
+      ["api", "--method", "GET", "--paginate", "repos/me/app/issues/12/events"],
+      ["pr", "edit", "3", "--repo=me/app", "--body-file=-", "--add-reviewer=x"],
       ["api", "--method", "GET", "repos/me/app/collaborators"],
       ["api", "--method", "GET", "repos/me/app/collaborators/x/permission", "--paginate"],
       ["--repo", "me/app", "pr", "merge"],
@@ -92,6 +98,7 @@ describe("ghAllowed", () => {
       body: "Part of #12",
     });
     await github.checks("me/app", 3);
+    await github.updatePull("me/app", 3, "Part of #12");
     expect((await github.pullsFor("me/app", "kozo/x/12-t1")).map((pull) => pull.number)).toEqual([
       3,
     ]);
@@ -105,6 +112,22 @@ describe("ghAllowed", () => {
       calls.find((call) => call.args[1] === "create" && call.args[0] === "pr")?.args,
     ).toContain("--title=--draft");
     expect(calls.find((call) => call.args[0] === "api")?.stdin).toBe("edited");
+  });
+
+  test("finds who added a label last, across pages", async () => {
+    const event = (kind: string, login: string, name: string) => ({
+      event: kind,
+      actor: { login },
+      label: { name },
+    });
+    const { exec } = recording(() =>
+      JSON.stringify([
+        [event("labeled", "owner", "kozo:accept"), event("labeled", "triager", "bug")],
+        [event("unlabeled", "owner", "kozo:accept"), event("labeled", "triager", "kozo:accept")],
+      ]),
+    );
+    expect(await ghGitHub(exec).labelledBy("me/app", 12, "kozo:accept")).toBe("triager");
+    expect(await ghGitHub(exec).labelledBy("me/app", 12, "kozo:paused")).toBeNull();
   });
 
   test("pending checks are not an error, and other failures are", async () => {

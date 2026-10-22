@@ -22,6 +22,10 @@ export interface FakeGitHub extends GitHub {
   /** Branch tips on each clone's origin, by `<clone> <branch>`. */
   readonly branches: Map<string, string>;
   checksOf: Map<number, GitHubCheck[]>;
+  /** Each pull request's body, by number. */
+  bodies: Map<number, string>;
+  /** Who added each label last, by `<repository> #<issue> <label>`. */
+  labellers: Map<string, string>;
   /** Each login's permission, by `<repository> <login>`; anyone else has none. */
   permissions: Map<string, GitHubPermission>;
   addIssue(repository: GitHubRepository, issue: Partial<GitHubIssue> & { title: string }): number;
@@ -59,7 +63,9 @@ export function fakeGitHub(): FakeGitHub {
     repositories,
     branches,
     checksOf: new Map(),
+    bodies: new Map(),
     permissions: new Map(),
+    labellers: new Map(),
     addIssue(repository, issue) {
       const entry = repositoryOf(repository);
       const number = entry.issues.length + entry.pulls.length + 1;
@@ -113,7 +119,7 @@ export function fakeGitHub(): FakeGitHub {
     async createLabel(repository, { name }) {
       calls.push(`createLabel ${repository} ${name}`);
     },
-    async createPull(repository, { head }) {
+    async createPull(repository, { head, body }) {
       calls.push(`createPull ${repository} ${head}`);
       const entry = repositoryOf(repository);
       const pull: GitHubPull = {
@@ -125,7 +131,14 @@ export function fakeGitHub(): FakeGitHub {
         mergeCommit: null,
       };
       entry.pulls.push(pull);
+      this.bodies.set(pull.number, body);
       return { ...pull };
+    },
+    async updatePull(repository, pull, body) {
+      calls.push(`updatePull ${repository} #${pull}`);
+      const found = repositoryOf(repository).pulls.find((entry) => entry.number === pull);
+      if (!found) throw new Error(`pull request ${pull} does not exist`);
+      this.bodies.set(pull, body);
     },
     async pullsFor(repository, head) {
       calls.push(`pullsFor ${repository} ${head}`);
@@ -140,6 +153,10 @@ export function fakeGitHub(): FakeGitHub {
     async permission(repository, login) {
       calls.push(`permission ${repository} ${login}`);
       return this.permissions.get(`${repository} ${login}`) ?? "none";
+    },
+    async labelledBy(repository, issue, label) {
+      calls.push(`labelledBy ${repository} #${issue} ${label}`);
+      return this.labellers.get(`${repository} #${issue} ${label}`) ?? null;
     },
     async login() {
       calls.push("login");
