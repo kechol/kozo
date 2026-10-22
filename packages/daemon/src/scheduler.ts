@@ -135,6 +135,46 @@ export class Scheduler {
     return null;
   }
 
+  /**
+   * Holds each open task whose dependencies are not all complete, and clears the hold once they
+   * are. A cancelled dependency never completes, so its dependents are held for attention.
+   */
+  private async holdForDependencies() {
+    for (const task of Object.values(this.store.state.tasks)) {
+      if (isClosed(task.stage)) continue;
+      const state = this.store.state;
+      const open = task.depends_on.filter((ref) => state.tasks[ref]?.stage !== "complete");
+      const cancelled = open.filter((ref) => state.tasks[ref]?.stage === "cancelled");
+      const envelope = { item: task.item, task: task.ref };
+      if (task.hold?.kind === "dependency" && (open.length === 0 || cancelled.length > 0)) {
+        await this.store.append({
+          ...envelope,
+          type: "hold.cleared",
+          data: { target: "task", hold: "dependency", by: "kozod" },
+        });
+      }
+      if (this.store.state.tasks[task.ref]?.hold || open.length === 0) continue;
+      await this.store.append({
+        ...envelope,
+        type: "hold.set",
+        data:
+          cancelled.length > 0
+            ? {
+                target: "task",
+                hold: "attention",
+                by: "kozod",
+                reason: `${cancelled.join(", ")} was cancelled, so ${task.ref} cannot start; close it or plan it again`,
+              }
+            : {
+                target: "task",
+                hold: "dependency",
+                by: "kozod",
+                reason: `waits for ${open.join(", ")} to complete`,
+              },
+      });
+    }
+  }
+
   /** Whether a task needs a run: it is in Building, or a run of its blueprint did not finish. */
   private needsRun(task: TaskState): boolean {
     const state = this.store.state;
@@ -175,11 +215,20 @@ export class Scheduler {
       });
     }
 
+    await this.holdForDependencies();
+
     for (const item of Object.values(this.store.state.items)) {
       if (this.active.size >= this.factory.concurrency) return;
-      if (item.stage !== "triage" || item.hold || this.active.has(item.ref)) continue;
-      if ((await stopOf(item.repository)) !== null) continue;
-      this.start(item.ref, "item", () => this.runner.triage(item.ref));
+      if (item.hold || this.active.has(item.ref)) continue;
+      // An item in Planning without a hold had its plan rejected or its question answered.
+      const draft =
+        item.stage === "triage"
+          ? () => this.runner.triage(item.ref)
+          : item.stage === "planning" && item.draft
+            ? () => this.runner.replan(item.ref)
+            : null;
+      if (!draft || (await stopOf(item.repository)) !== null) continue;
+      this.start(item.ref, "item", draft);
     }
     for (const task of Object.values(this.store.state.tasks)) {
       if (this.active.size >= this.factory.concurrency) return;

@@ -31,6 +31,8 @@ export interface ItemState {
   hold: Hold | null;
   draft: Plan | null;
   plan: Plan | null;
+  /** The rejections of its plan since it last went to Triage or had a plan accepted. */
+  rejections: number;
   tasks: string[];
   /** The notes about the item and its tasks, oldest first. */
   notes: Note[];
@@ -137,7 +139,7 @@ export function isClosed(stage: Stage): boolean {
 const itemEdges: Partial<Record<Stage, readonly Stage[]>> = {
   intake: ["triage", "complete"],
   triage: ["planning", "complete"],
-  // A rejected plan is drafted again in Triage.
+  // `kozo retry` sends an item held in Planning back to Triage.
   planning: ["triage", "complete"],
   building: ["complete"],
   // An item whose DONE_WHEN fails after the merge goes back to Triage.
@@ -227,6 +229,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
         hold: null,
         draft: null,
         plan: null,
+        rejections: 0,
         tasks: [],
         notes: [],
         createdAt: event.ts,
@@ -250,6 +253,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
         if (task.stage === "reviewing" && event.data.to === "building") task.revisions += 1;
         if (task.stage === "handoff" && event.data.to === "building") task.handoffFixes += 1;
       }
+      if (event.data.target === "item" && item && event.data.to === "triage") item.rejections = 0;
       subject.stage = event.data.to;
       subject.updatedAt = event.ts;
       return;
@@ -285,6 +289,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
         kind: event.data.kind,
         text: event.data.text,
       });
+      if (event.data.kind === "rejection" && event.task === null) subject.rejections += 1;
       return;
     }
     case "plan.proposed": {
@@ -311,6 +316,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
       if (reused) throw new StateError(`${reused} already exists; number the new tasks after it`);
       subject.plan = plan;
       subject.draft = null;
+      subject.rejections = 0;
       subject.stage = "building";
       subject.tasks = [...subject.tasks, ...refs];
       plan.tasks.forEach((planned, index) => {

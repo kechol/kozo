@@ -220,8 +220,22 @@ export class ControlPlane {
     }
     await this.clearHold("item", ref, body.reason);
     await this.note(ref, ref, "rejection", body.reason);
-    await this.move("item", ref, "triage", `kozo reject: ${body.reason}`);
-    return { message: `rejected the plan of ${ref}; Triage drafts it again with your reason` };
+    if ((this.store.state.items[ref]?.rejections ?? 0) >= 2) {
+      await this.store.append({
+        type: "hold.set",
+        item: ref,
+        data: {
+          target: "item",
+          hold: "attention",
+          by: "kozod",
+          reason: "the plan was rejected twice; kozo retry drafts it again from Triage",
+        },
+      });
+      return { message: `rejected the plan of ${ref} a second time; it waits for your attention` };
+    }
+    return {
+      message: `rejected the plan of ${ref}; the plan agent drafts it again with your reason`,
+    };
   }
 
   private async say(ref: string, kind: "item" | "task", body: Body<"say">): Promise<VerbResult> {

@@ -322,7 +322,9 @@ describe("the minimal path", () => {
 
   test("reject, pause, resume, retry and close do what they say, and twice is once", async () => {
     await using env = await factoryOf((request) =>
-      request.agent === "triage" ? [{ answer: plan }] : [{ hang: true }],
+      request.agent === "triage" || request.agent === "plan"
+        ? [{ answer: plan }]
+        : [{ hang: true }],
     );
     const item = { kind: "item", item: { repo: null, number: 1 } } as const;
     const task = { kind: "task", item: { repo: null, number: 1 }, task: 1 } as const;
@@ -335,9 +337,15 @@ describe("the minimal path", () => {
       `${ref} is not waiting for a plan approval`,
     );
     await env.settle();
+    expect(env.agent.requests.at(-1)?.agent).toBe("plan");
     expect(env.agent.requests.at(-1)?.prompt).toContain(
       "OWNER       (rejection) Also cover 0 units",
     );
+    expect(env.agent.requests.at(-1)?.prompt).toContain('DRAFT       <request trust="untrusted">');
+    expect(env.store.state.items[ref]).toMatchObject({
+      stage: "planning",
+      hold: { kind: "approval", reason: "plan approval" },
+    });
     await env.control.act(ref, item, "approve", {});
     expect((await env.control.act(ref, item, "approve", {})).message).toBe(
       `${ref} is not waiting for an approval`,
@@ -823,7 +831,11 @@ describe("the minimal path", () => {
     await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
     await env.settle();
     expect(env.store.state.tasks[`${ref}/t1`]?.stage).toBe("handoff");
-    expect(env.store.state.tasks[`${ref}/t2`]).toMatchObject({ stage: "building", runs: [] });
+    expect(env.store.state.tasks[`${ref}/t2`]).toMatchObject({
+      stage: "building",
+      runs: [],
+      hold: { kind: "dependency", reason: `waits for ${ref}/t1 to complete` },
+    });
     await env.repo.git(
       "merge",
       "--no-ff",
@@ -838,7 +850,79 @@ describe("the minimal path", () => {
     expect(env.store.state.items[ref]?.stage).not.toBe("complete");
     expect(env.store.state.tasks[`${ref}/t2`]?.runs.length).toBeGreaterThan(0);
     expect(implemented).toBe(2);
+    const merge = env.store.state.tasks[`${ref}/t1`]?.merged?.commit?.slice(0, 12);
+    expect(env.agent.requests.at(-1)?.prompt).toContain(
+      `Earlier task: ${ref}/t1 ${plan.plan.tasks[0]?.goal}, merged in ${merge}`,
+    );
   }, 180_000);
+
+  test("a dependent of a cancelled task is held for attention", async () => {
+    const split = {
+      ...plan,
+      plan: {
+        ...plan.plan,
+        tasks: [
+          plan.plan.tasks[0],
+          {
+            ...plan.plan.tasks[0],
+            id: "t2",
+            done_when: ["The docs mention the low-stock notice"],
+            scope: ["docs/**"],
+            depends_on: ["t1"],
+          },
+        ],
+      },
+    };
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: split }] : [{ hang: true }],
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    env.scheduler.tick();
+    while (env.agent.requests.length < 2) await Bun.sleep(20);
+    await env.control.act(
+      `${ref}/t1`,
+      { kind: "task", item: { repo: null, number: 1 }, task: 1 },
+      "close",
+      { cancel: "not needed" },
+    );
+    await env.settle();
+    expect(env.store.state.tasks[`${ref}/t2`]?.hold).toMatchObject({
+      kind: "attention",
+      reason: `${ref}/t1 was cancelled, so ${ref}/t2 cannot start; close it or plan it again`,
+    });
+  }, 120_000);
+
+  test("the second rejection of a plan holds the item, and retry drafts it again from Triage", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" || request.agent === "plan"
+        ? [{ answer: plan }]
+        : [{ hang: true }],
+    );
+    const item = { kind: "item", item: { repo: null, number: 1 } } as const;
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, item, "reject", { reason: "Also cover 0 units" });
+    await env.settle();
+    expect(
+      (await env.control.act(ref, item, "reject", { reason: "Still not 0" })).message,
+    ).toContain("a second time");
+    await env.settle();
+    expect(env.store.state.items[ref]).toMatchObject({
+      stage: "planning",
+      rejections: 2,
+      hold: { kind: "attention" },
+    });
+    expect(env.agent.requests.map((request) => request.agent)).toEqual(["triage", "plan"]);
+    await env.control.act(ref, item, "retry", {});
+    await env.settle();
+    expect(env.agent.requests.at(-1)?.agent).toBe("triage");
+    expect(env.store.state.items[ref]).toMatchObject({
+      rejections: 0,
+      hold: { kind: "approval", reason: "plan approval" },
+    });
+  }, 120_000);
 
   test("kozo say reaches a running run at its next turn", async () => {
     await using env = await factoryOf((request) =>

@@ -58,6 +58,7 @@ import { taskSandbox } from "@kozo/worker";
 import implementDefinition from "../../../templates/factory/agents/implement/agent.md" with {
   type: "text",
 };
+import planDefinition from "../../../templates/factory/agents/plan/agent.md" with { type: "text" };
 import triageDefinition from "../../../templates/factory/agents/triage/agent.md" with {
   type: "text",
 };
@@ -105,6 +106,9 @@ export type Node = (typeof bugfixNodes)[number];
 type Attempt = { kind: "done" } | { kind: "retry"; failure: string; rounds: number };
 
 const gatesFor: Record<RiskTier, GateLevel> = { low: "fast", normal: "full", high: "deep" };
+
+/** A plan as the triage and plan agents write it, without the fields kozod adds. */
+const draftOf = ({ version: _version, item: _item, ...draft }: Plan) => draft;
 
 const instructionsOf = (definition: string) =>
   definition.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
@@ -200,7 +204,7 @@ export class Runner {
 
   private async startRun(
     envelope: Omit<Envelope, "run_id">,
-    agent: "triage" | "implement" | "review" | "verify",
+    agent: "triage" | "plan" | "implement" | "review" | "verify",
     charterCommit: string,
   ) {
     const run = this.store.nextRun();
@@ -296,6 +300,23 @@ export class Runner {
   async triage(itemRef: string): Promise<void> {
     const item = this.store.state.items[itemRef];
     if (item?.stage !== "triage" || item.hold) return;
+    await this.draft(itemRef, "triage");
+  }
+
+  /**
+   * Planning after a rejection: the plan agent drafts the plan again from the current draft and
+   * the owner's notes, and the new draft waits for approval like the first.
+   */
+  async replan(itemRef: string): Promise<void> {
+    const item = this.store.state.items[itemRef];
+    if (item?.stage !== "planning" || item.hold || !item.draft) return;
+    await this.draft(itemRef, "plan");
+  }
+
+  /** Runs `agent` on the item in a read-only checkout until kozod takes a draft or holds it. */
+  private async draft(itemRef: string, agent: "triage" | "plan") {
+    const item = this.store.state.items[itemRef];
+    if (!item) return;
     const repository = await this.repository(item.repository);
     const file = await readItemFile(this.home, itemRef);
     const checkout = triageCheckoutPath(this.home, repository.path, itemRef);
@@ -314,13 +335,22 @@ export class Runner {
       // A draft that fails its checks gets one more session, told why, before a human looks.
       let refused: string[] = [];
       for (let round = 1; round <= 2; round += 1) {
-        const drafted = await this.draftPlan(itemRef, repository, file, checkout, refused, round);
+        const drafted = await this.draftPlan(
+          itemRef,
+          agent,
+          repository,
+          file,
+          checkout,
+          refused,
+          round,
+        );
         if ("refused" in drafted) {
           refused = drafted.refused;
           continue;
         }
-        if (drafted.plan)
+        if (drafted.plan && agent === "triage")
           await this.afterTriage(itemRef, drafted.plan, repository.charter, file.class);
+        else if (drafted.plan) await this.hold(itemRef, null, "approval", "plan approval");
         return;
       }
     } catch (error) {
@@ -332,25 +362,32 @@ export class Runner {
   }
 
   /**
-   * One triage session in a run of its own. Returns the plan kozod proposed, the issues that
-   * refused the draft on the first round, or no plan when the item is held or the run stopped.
+   * One triage or plan session in a run of its own. Returns the plan kozod proposed, the issues
+   * that refused the draft on the first round, or no plan when the item is held or the run
+   * stopped.
    */
   private async draftPlan(
     itemRef: string,
+    agent: "triage" | "plan",
     repository: Repository,
     file: ItemFile,
     checkout: string,
     refused: readonly string[],
     round: number,
   ): Promise<{ plan: Plan | null } | { refused: string[] }> {
-    const run = await this.startRun({ item: itemRef, task: null }, "triage", repository.tip);
+    const run = await this.startRun({ item: itemRef, task: null }, agent, repository.tip);
     const envelope: Envelope = { run_id: run, item: itemRef, task: null };
     const { limits } = repository.charter;
+    const current = this.store.state.items[itemRef]?.draft;
     const prompt = [
       `ITEM        ${itemRef} in ${repository.path}, default branch ${repository.branch}`,
       `LIMITS      a task changes at most ${limits.max_changed_lines} lines in ${limits.max_files} files; an item has at most ${limits.max_tasks_per_item} tasks`,
       `PROTECTED   ${repository.charter.protected_paths.join(", ")}`,
       `REQUEST     ${wrapRequest(requestText(file))}`,
+      // The draft came from a session that read the request, so it is data like the request.
+      ...(agent === "plan" && current
+        ? [`DRAFT       ${wrapRequest(JSON.stringify(draftOf(current), null, 2))}`]
+        : []),
       ...ownerNotes(this.store.state, itemRef, [itemRef]).map(
         (note) => `OWNER       (${note.kind}) ${note.text}`,
       ),
@@ -369,10 +406,10 @@ export class Runner {
       {
         version: 1,
         run,
-        agent: "triage",
+        agent,
         model: this.deps.model,
         cwd: checkout,
-        instructions: instructionsOf(triageDefinition),
+        instructions: instructionsOf(agent === "triage" ? triageDefinition : planDefinition),
         prompt,
         outputSchema: triageAnswerJsonSchema,
         maxTurns: limits.max_turns,
@@ -395,7 +432,7 @@ export class Runner {
     );
     if (result.status !== "answered") {
       if (result.status !== "stopped")
-        await this.hold(itemRef, null, "attention", `triage ${describe(result)}`, run);
+        await this.hold(itemRef, null, "attention", `${agent} ${describe(result)}`, run);
       await this.endRun(
         run,
         result.status === "lost" ? "lost" : result.status === "stopped" ? "stopped" : "failed",
@@ -737,7 +774,12 @@ export class Runner {
               task: taskRef,
               position: item.tasks.indexOf(taskRef) + 1,
               of: item.tasks.length,
-              prior_diffs: [],
+              prior_diffs: current.depends_on.map((ref) => {
+                const dependency = this.store.state.tasks[ref];
+                const commit = dependency?.merged?.commit;
+                const merged = commit ? `, merged in ${commit.slice(0, 12)}` : "";
+                return `${ref} ${dependency?.goal ?? ""}${merged}`;
+              }),
             },
             blueprint: { class: plan.class, nodes: [...bugfixNodes] },
             scope: current.scope as [string, ...string[]],
