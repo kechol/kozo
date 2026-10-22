@@ -274,8 +274,9 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
           ) ?? "none"
         );
       } catch (error) {
-        // GitHub answers 404 for a login that is no collaborator.
-        if (error instanceof GhError) return "none";
+        // GitHub answers 404 for a login that is no collaborator; any other failure, such as a
+        // rate limit, says nothing about the login and must not make a writer look like none.
+        if (error instanceof GhError && /\bHTTP 404\b/.test(error.message)) return "none";
         throw error;
       }
     },

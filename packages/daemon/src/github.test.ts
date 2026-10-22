@@ -136,6 +136,18 @@ describe("ghAllowed", () => {
     expect(calls.find((call) => call.args[0] === "api")?.stdin).toBe("edited");
   });
 
+  test("only a 404 means a login has no permission", async () => {
+    const failing =
+      (stderr: string): GhExec =>
+      async () => ({ stdout: "", stderr, code: 1 });
+    expect(await ghGitHub(failing("gh: Not Found (HTTP 404)")).permission("me/app", "x")).toBe(
+      "none",
+    );
+    await expect(
+      ghGitHub(failing("gh: API rate limit exceeded (HTTP 403)")).permission("me/app", "x"),
+    ).rejects.toThrow(GhError);
+  });
+
   test("finds who added a label last, across pages", async () => {
     const event = (kind: string, login: string, name: string) => ({
       event: kind,
