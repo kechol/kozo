@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { factoryTemplate } from "@kozo/core";
 import { gitRepository, tempDirectory } from "@kozo/testing";
-import { builtInFactory, modelFor, readDefinition } from "./factory-definition.ts";
+import { blueprintFor, builtInFactory, modelFor, readDefinition } from "./factory-definition.ts";
 
 const review = (model?: string) =>
   `---\nname: review\ndescription: Reviews a diff.\n${model ? `model: ${model}\n` : ""}---\n\nReview it.\n`;
@@ -63,5 +64,24 @@ describe("readDefinition", () => {
     expect(modelFor(definition, "review")).toBe("claude-haiku-5-5");
     expect(modelFor(definition, "verify")).toBe("claude-opus-5-5");
     expect(modelFor(definition, "implement")).toBe(builtInFactory.agent_defaults.model);
+  });
+
+  test("takes each class's blueprint from the definition, kozo's template or bugfix's", async () => {
+    await using dir = await tempDirectory({
+      "factory/blueprints/refactor.yml": "version: 1\nreproduce: false\nnodes: [claim]\n",
+    });
+    const refused = await readDefinition(join(dir.path, "factory"), null);
+    expect(refused.ok ? [] : refused.issues).toEqual([
+      expect.stringContaining("blueprints/refactor.yml: nodes: List the nodes in the order"),
+    ]);
+    await Bun.write(
+      join(dir.path, "factory", "blueprints", "refactor.yml"),
+      factoryTemplate["blueprints/bugfix.yml"].replace("reproduce: true", "reproduce: false"),
+    );
+    const result = await readDefinition(join(dir.path, "factory"), null);
+    if (!result.ok) throw new Error(result.issues.join("; "));
+    expect(blueprintFor(result.definition, "refactor").reproduce).toBe(false);
+    expect(blueprintFor(result.definition, "deps").gates).toBe("deep");
+    expect(blueprintFor(result.definition, "feature")).toEqual(result.definition.blueprints.bugfix);
   });
 });

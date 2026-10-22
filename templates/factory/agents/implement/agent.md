@@ -25,7 +25,8 @@ sections; every section applies.
 
 1. Read `AGENTS.md` and the code around the change before you edit anything.
 2. Write or extend a test that fails because of the problem, and run it to see it fail. Add new
-   test files; do not change existing tests, which the factory refuses.
+   test files; do not change existing tests, which the factory refuses. Skip this step when the
+   brief's rules say the blueprint starts from no failing test, as a dependency update does.
 3. Make the smallest change that makes the test pass and satisfies DONE_WHEN.
 4. Commit in small steps with messages that say what changed and why.
 5. Record every choice a reviewer would want explained with `kozo_note`: what you chose and why.

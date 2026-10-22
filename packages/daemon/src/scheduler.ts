@@ -1,4 +1,5 @@
 import {
+  blueprintNodes,
   type Factory,
   type FactoryState,
   isClosed,
@@ -10,7 +11,7 @@ import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
 import { costSince } from "./queries.ts";
 import { type CharterResult, readCharter } from "./repository.ts";
-import { bugfixNodes, type Node, type Runner } from "./runner.ts";
+import type { Node, Runner } from "./runner.ts";
 
 /** The last implement run of a task, the one that carries its blueprint. */
 export function lastBlueprintRun(state: FactoryState, task: TaskState) {
@@ -37,7 +38,7 @@ export function resumePoint(state: FactoryState, task: TaskState): Node {
     last.state !== "succeeded" &&
     task.checkpoint?.run === last.ref &&
     node &&
-    bugfixNodes.includes(node)
+    blueprintNodes.includes(node)
   ) {
     return node;
   }

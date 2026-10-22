@@ -979,6 +979,57 @@ describe("the minimal path", () => {
     }
   }, 240_000);
 
+  test("a dependency update runs the deps blueprint: no reproduction and the deep gates", async () => {
+    const depsPlan = {
+      ...plan,
+      plan: {
+        ...plan.plan,
+        class: "deps",
+        approach: "Pin the test runner",
+        tasks: [{ ...plan.plan.tasks[0], scope: ["package.json"] }],
+      },
+    };
+    const manifest = `${JSON.stringify(
+      {
+        name: "suite-shop",
+        private: true,
+        scripts: { test: "bun test" },
+        devDependencies: { "left-pad": "1.3.0" },
+      },
+      null,
+      2,
+    )}\n`;
+    await using env = await factoryOf((request) =>
+      request.agent === "triage"
+        ? [{ answer: depsPlan }]
+        : [
+            { write: { "package.json": manifest } },
+            { commit: "chore: pin left-pad" },
+            {
+              tool: "Bash",
+              input: { command: "kozo gates --level deep --base main" },
+              output: { stdout: "KOZO_GATES: level=deep status=pass gates=lint,test duration=1s" },
+            },
+            { use: "kozo_note", input: { choice: "Pinned 1.3.0", reason: "The latest" } },
+            { answer: { ...report, tests: [] } },
+          ],
+    );
+    const { ref } = await env.control.addItem({ title: "Pin left-pad", class: "deps" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    expect(env.store.state.tasks[`${ref}/t1`]).toMatchObject({ stage: "handoff", hold: null });
+    const gates = env.store.db
+      .query<{ level: string }, []>(
+        "select json_extract(line, '$.data.level') as level from events where type = 'gates.result' order by id limit 1",
+      )
+      .get();
+    expect(gates?.level).toBe("deep");
+    expect(env.agent.requests.at(-1)?.prompt).toContain(
+      "This blueprint starts from no failing test",
+    );
+  }, 120_000);
+
   test("kozo say reaches a running run at its next turn", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage"

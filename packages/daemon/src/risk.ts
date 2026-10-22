@@ -1,4 +1,4 @@
-import type { GateLevel, RiskTier } from "@kozo/core";
+import { type GateLevel, gateLevelSchema, type RiskTier } from "@kozo/core";
 import { git } from "@kozo/verify";
 
 /** What each risk tier verifies beyond diff-guard and review, which every tier runs. */
@@ -7,6 +7,12 @@ export const layersFor: Record<RiskTier, { gates: GateLevel; prove: boolean; ver
   normal: { gates: "full", prove: true, verify: true },
   high: { gates: "deep", prove: true, verify: true },
 };
+
+/** The deeper of a tier's gate level and the one a blueprint asks for. */
+export function atLeast(level: GateLevel, floor: GateLevel | undefined): GateLevel {
+  const order = gateLevelSchema.options;
+  return floor && order.indexOf(floor) > order.indexOf(level) ? floor : level;
+}
 
 // `.txt` and `.mdx` are left out: requirements.txt pins dependencies, and MDX runs components.
 const documentation = /\.(md|markdown|rst|adoc)$/i;

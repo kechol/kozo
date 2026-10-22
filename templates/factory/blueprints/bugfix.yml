@@ -1,0 +1,15 @@
+# How a bugfix task goes from Building to Handoff. A class without a blueprint of its own uses
+# this one.
+version: 1
+nodes:
+  - claim
+  - prepare
+  - brief
+  - implement
+  - verify-deterministic
+  - review
+  - verify-app
+  - handoff
+  - final-verify
+# The implement node starts from a test that fails without the fix, which prove checks.
+reproduce: true

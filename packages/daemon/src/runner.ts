@@ -3,7 +3,9 @@ import { dirname, join, relative } from "node:path";
 import {
   afterReview,
   autonomyLevel,
+  type BlueprintNode,
   type Brief,
+  blueprintNodes,
   type Charter,
   type Constraints,
   type GateLevel,
@@ -31,6 +33,7 @@ import {
   wrapRequest,
 } from "@kozo/core";
 import {
+  blueprintFor,
   commandEnvironmentFrom,
   type Definition,
   diffGuardLine,
@@ -65,7 +68,7 @@ import { type ItemFile, itemDirectory, readItemFile, requestText } from "./item-
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { checkPlan } from "./plan-checks.ts";
 import { type Base, baseOf } from "./repository.ts";
-import { firstCodeChange, layersFor } from "./risk.ts";
+import { atLeast, firstCodeChange, layersFor } from "./risk.ts";
 import { type Envelope, pumpSession, type SessionResult } from "./session-pump.ts";
 import {
   claimTask,
@@ -85,19 +88,7 @@ export interface RunnerDeps {
   definition: DefinitionInUse;
 }
 
-/** The nodes of the bugfix blueprint from Building to Handoff, in order. */
-export const bugfixNodes = [
-  "claim",
-  "prepare",
-  "brief",
-  "implement",
-  "verify-deterministic",
-  "review",
-  "verify-app",
-  "handoff",
-  "final-verify",
-] as const;
-export type Node = (typeof bugfixNodes)[number];
+export type Node = BlueprintNode;
 
 /** How one attempt ended: done, or retried in a new run until `rounds` attempts. */
 type Attempt = { kind: "done" } | { kind: "retry"; failure: string; rounds: number };
@@ -603,9 +594,10 @@ export class Runner {
     const plan = item.plan;
     const worktree = worktreePath(this.home, repository.path, taskRef);
     const branch = taskBranch(this.store.factoryId, taskRef);
-    let layers = layersFor[task.risk];
-    let level = layers.gates;
     const definition = this.deps.definition.current;
+    const blueprint = blueprintFor(definition, plan.class);
+    let layers = layersFor[task.risk];
+    let level = atLeast(layers.gates, blueprint.gates);
     const run = await this.startRun(
       { item: item.ref, task: taskRef },
       "implement",
@@ -694,7 +686,9 @@ export class Runner {
       return await stopHere("failed", "final verification failed");
     };
 
-    const nodes = bugfixNodes.slice(bugfixNodes.indexOf(start));
+    const nodes = blueprintNodes
+      .slice(blueprintNodes.indexOf(start))
+      .filter((node) => blueprint.nodes.includes(node));
     for (const node of nodes) {
       const current = this.store.state.tasks[taskRef];
       if (!current || isClosed(current.stage))
@@ -795,7 +789,7 @@ export class Runner {
                 return `${ref} ${dependency?.goal ?? ""}${merged}`;
               }),
             },
-            blueprint: { class: plan.class, nodes: [...bugfixNodes] },
+            blueprint: { class: plan.class, nodes: [...blueprint.nodes] },
             scope: current.scope as [string, ...string[]],
             do_not_act: [
               "Changes outside SCOPE, even ones worth making; list them in the run report instead",
@@ -806,6 +800,11 @@ export class Runner {
               decisions: earlier.slice(-20),
               rules: [
                 "Read AGENTS.md before you change anything.",
+                ...(blueprint.reproduce
+                  ? []
+                  : [
+                      "This blueprint starts from no failing test: make the change, keep every existing test passing and run the gates.",
+                    ]),
                 ...ownerWords().map((note) => `The owner said (${note.kind}): ${note.text}`),
                 ...(failure
                   ? [`The previous attempt did not pass: ${failure.slice(0, 1500)}`]
@@ -940,7 +939,7 @@ export class Runner {
                 },
               });
               layers = layersFor.normal;
-              level = layers.gates;
+              level = atLeast(layers.gates, blueprint.gates);
             }
           }
           const recorded = await this.recordedGates(
@@ -967,7 +966,8 @@ export class Runner {
           if (gates.status === "fail")
             return await retry(node, `the ${gates.failed} gate failed:\n${tail(output)}`);
           output = "";
-          if (layers.prove) {
+          // A blueprint that starts from no failing test has nothing for prove to check.
+          if (layers.prove && blueprint.reproduce) {
             const prove = await runProve({
               cwd: worktree,
               base: repository.base,

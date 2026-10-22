@@ -5,6 +5,10 @@ import planAgent from "../../../templates/factory/agents/plan/agent.md" with { t
 import reviewAgent from "../../../templates/factory/agents/review/agent.md" with { type: "text" };
 import triageAgent from "../../../templates/factory/agents/triage/agent.md" with { type: "text" };
 import verifyAgent from "../../../templates/factory/agents/verify/agent.md" with { type: "text" };
+import bugfixBlueprint from "../../../templates/factory/blueprints/bugfix.yml" with {
+  type: "text",
+};
+import depsBlueprint from "../../../templates/factory/blueprints/deps.yml" with { type: "text" };
 import factoryYml from "../../../templates/factory/factory.yml" with { type: "text" };
 import verifyAppSkill from "../../../templates/factory/skills/verify-app/SKILL.md" with {
   type: "text",
@@ -22,4 +26,6 @@ export const factoryTemplate = {
   "agents/review/agent.md": reviewAgent,
   "agents/verify/agent.md": verifyAgent,
   "skills/verify-app/SKILL.md": verifyAppSkill,
+  "blueprints/bugfix.yml": bugfixBlueprint,
+  "blueprints/deps.yml": depsBlueprint,
 } as const;

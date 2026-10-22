@@ -1,7 +1,16 @@
 import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { type Factory, factorySchema, factoryTemplate, issueText } from "@kozo/core";
+import {
+  type Blueprint,
+  type Factory,
+  factorySchema,
+  factoryTemplate,
+  issueText,
+  parseBlueprint,
+  type WorkClass,
+  workClassSchema,
+} from "@kozo/core";
 import {
   type AgentDefinition,
   parseAgentDefinition,
@@ -69,6 +78,13 @@ export interface Definition {
   factory: Factory;
   agents: Record<DefinedAgent, AgentDefinition>;
   verifyApp: Skill;
+  /** The blueprints the definition or kozo's template has; bugfix's is always there. */
+  blueprints: Partial<Record<WorkClass, Blueprint>> & { bugfix: Blueprint };
+}
+
+/** The blueprint a task of `workClass` runs: its own, else bugfix's. */
+export function blueprintFor(definition: Definition, workClass: WorkClass): Blueprint {
+  return definition.blueprints[workClass] ?? definition.blueprints.bugfix;
 }
 
 export type DefinitionResult =
@@ -108,7 +124,9 @@ export async function readDefinition(
   commit: string | null,
 ): Promise<DefinitionResult> {
   const issues: string[] = [];
-  const read = async (path: keyof typeof factoryTemplate): Promise<string> => {
+  const template = factoryTemplate as Record<string, string | undefined>;
+  /** The file at `path`, else the template's, else null. */
+  const readOptional = async (path: string): Promise<string | null> => {
     try {
       const text =
         commit === null
@@ -116,18 +134,16 @@ export async function readDefinition(
               .text()
               .catch(() => null)
           : await showFile(directory, commit, path);
-      return text ?? factoryTemplate[path];
+      return text ?? template[path] ?? null;
     } catch (error) {
       if (!(error instanceof GitError)) throw error;
       issues.push(`${path}: ${error.message}`);
-      return factoryTemplate[path];
+      return template[path] ?? null;
     }
   };
-  const parsed = <T>(
-    path: keyof typeof factoryTemplate,
-    text: string,
-    parse: (text: string) => T,
-  ) => {
+  const read = async (path: keyof typeof factoryTemplate): Promise<string> =>
+    (await readOptional(path)) ?? factoryTemplate[path];
+  const parsed = <T>(path: string, text: string, parse: (text: string) => T) => {
     try {
       return parse(text);
     } catch (error) {
@@ -148,7 +164,17 @@ export async function readDefinition(
     await read("skills/verify-app/SKILL.md"),
     parseSkill,
   );
-  if (issues.length > 0 || !factory || !verifyApp) return { ok: false, commit, issues };
+  const blueprints: Partial<Record<WorkClass, Blueprint>> = {};
+  for (const workClass of workClassSchema.options) {
+    const path = `blueprints/${workClass}.yml`;
+    const text = await readOptional(path);
+    if (text === null) continue;
+    const result = parseBlueprint(text);
+    if (result.ok) blueprints[workClass] = result.value;
+    else issues.push(...result.issues.map((issue) => `${path}: ${issue}`));
+  }
+  const bugfix = blueprints.bugfix;
+  if (issues.length > 0 || !factory || !verifyApp || !bugfix) return { ok: false, commit, issues };
   return {
     ok: true,
     definition: {
@@ -156,6 +182,7 @@ export async function readDefinition(
       factory,
       agents: agents as Record<DefinedAgent, AgentDefinition>,
       verifyApp,
+      blueprints: { ...blueprints, bugfix },
     },
   };
 }
