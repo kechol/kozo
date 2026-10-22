@@ -26,6 +26,7 @@ import {
   type TaskState,
   triageAnswerJsonSchema,
   triageAnswerSchema,
+  type VerdictFile,
   type WorkClass,
   wrapRequest,
 } from "@kozo/core";
@@ -1019,7 +1020,7 @@ export class Runner {
         case "handoff": {
           await enter(node, "D");
           await this.moveTask(current, "handoff", run, "the checks of its risk tier passed");
-          await this.writeHandoffReport(item.ref, current, run, repository.branch, worktree);
+          await this.writeHandoffReport(item.ref, current, repository.branch, worktree);
           await exit(node, true);
           break;
         }
@@ -1145,26 +1146,40 @@ export class Runner {
   private async writeHandoffReport(
     itemRef: string,
     task: TaskState,
-    run: string,
     base: string,
     worktree: string,
   ) {
     const item = this.store.state.items[itemRef];
-    const files = runFiles(this.home, run);
-    const report = (await Bun.file(files.report)
-      .json()
-      .catch(() => null)) as RunReport | null;
-    const verdict = (await Bun.file(files.verdict)
-      .json()
-      .catch(() => ({}))) as {
-      review?: { verdict: string; summary: string };
-      verify?: { result: string; summary: string };
+    // A task resumed in a new run left its report and verdicts in the runs before it.
+    const runs = task.runs
+      .filter((ref) => this.store.state.runs[ref]?.agent === "implement")
+      .map((ref) => runFiles(this.home, ref));
+    const reports: (RunReport | null)[] = [];
+    const verdicts: VerdictFile[] = [];
+    const decisionLogs: string[] = [];
+    for (const files of runs) {
+      reports.push(
+        await Bun.file(files.report)
+          .json()
+          .catch(() => null),
+      );
+      verdicts.push(
+        await Bun.file(files.verdict)
+          .json()
+          .catch(() => ({})),
+      );
+      decisionLogs.push(
+        await Bun.file(files.decisions)
+          .text()
+          .catch(() => ""),
+      );
+    }
+    const report = reports.findLast((entry) => entry !== null) ?? null;
+    const verdict = {
+      review: verdicts.findLast((entry) => entry.review)?.review,
+      verify: verdicts.findLast((entry) => entry.verify)?.verify,
     };
-    const decisions = (
-      await Bun.file(files.decisions)
-        .text()
-        .catch(() => "")
-    ).trim();
+    const decisions = decisionLogs.join("").trim();
     const stat = await git(worktree, ["diff", "--stat", `${base}...HEAD`]).catch((error) =>
       error instanceof GitError ? "" : Promise.reject(error),
     );

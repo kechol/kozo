@@ -778,6 +778,10 @@ describe("the minimal path", () => {
     await env.settle();
     expect(env.store.state.tasks[task]?.stage).toBe("handoff");
     expect(env.agent.requests).toHaveLength(2);
+    const handoff = await Bun.file(join(env.home.items, ref, "handoff-t1.md")).text();
+    expect(handoff).toContain(report.summary);
+    expect(handoff).toContain("- review: accept");
+    expect(handoff).toContain("Kept the label");
   }, 120_000);
 
   test("three sessions in a row that fail on the API pause the factory", async () => {
