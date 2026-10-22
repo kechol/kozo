@@ -16,7 +16,6 @@ import {
   type Plan,
   planNeeded,
   planSchema,
-  type RiskTier,
   type RunReport,
   renderBrief,
   runFiles,
@@ -69,6 +68,7 @@ import { type ItemFile, itemDirectory, readItemFile, requestText } from "./item-
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { checkPlan } from "./plan-checks.ts";
 import { defaultBranch } from "./repository.ts";
+import { firstCodeChange, layersFor } from "./risk.ts";
 import { type Envelope, pumpSession, type SessionResult } from "./session-pump.ts";
 import {
   claimTask,
@@ -104,16 +104,6 @@ export type Node = (typeof bugfixNodes)[number];
 
 /** How one attempt ended: done, or retried in a new run until `rounds` attempts. */
 type Attempt = { kind: "done" } | { kind: "retry"; failure: string; rounds: number };
-
-/** What each risk tier verifies beyond diff-guard and review, which every tier runs. */
-const layersFor: Record<RiskTier, { gates: GateLevel; prove: boolean; verify: boolean }> = {
-  low: { gates: "fast", prove: false, verify: false },
-  normal: { gates: "full", prove: true, verify: true },
-  high: { gates: "deep", prove: true, verify: true },
-};
-
-/** The files a diff may change and still be the documentation-only change of the low tier. */
-const documentation = /\.(md|mdx|markdown|rst|txt|adoc)$/i;
 
 /** A plan as the triage and plan agents write it, without the fields kozod adds. */
 const draftOf = ({ version: _version, item: _item, ...draft }: Plan) => draft;
@@ -915,13 +905,7 @@ export class Runner {
         case "verify-deterministic": {
           await enter(node, "D");
           if (current.risk === "low") {
-            const changed = await git(worktree, [
-              "diff",
-              "--name-only",
-              "-z",
-              `${repository.branch}...HEAD`,
-            ]);
-            const code = changed.split("\0").find((path) => path && !documentation.test(path));
+            const code = await firstCodeChange(worktree, repository.branch);
             if (code) {
               await this.store.append({
                 ...envelope,
