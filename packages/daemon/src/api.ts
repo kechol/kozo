@@ -152,11 +152,16 @@ export function createApi({
     return c.json(location ? { ...result, diff: location } : result);
   });
 
+  const exists = (ref: string) => {
+    const state = store.state;
+    return ref in state.items || ref in state.tasks || ref in state.runs;
+  };
+
   app.get("/api/refs/:ref/events", (c) => {
     const found = reference(c);
     if (found instanceof Response) return found;
     const [ref, parsedReference] = found;
-    if (!detail(store.db, ref, parsedReference)) return error(c, 404, `${ref} does not exist`);
+    if (!exists(ref)) return error(c, 404, `${ref} does not exist`);
     const after = Number(c.req.header("last-event-id") ?? c.req.query("after") ?? 0) || 0;
     const column = eventColumn[parsedReference.kind];
     const matches = (event: Event) => (column === "run_id" ? event.run_id : event[column]) === ref;
@@ -229,7 +234,7 @@ export function createApi({
         body.error.issues.map((i) => `${i.path.join(".") || "<body>"}: ${i.message}`),
       );
     }
-    if (!detail(store.db, ref, parsedReference)) return error(c, 404, `${ref} does not exist`);
+    if (!exists(ref)) return error(c, 404, `${ref} does not exist`);
     return c.json(await commands.act(ref, parsedReference, verb.data, body.data));
   });
 

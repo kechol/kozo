@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { type Event, type FactoryState, itemStage } from "@kozo/core";
+import { type Event, type FactoryState, itemStage, recordOnlyTypes } from "@kozo/core";
 
 export const indexSchemaVersion = 1;
 
@@ -49,6 +49,8 @@ export class IndexDb {
   static create(path: string): IndexDb {
     const db = new Database(path, { create: true, strict: true });
     db.exec("pragma journal_mode = wal");
+    // The index is rebuilt from the event logs at every start, so it needs no durability.
+    db.exec("pragma synchronous = off");
     const tables = db
       .query<{ name: string }, []>("select name from sqlite_master where type = 'table'")
       .all();
@@ -62,8 +64,11 @@ export class IndexDb {
     return new IndexDb(db);
   }
 
-  /** Records one event and the current rows of what it touched, in one transaction. */
-  record(event: Event, state: FactoryState): number {
+  /**
+   * Records one event, given as its line when the caller has it, and the current rows of what
+   * it touched, in one transaction.
+   */
+  record(event: Event, state: FactoryState, line = JSON.stringify(event)): number {
     let id = 0;
     this.db.transaction(() => {
       const result = this.db
@@ -78,10 +83,10 @@ export class IndexDb {
           event.item,
           event.task,
           event.type,
-          JSON.stringify(event),
+          line,
         );
       id = Number(result.lastInsertRowid);
-      this.project(event, state);
+      if (!recordOnlyTypes.has(event.type)) this.project(event, state);
     })();
     return id;
   }
@@ -144,11 +149,6 @@ export class IndexDb {
           run.startedAt,
           run.endedAt,
         );
-    }
-    if (event.type === "factory.changed") {
-      this.db
-        .query("insert or replace into meta (key, value) values ('paused', ?)")
-        .run(state.paused ? (state.pausedReason ?? "") : "");
     }
   }
 

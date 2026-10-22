@@ -6,6 +6,7 @@ import {
   type Event,
   type EventLog,
   type EventType,
+  emptyState,
   eventSchema,
   type FactoryState,
   formatReference,
@@ -14,7 +15,7 @@ import {
   mergeLogs,
   parseEventLog,
   parseReference,
-  replay,
+  recordOnlyTypes,
   runFiles,
   sealIssues,
   sha256,
@@ -38,6 +39,18 @@ export type NewEvent = {
 }[EventType];
 
 export type Listener = (event: Event, id: number) => void;
+
+/** Builds the index from `events` in one transaction and returns the state they replay into. */
+function fill(index: IndexDb, events: readonly Event[]): FactoryState {
+  const state = emptyState();
+  index.db.transaction(() => {
+    for (const event of events) {
+      applyEvent(state, event);
+      index.record(event, state);
+    }
+  })();
+  return state;
+}
 
 /** Six random lowercase letters and digits. */
 function newFactoryId(): string {
@@ -99,18 +112,20 @@ export class EventStore {
     await mkdir(home.runs, { recursive: true });
     const logs = await readLogs(home);
     const events = mergeLogs(logs.map((log) => log.events));
+    const index = IndexDb.create(home.db);
     let state: FactoryState;
     try {
-      state = replay(events);
+      state = fill(index, events);
     } catch (error) {
+      index.close();
       throw new EventLogError(`the event logs do not replay: ${(error as Error).message}`);
     }
-    const store = new EventStore(home, state, IndexDb.create(home.db));
+    const store = new EventStore(home, state, index);
     for (const log of logs) {
       const end = log.events.at(-1);
       if (end) store.logs.set(end.run_id ?? "", { seq: end.seq + 1, last: log.last });
     }
-    store.fillIndex(events);
+    for (const ref of [...Object.keys(state.runs), ...Object.keys(state.items)]) store.count(ref);
     // A run that ended just before kozod stopped may not have its seal yet.
     for (const run of Object.values(state.runs)) {
       if (isRunOver(run.state) && !run.sealed) await store.serial(() => store.seal(run.ref));
@@ -140,16 +155,8 @@ export class EventStore {
     await this.serial(async () => {
       this.index.close();
       this.index = IndexDb.create(this.home.db);
-      this.fillIndex(mergeLogs((await readLogs(this.home)).map((log) => log.events)));
+      fill(this.index, mergeLogs((await readLogs(this.home)).map((log) => log.events)));
     });
-  }
-
-  private fillIndex(events: Event[]) {
-    const state = replay([]);
-    for (const event of events) {
-      applyEvent(state, event);
-      this.index.record(event, state);
-    }
   }
 
   /**
@@ -196,7 +203,9 @@ export class EventStore {
       type: event.type,
       data: event.data,
     });
-    const next = structuredClone(this.current);
+    // A record-only event changes nothing but lastTs, so a shallow copy is enough.
+    const recordOnly = recordOnlyTypes.has(line.type);
+    const next = recordOnly ? { ...this.current } : structuredClone(this.current);
     applyEvent(next, line);
     const path =
       line.run_id === null ? this.home.eventsLog : runFiles(this.home, line.run_id).events;
@@ -212,7 +221,9 @@ export class EventStore {
     this.current = next;
     this.lastMs = now;
     this.logs.set(log, { seq: line.seq + 1, last: sha256(text) });
-    const id = this.index.record(line, next);
+    if (line.type === "run.started" && line.run_id) this.count(line.run_id);
+    if (line.type === "item.created" && line.item) this.count(line.item);
+    const id = this.index.record(line, next, text);
     for (const listener of this.listeners) listener(line, id);
     return line;
   }
@@ -231,23 +242,23 @@ export class EventStore {
     return () => this.listeners.delete(listener);
   }
 
+  /** Keeps the run and local item counters past a reference in use. */
+  private count(ref: string) {
+    const reference = parseReference(ref);
+    if (reference?.kind === "run") this.lastRun = Math.max(this.lastRun, reference.run);
+    if (reference?.kind === "item" && reference.item.repo === null)
+      this.lastItem = Math.max(this.lastItem, reference.item.number);
+  }
+
   /** Reserves the next free run reference. */
   nextRun(): string {
-    const numbers = Object.keys(this.current.runs).map((ref) => {
-      const reference = parseReference(ref);
-      return reference?.kind === "run" ? reference.run : 0;
-    });
-    this.lastRun = Math.max(this.lastRun, ...numbers) + 1;
+    this.lastRun += 1;
     return formatReference({ kind: "run", run: this.lastRun });
   }
 
   /** Reserves the next free local item reference, `K-<n>`. */
   nextLocalItem(): string {
-    const numbers = Object.keys(this.current.items).map((ref) => {
-      const reference = parseReference(ref);
-      return reference?.kind === "item" && reference.item.repo === null ? reference.item.number : 0;
-    });
-    this.lastItem = Math.max(this.lastItem, ...numbers) + 1;
+    this.lastItem += 1;
     return formatReference({ kind: "item", item: { repo: null, number: this.lastItem } });
   }
 

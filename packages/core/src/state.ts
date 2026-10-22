@@ -1,5 +1,5 @@
 import type { AutonomyLevel, Charter, WorkClass } from "./charter.ts";
-import type { Event, NoteKind } from "./event.ts";
+import type { Event, EventType, NoteKind } from "./event.ts";
 import type { Plan } from "./plan.ts";
 import type { ReviewVerdict } from "./verdict.ts";
 import { type HoldKind, type RunState, type Stage, stageSchema } from "./work-model.ts";
@@ -91,6 +91,26 @@ export interface FactoryState {
   lastTs: string | null;
 }
 
+/**
+ * The event types that `applyEvent` only checks and orders: they leave the state as it is but
+ * for `lastTs`, so kozod applies them without copying the state or touching the index rows.
+ */
+export const recordOnlyTypes: ReadonlySet<EventType> = new Set<EventType>([
+  "session.started",
+  "node.enter",
+  "node.exit",
+  "agent.message",
+  "tool.call",
+  "guard.denied",
+  "tool.result",
+  "instruction.delivered",
+  "gates.result",
+  "handoff.ready",
+  "review.verdict",
+  "external.write",
+  "cost.tick",
+]);
+
 /** An event that the current state does not allow, which means a broken log or a kozod bug. */
 export class StateError extends Error {}
 
@@ -177,10 +197,10 @@ export function applyEvent(state: FactoryState, event: Event): void {
   if (state.lastTs !== null && event.ts <= state.lastTs) {
     throw new StateError(`event ${event.type} at ${event.ts} is not after ${state.lastTs}`);
   }
-  state.lastTs = event.ts;
   if (event.run_id !== null && state.runs[event.run_id]?.sealed) {
     throw new StateError(`run ${event.run_id} is sealed`);
   }
+  state.lastTs = event.ts;
   const item = event.item === null ? undefined : state.items[event.item];
   const task = event.task === null ? undefined : state.tasks[event.task];
   const subjectOf = (target: "item" | "task") =>

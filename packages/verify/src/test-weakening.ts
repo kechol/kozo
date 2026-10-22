@@ -374,8 +374,9 @@ export async function includedFiles(
   let frontier = [...files.keys()];
   for (let depth = 0; depth < 4 && frontier.length > 0; depth += 1) {
     const next: string[] = [];
-    for (const path of frontier) {
-      const text = await read(path);
+    const texts = await Promise.all(frontier.map(read));
+    for (const [index, path] of frontier.entries()) {
+      const text = texts[index] ?? null;
       const owner = all.get(path);
       if (text === null || !owner) continue;
       for (const match of text.matchAll(/^\s*(?:-?include|sinclude|source|\.)\s+([^;&|#\n]+)/gm)) {
@@ -384,11 +385,11 @@ export async function includedFiles(
             posix.join(owner.directory, operand),
             posix.join(posix.dirname(path), operand),
           ].map(clean);
-          const expanded = candidates.flatMap((candidate) =>
-            /[*?[]/.test(candidate)
-              ? knownFiles.filter((file) => new Bun.Glob(candidate).match(file))
-              : [candidate],
-          );
+          const expanded = candidates.flatMap((candidate) => {
+            if (!/[*?[]/.test(candidate)) return [candidate];
+            const glob = new Bun.Glob(candidate);
+            return knownFiles.filter((file) => glob.match(file));
+          });
           for (const included of expanded) {
             if (included === "" || all.has(included)) continue;
             all.set(included, owner);
