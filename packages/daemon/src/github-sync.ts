@@ -185,7 +185,7 @@ export class GitHubSync {
     for (const task of item.tasks) {
       const state = this.store.state.tasks[task];
       const url = pulls.get(task);
-      if (!state || state.stage !== "handoff" || state.hold || !url) continue;
+      if (state?.stage !== "handoff" || state.hold || !url) continue;
       const branch = taskBranch(this.store.factoryId, task);
       const pull = (await this.github.pullsFor(github, branch)).find((entry) => entry.url === url);
       if (pull?.state !== "closed") continue;
