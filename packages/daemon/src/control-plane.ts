@@ -322,7 +322,7 @@ export class ControlPlane {
       if (!state || isClosed(state.stage)) continue;
       const running = this.runner?.sessionFor(task);
       if (running) this.runner?.stopSession(running);
-      if (done) await this.clearHold("task", task);
+      await this.clearHold("task", task);
       await this.move("task", task, to, reason);
       if (!done) await this.runner?.release(task, true);
     }
@@ -332,7 +332,7 @@ export class ControlPlane {
     ) {
       const owner = this.store.state.items[item];
       if (owner && !isClosed(owner.stage)) {
-        if (done) await this.clearHold("item", item);
+        await this.clearHold("item", item);
         await this.move("item", item, to, reason);
       }
     }

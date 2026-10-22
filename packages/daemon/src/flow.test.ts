@@ -363,9 +363,11 @@ describe("the minimal path", () => {
     expect(env.agent.requests).toHaveLength(3);
     await env.control.resumeFactory();
 
+    await env.control.act(taskRef, task, "pause", {});
     await env.control.act(taskRef, task, "close", { cancel: "not needed after all" });
     await env.scheduler.idle();
     expect(env.store.state.tasks[taskRef]?.stage).toBe("cancelled");
+    expect(env.store.state.tasks[taskRef]?.hold).toBeNull();
     expect(env.store.state.items[ref]?.stage).toBe("cancelled");
     expect(await env.repo.git("branch", "--list", "kozo/*")).toBe("");
     expect((await env.control.act(taskRef, task, "close", { done: true })).message).toBe(
