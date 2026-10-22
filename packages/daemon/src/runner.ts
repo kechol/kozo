@@ -50,6 +50,7 @@ import {
   listFiles,
   modelFor,
   packageCaches,
+  packageLocks,
   proveLine,
   readBaseDocuments,
   runCommand,
@@ -141,8 +142,9 @@ export class Runner {
   /**
    * The sandbox of the commands run in `worktree`: they read neither the factory's home, which
    * holds the API token and every other task, nor credentials, and write only the worktree, but
-   * not the file that ties it to its repository. Only prepare, which installs the base's
-   * dependencies before any diff exists, reaches other hosts and writes the package caches.
+   * not the file that ties it to its repository, and pnpm's locks. Only prepare, which installs
+   * the base's dependencies before any diff exists, reaches other hosts and writes the package
+   * caches.
    */
   private confined(worktree: string, prepare = false): Confined {
     return {
@@ -150,7 +152,7 @@ export class Runner {
       sandbox: {
         denyRead: [this.home.root, ...deniedCredentials(process.env)],
         allowRead: [worktree],
-        allowWrite: [worktree, ...(prepare ? packageCaches : [])],
+        allowWrite: [worktree, ...packageLocks, ...(prepare ? packageCaches : [])],
         denyWrite: [join(worktree, ".git")],
         network: prepare ? "any" : "local",
       },

@@ -5,7 +5,7 @@ import { tempDirectory } from "@kozo/testing";
 import { runCommand } from "./command.ts";
 import {
   type CommandSandbox,
-  packageCaches,
+  packageLocks,
   platformConfine,
   seatbelt,
   seatbeltProfile,
@@ -19,11 +19,9 @@ const empty: CommandSandbox = {
   network: "local",
 };
 
-describe("packageCaches", () => {
+describe("packageLocks", () => {
   test("holds the lock directories pnpm keeps in /tmp whatever TMPDIR says", () => {
-    expect(packageCaches).toContain(
-      `/private/tmp/pnpm-store-operation-locks-${process.getuid?.()}`,
-    );
+    expect(packageLocks).toContain(`/private/tmp/pnpm-store-operation-locks-${process.getuid?.()}`);
   });
 });
 

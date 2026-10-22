@@ -53,27 +53,29 @@ export function deniedCredentials(env: Record<string, string | undefined>): stri
 
 /**
  * The package managers' download caches in the home directory, which prepare writes so that an
- * install reuses what earlier tasks and the human downloaded, and the lock directories pnpm
- * keeps in /tmp whatever TMPDIR says. The gates and prove only read them.
+ * install reuses what earlier tasks and the human downloaded. The gates and prove only read them.
  */
 export const packageCaches = [
-  ...[
-    ".npm",
-    ".cache",
-    ".bun/install/cache",
-    ".yarn/berry/cache",
-    "Library/pnpm",
-    "Library/Caches/pnpm",
-    "Library/Caches/Yarn",
-    "Library/Caches/ms-playwright",
-    "Library/Caches/pip",
-    ".cargo/registry",
-    "go/pkg/mod",
-  ].map((path) => join(homedir(), path)),
-  ...["pnpm-dir-locks", "pnpm-store-operation-locks"].map(
-    (name) => `/private/tmp/${name}-${process.getuid?.() ?? 0}`,
-  ),
-];
+  ".npm",
+  ".cache",
+  ".bun/install/cache",
+  ".yarn/berry/cache",
+  "Library/pnpm",
+  "Library/Caches/pnpm",
+  "Library/Caches/Yarn",
+  "Library/Caches/ms-playwright",
+  "Library/Caches/pip",
+  ".cargo/registry",
+  "go/pkg/mod",
+].map((path) => join(homedir(), path));
+
+/**
+ * The lock directories pnpm keeps in /tmp whatever TMPDIR says, which every pnpm command takes,
+ * `pnpm run` included, so every confined command may write them.
+ */
+export const packageLocks = ["pnpm-dir-locks", "pnpm-store-operation-locks"].map(
+  (name) => `/private/tmp/${name}-${process.getuid?.() ?? 0}`,
+);
 
 const quoted = (path: string) => `"${path.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 
