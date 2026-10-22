@@ -280,7 +280,9 @@ export function applyEvent(state: FactoryState, event: Event): void {
       }
       if (event.data.target === "task" && task) {
         if (task.stage === "reviewing" && event.data.to === "building") task.revisions += 1;
-        if (task.stage === "handoff" && event.data.to === "building") task.handoffFixes += 1;
+        // A human's change request sends a task back as well, but only kozod's sends are fix rounds.
+        if (task.stage === "handoff" && event.data.to === "building" && event.data.by === "kozod")
+          task.handoffFixes += 1;
       }
       if (event.data.target === "item" && item && event.data.to === "triage") item.rejections = 0;
       subject.stage = event.data.to;

@@ -4,6 +4,7 @@ import {
   type GitHub,
   type GitHubIssue,
   type GitHubPermission,
+  type GitHubPull,
   type HoldKind,
   isClosed,
   itemStage,
@@ -14,7 +15,7 @@ import {
   stageSchema,
   wrapRequest,
 } from "@kozo/core";
-import { defaultBranch } from "@kozo/verify";
+import { defaultBranch, git } from "@kozo/verify";
 import type { ControlPlane } from "./control-plane.ts";
 import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
@@ -23,7 +24,7 @@ import { quiet, statusBody } from "./github-report.ts";
 import { enqueue } from "./instructions.ts";
 import { readItemFile, requestText, writeItemFile } from "./item-file.ts";
 import { readCharter } from "./repository.ts";
-import { taskBranch } from "./worktrees.ts";
+import { taskBranch, worktreePath } from "./worktrees.ts";
 
 /** The label a human adds to an Issue to approve its start. */
 export const acceptLabel = "kozo:accept";
@@ -126,7 +127,7 @@ export class GitHubSync {
       await this.followEdit(github, ref, issue);
       await this.mirror(github, ref, issue);
       await this.publish(path, github, ref, issue.number);
-      await this.followPulls(github, ref);
+      await this.followPulls(path, github, ref);
       await this.closeWhenComplete(github, ref, issue.number);
     }
   }
@@ -216,8 +217,11 @@ export class GitHubSync {
     }
   }
 
-  /** Holds a task for attention when its pull request was closed without a merge. */
-  private async followPulls(github: string, ref: string) {
+  /**
+   * Follows each handed-off task's pull request: closed without a merge, it holds the task for
+   * attention; open, it may carry a human's commits, a change request or failing checks.
+   */
+  private async followPulls(path: string, github: string, ref: string) {
     const item = this.store.state.items[ref];
     if (!item) return;
     const pulls = this.pulls(ref);
@@ -227,19 +231,118 @@ export class GitHubSync {
       if (state?.stage !== "handoff" || state.hold || !url) continue;
       const branch = taskBranch(this.store.factoryId, task);
       const pull = (await this.github.pullsFor(github, branch)).find((entry) => entry.url === url);
-      if (pull?.state !== "closed") continue;
+      if (pull?.state === "closed") {
+        await this.holdTask(ref, task, `${url} was closed without a merge`);
+        continue;
+      }
+      const head = this.written(ref, task, "push").at(-1)?.split(" ")[1];
+      if (pull?.state === "open" && head)
+        await this.followPull(path, github, ref, task, pull, head);
+    }
+  }
+
+  /**
+   * One open pull request whose task kozod pushed at `head`. A human's commits on top of it come
+   * into the task branch, where the reconciler sends the task back to Reviewing; a writer's
+   * change request on `head` sends it back to Building with the review as their instruction;
+   * failing checks on `head` do so within the Charter's `ci_fix_rounds`.
+   */
+  private async followPull(
+    path: string,
+    github: string,
+    item: string,
+    task: string,
+    pull: GitHubPull,
+    head: string,
+  ) {
+    const branch = taskBranch(this.store.factoryId, task);
+    const remote = await git(path, [
+      "rev-parse",
+      "--verify",
+      "--quiet",
+      `refs/remotes/origin/${branch}`,
+    ])
+      .then((sha) => sha.trim())
+      .catch(() => null);
+    const ancestor = (older: string, newer: string) =>
+      git(path, ["merge-base", "--is-ancestor", older, newer]).then(
+        () => true,
+        () => false,
+      );
+    // A tracking ref behind `head` has not caught up with kozod's own push yet.
+    if (remote && remote !== head && !(await ancestor(remote, head))) {
+      const forward = await ancestor(head, remote);
+      const worktree = worktreePath(this.home, path, task);
+      if (
+        forward &&
+        (await git(worktree, ["merge", "--ff-only", "--quiet", remote]).then(
+          () => true,
+          () => false,
+        ))
+      )
+        return;
+      await this.holdTask(
+        item,
+        task,
+        `${branch} on GitHub no longer builds on ${head.slice(0, 12)}; kozo retry continues from kozod's commit`,
+      );
+      return;
+    }
+    const requested = pull.reviews.filter(
+      (review) => review.state === "CHANGES_REQUESTED" && review.commit === head,
+    );
+    for (const review of requested.reverse()) {
+      if (!writers.includes(await this.github.permission(github, review.author))) continue;
       await this.store.append({
-        type: "hold.set",
-        item: ref,
+        type: "note.added",
+        item,
         task,
         data: {
-          target: "task",
-          hold: "attention",
-          by: "kozod",
-          reason: `${url} was closed without a merge`,
+          kind: "instruction",
+          text: review.body.trim() || `${review.author} requested changes`,
         },
       });
+      await this.sendBack(item, task, "human", `${review.author} requested changes on ${pull.url}`);
+      return;
     }
+    if (pull.headSha !== head) return;
+    const failed = (await this.github.checks(github, pull.number))
+      .filter((check) => check.bucket === "fail")
+      .map((check) => check.name);
+    if (failed.length === 0) return;
+    const charter = await readCharter(path, "github");
+    const rounds = charter.ok ? charter.charter.limits.ci_fix_rounds : 0;
+    const fixes = this.store.state.tasks[task]?.handoffFixes ?? 0;
+    if (fixes >= rounds) {
+      await this.holdTask(item, task, `CI failed after ${fixes} fixes: ${failed.join(", ")}`);
+      return;
+    }
+    await this.store.append({
+      type: "note.added",
+      item,
+      task,
+      data: { kind: "check", text: `The CI checks ${failed.join(", ")} failed on ${head}.` },
+    });
+    await this.sendBack(item, task, "kozod", `CI failed: ${failed.join(", ")}`);
+  }
+
+  private async sendBack(item: string, task: string, by: "kozod" | "human", reason: string) {
+    await this.store.append({
+      type: "stage.changed",
+      item,
+      task,
+      data: { target: "task", from: "handoff", to: "building", by, reason: reason.slice(0, 2000) },
+    });
+  }
+
+  private async holdTask(item: string, task: string, reason: string) {
+    if (this.store.state.tasks[task]?.hold) return;
+    await this.store.append({
+      type: "hold.set",
+      item,
+      task,
+      data: { target: "task", hold: "attention", by: "kozod", reason },
+    });
   }
 
   /** Closes the Issue as completed once kozod has checked its item complete. */

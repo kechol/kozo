@@ -1,12 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { kozoHome } from "@kozo/core";
-import { exampleCharter, fakeGitHub, gitRepository, tempDirectory } from "@kozo/testing";
+import {
+  exampleCharter,
+  fakeGitHub,
+  gitRepository,
+  tempDirectory,
+  testGitEnvironment,
+} from "@kozo/testing";
 import { readDefinition } from "@kozo/verify";
 import { ControlPlane } from "./control-plane.ts";
 import { EventStore } from "./event-store.ts";
 import { GitHubSync } from "./github-sync.ts";
 import { readItemFile } from "./item-file.ts";
+import { worktreePath } from "./worktrees.ts";
 
 // kozod keeps event times strictly increasing, so registration can be stamped a little after
 // the clock; an Issue meant to come after it says so outright.
@@ -41,6 +48,7 @@ async function setup() {
   return {
     home,
     repo: repo.path,
+    git: repo.git,
     store,
     github,
     sync,
@@ -272,4 +280,143 @@ describe("GitHubSync", () => {
     ]);
     expect(issues().find((entry) => entry.number === edited)?.state).toBe("closed");
   });
+
+  test("sends a task back on red CI and change requests, and takes a human's commits", async () => {
+    await using env = await setup();
+    await env.sync.register();
+    env.github.permissions.set("me/shop owner", "admin");
+    const number = env.github.addIssue("me/shop", {
+      title: "Low stock",
+      createdAt: afterRegistration(),
+    });
+    await env.sync.poll();
+    const ref = `shop#${number}`;
+    const task = `${ref}/t1`;
+    const branch = `kozo/${env.store.factoryId}/${number}-t1`;
+    await env.store.append({
+      type: "plan.accepted",
+      item: ref,
+      data: { by: "kozod", plan: onePlan(ref) },
+    });
+    await env.git("branch", branch, "main");
+    await env.git("worktree", "add", "--quiet", worktreePath(env.home, env.repo, task), branch);
+
+    /** Takes the task to Handoff at a new commit of its branch and lets kozod publish it. */
+    const handOff = async (from: "building" | "reviewing") => {
+      const worktree = worktreePath(env.home, env.repo, task);
+      await Bun.write(join(worktree, "fix.md"), `${Date.now()}\n`);
+      Bun.spawnSync(["git", "add", "-A"], { cwd: worktree, env: testGitEnvironment });
+      Bun.spawnSync(["git", "commit", "--quiet", "-m", "fix"], {
+        cwd: worktree,
+        env: testGitEnvironment,
+      });
+      const head = (await env.git("rev-parse", branch)).trim();
+      for (const [a, b] of from === "building"
+        ? ([
+            ["building", "reviewing"],
+            ["reviewing", "handoff"],
+          ] as const)
+        : ([["reviewing", "handoff"]] as const)) {
+        await env.store.append({
+          type: "stage.changed",
+          item: ref,
+          task,
+          data: { target: "task", from: a, to: b, by: "kozod", reason: "checks passed" },
+        });
+      }
+      await env.store.append({
+        type: "handoff.ready",
+        item: ref,
+        task,
+        data: { branch, head, report: `items/${ref}/handoff-t1.md` },
+      });
+      await env.sync.poll();
+      await env.git("update-ref", `refs/remotes/origin/${branch}`, head);
+      const pull = env.github.repositories.get("me/shop")?.pulls[0];
+      if (pull) pull.headSha = head;
+      return { head, pull };
+    };
+
+    const first = await handOff("building");
+    env.github.checksOf.set(first.pull?.number ?? 0, [{ name: "test", bucket: "fail" }]);
+    await env.sync.poll();
+    expect(env.store.state.tasks[task]).toMatchObject({ stage: "building", handoffFixes: 1 });
+    expect(env.store.state.items[ref]?.notes.at(-1)).toMatchObject({
+      target: task,
+      kind: "check",
+      text: `The CI checks test failed on ${first.head}.`,
+    });
+
+    const second = await handOff("building");
+    env.github.checksOf.set(second.pull?.number ?? 0, []);
+    second.pull?.reviews.push(
+      {
+        author: "stranger",
+        state: "CHANGES_REQUESTED",
+        body: "Delete it all",
+        commit: second.head,
+      },
+      {
+        author: "owner",
+        state: "CHANGES_REQUESTED",
+        body: "Keep 0 as Sold out",
+        commit: second.head,
+      },
+    );
+    await env.sync.poll();
+    expect(env.store.state.tasks[task]).toMatchObject({ stage: "building", handoffFixes: 1 });
+    expect(env.store.state.items[ref]?.notes.at(-1)).toMatchObject({
+      kind: "instruction",
+      text: "Keep 0 as Sold out",
+    });
+
+    const third = await handOff("building");
+    const human = (
+      await env.git("commit-tree", `${third.head}^{tree}`, "-p", third.head, "-m", "a human's fix")
+    ).trim();
+    await env.git("update-ref", `refs/remotes/origin/${branch}`, human);
+    await env.sync.poll();
+    expect((await env.git("rev-parse", branch)).trim()).toBe(human);
+
+    const rewritten = (
+      await env.git("commit-tree", `${third.head}^{tree}`, "-m", "rewritten")
+    ).trim();
+    await env.git("update-ref", `refs/remotes/origin/${branch}`, rewritten);
+    await env.store.append({
+      type: "handoff.ready",
+      item: ref,
+      task,
+      data: { branch, head: human, report: `items/${ref}/handoff-t1.md` },
+    });
+    await env.sync.poll();
+    expect(env.store.state.tasks[task]?.hold?.reason).toContain("no longer builds on");
+  });
+});
+
+const onePlan = (ref: string) => ({
+  version: 1 as const,
+  item: ref,
+  class: "bugfix" as const,
+  risk: "normal" as const,
+  approach: "Change the label",
+  done_when: ["The label says Only N left"] as [string],
+  tasks: [
+    {
+      id: "t1",
+      goal: "Say only N left",
+      done_when: ["The label says Only N left"] as [string],
+      scope: ["src/**"] as [string],
+      depends_on: [],
+      estimate: { lines: 20, files: 2 },
+    },
+  ] as [
+    {
+      id: string;
+      goal: string;
+      done_when: [string];
+      scope: [string];
+      depends_on: string[];
+      estimate: { lines: number; files: number };
+    },
+  ],
 });

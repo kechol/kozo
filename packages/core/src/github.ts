@@ -30,6 +30,15 @@ export interface GitHubPull {
   head: string;
   headSha: string;
   mergeCommit: string | null;
+  reviews: GitHubReview[];
+}
+
+export interface GitHubReview {
+  author: string;
+  state: "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISMISSED" | "PENDING";
+  body: string;
+  /** The commit the review was made on. */
+  commit: string;
 }
 
 export interface GitHubCheck {

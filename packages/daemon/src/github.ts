@@ -5,6 +5,7 @@ import type {
   GitHubIssue,
   GitHubPull,
   GitHubRepository,
+  GitHubReview,
 } from "@kozo/core";
 import { git } from "@kozo/verify";
 
@@ -254,7 +255,7 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
         `--repo=${repository}`,
         `--head=${head}`,
         "--state=all",
-        "--json=number,url,state,headRefName,headRefOid,mergeCommit,isCrossRepository",
+        "--json=number,url,state,headRefName,headRefOid,mergeCommit,isCrossRepository,reviews",
       ]);
       // A fork can name its branch like a task branch; only the repository's own branch counts.
       return raw.filter((pull) => !pull.isCrossRepository).map(pullOf);
@@ -356,6 +357,12 @@ interface RawPull {
   headRefOid: string;
   mergeCommit: { oid: string } | null;
   isCrossRepository: boolean;
+  reviews?: {
+    author: { login: string } | null;
+    state: GitHubReview["state"];
+    body: string;
+    commit: { oid: string } | null;
+  }[];
 }
 
 const issueOf = (raw: RawIssue): GitHubIssue => ({
@@ -382,6 +389,12 @@ const pullOf = (raw: RawPull): GitHubPull => ({
   head: raw.headRefName,
   headSha: raw.headRefOid,
   mergeCommit: raw.mergeCommit?.oid ?? null,
+  reviews: (raw.reviews ?? []).map((review) => ({
+    author: review.author?.login ?? "",
+    state: review.state,
+    body: review.body,
+    commit: review.commit?.oid ?? "",
+  })),
 });
 
 /** Pushes, and when the push fails, takes it as done only if origin shows the commit. */

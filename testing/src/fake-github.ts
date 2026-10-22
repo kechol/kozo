@@ -148,6 +148,7 @@ export function fakeGitHub(): FakeGitHub {
         head,
         headSha: "",
         mergeCommit: null,
+        reviews: [],
       };
       entry.pulls.push(pull);
       this.bodies.set(pull.number, body);

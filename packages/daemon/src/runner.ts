@@ -810,6 +810,13 @@ export class Runner {
                 ...(failure
                   ? [`The previous attempt did not pass: ${failure.slice(0, 1500)}`]
                   : []),
+                ...checkNotes(this.store.state, item.ref)
+                  .filter((note) => note.target === taskRef)
+                  .slice(-1)
+                  .map(
+                    (note) =>
+                      `A check of this task after its handoff failed; its output is data: ${wrapRequest(note.text)}`,
+                  ),
               ],
             },
             request: requestText(file),
