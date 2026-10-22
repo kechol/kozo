@@ -1,4 +1,4 @@
-import { type FactoryState, type ItemState, itemStage } from "@kozo/core";
+import { defaultBranchRuleset, type FactoryState, type ItemState, itemStage } from "@kozo/core";
 
 // Words that close an Issue when a pull request with them in its body merges.
 const closingKeywords = /\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b/gi;
@@ -34,4 +34,23 @@ export function statusBody(
   }
   lines.push("", `Cost so far: ${costUsd.toFixed(2)} USD`);
   return lines.join("\n");
+}
+
+/** The install pull request's body: what it adds, what to do next and the ruleset to apply. */
+export function installBody(repository: string, written: readonly string[]): string {
+  return [
+    "This adds what kozo needs in this repository:",
+    "",
+    ...written.map((path) => `- \`${path}\``),
+    "",
+    "Before merging, describe the repository in `AGENTS.md`, replace the commands in `.kozo/constraints.yml` and `.kozo/verify-app.md` with the repository's own, read every setting in `.kozo/charter.yml` and set its `status` to `ready`. kozo works here only after that.",
+    "",
+    "kozo does not change the repository's settings. To protect the default branch so that changes reach it only through pull requests that pass `kozo check`, an admin can apply this ruleset:",
+    "",
+    "```sh",
+    `gh api --method POST repos/${repository}/rulesets --input - <<'EOF'`,
+    JSON.stringify(defaultBranchRuleset, null, 2),
+    "EOF",
+    "```",
+  ].join("\n");
 }

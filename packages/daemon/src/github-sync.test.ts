@@ -223,6 +223,26 @@ describe("GitHubSync", () => {
     });
   });
 
+  test("installs kozo's files as one pull request with the ruleset to apply", async () => {
+    await using env = await setup();
+    const first = await env.sync.install(env.repo);
+    expect(first.message).toStartWith("opened https://github.example/me/shop/pull/");
+    const branch = `kozo/${env.store.factoryId}/install`;
+    const pull = env.github.repositories.get("me/shop")?.pulls[0];
+    expect(pull?.head).toBe(branch);
+    const body = env.github.bodies.get(pull?.number ?? 0) ?? "";
+    expect(body).toContain("- `.github/workflows/kozo.yml`");
+    expect(body).not.toContain("- `.kozo/charter.yml`");
+    expect(body).toContain("gh api --method POST repos/me/shop/rulesets --input -");
+    const pushed = await env.github.remoteBranch(env.repo, branch);
+    expect(await env.git("show", "--format=%an", "--name-only", pushed ?? "")).toContain(
+      "AGENTS.md",
+    );
+    expect((await env.git("show", "-s", "--format=%an", pushed ?? "")).trim()).toBe("kozo");
+    expect((await env.sync.install(env.repo)).message).toStartWith("the install waits");
+    expect(env.github.repositories.get("me/shop")?.pulls).toHaveLength(1);
+  });
+
   test("a writer's kozo:paused Issue pauses the factory once per start and is no item", async () => {
     await using env = await setup();
     await env.sync.register();

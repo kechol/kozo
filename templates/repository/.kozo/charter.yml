@@ -1,0 +1,30 @@
+# What kozo may do in this repository. kozo works here only once `status` is `ready`; read
+# every setting, adjust it, then set it.
+version: 1
+status: incomplete
+isolation: worktree
+# Paths kozo never changes unattended; a task that needs one asks you first.
+protected_paths:
+  - ".kozo/**"
+  - ".github/**"
+  - ".claude/**"
+  - "AGENTS.md"
+  - "CLAUDE.md"
+existing_tests_protected: true
+# How many approvals each work class needs: L1 asks before starting and for the plan, L2 for
+# the plan, L3 only for a high risk or split plan.
+levels:
+  default: L1
+limits:
+  max_changed_lines: 400
+  max_files: 8
+  max_tasks_per_item: 8
+  inner_retries: 2
+  ci_fix_rounds: 2
+  no_progress_rounds: 3
+  max_turns: 40
+  max_minutes: 45
+  max_cost_usd: 5
+backpressure:
+  max_awaiting_merge: 3
+  max_held: 10

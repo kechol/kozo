@@ -1,0 +1,23 @@
+# Checks kozo's documents on every pull request; make "kozo check" a required status check.
+name: kozo
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    name: kozo check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install kozo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo kechol/kozo --pattern 'kozo-*-linux-x64.tar.gz' --pattern SHA256SUMS.txt
+          grep linux-x64 SHA256SUMS.txt | sha256sum --check
+          tar -xzf kozo-*-linux-x64.tar.gz kozo
+      - name: Check
+        run: ./kozo check .

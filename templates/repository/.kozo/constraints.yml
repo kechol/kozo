@@ -1,0 +1,18 @@
+# How kozo checks a change in this repository. Replace each command with the repository's own.
+version: 1
+# Commands that set up a fresh worktree, such as installing dependencies.
+prepare: []
+# Globs of the repository's test files; kozo tells tests from other files by these alone.
+tests: ["**/*.test.*", "**/test_*.py", "**/*_test.go"]
+gates:
+  lint:
+    run: echo "replace with the lint command" && exit 1
+  test:
+    run: echo "replace with the test command" && exit 1
+levels:
+  fast: [lint]
+  full: [lint, test]
+  deep: [lint, test]
+# Commands that run the changed test files, which must fail without the change; {files} is
+# replaced with their paths.
+prove: []

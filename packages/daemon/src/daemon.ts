@@ -2,7 +2,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { apiPort, type KozoHome, kozoHome } from "@kozo/core";
 import { claudeJudge, claudeVerifier, shellQuote } from "@kozo/verify";
-import { type Commands, createApi, serveApi } from "./api.ts";
+import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
 import { ControlPlane } from "./control-plane.ts";
 import { type DefinitionInUse, refreshDefinition, startingDefinition } from "./definition.ts";
@@ -105,6 +105,7 @@ export class Daemon {
     });
     const control = new ControlPlane(home, store, definition, runner);
     const scheduler = new Scheduler(store, runner, definition, report);
+    const github = new GitHubSync(home, store, definition, control, ghGitHub(), report);
     // Each write is one API call; the work the scheduler starts after it is kozod's own.
     const apiCall =
       <A extends unknown[], R>(command: (...args: A) => Promise<R>, tick = true) =>
@@ -122,6 +123,11 @@ export class Daemon {
         await store.rebuildIndex();
         return { message: "rebuilt kozo.db from the event logs" };
       },
+      install: apiCall(async ({ repository }) => {
+        if (definition.current.factory.mode !== "github")
+          throw new CommandError(409, "in local mode, kozo admin install writes the files itself");
+        return await github.install(repository);
+      }, false),
     };
     const app = createApi({
       store,
@@ -148,7 +154,6 @@ export class Daemon {
       () => definition.current.factory.mode,
     );
     await reconciler.recover();
-    const github = new GitHubSync(home, store, definition, control, ghGitHub(), report);
     const pollGitHub = () =>
       definition.current.factory.mode === "github"
         ? github.poll().catch((error: unknown) => report(`kozod: polling GitHub failed: ${error}`))

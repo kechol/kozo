@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdir, open, readdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
   factoryTemplate,
@@ -12,7 +12,13 @@ import {
   verbsByKind,
   workClassSchema,
 } from "@kozo/core";
-import { GitError, git } from "@kozo/verify";
+import {
+  definitionTip,
+  GitError,
+  git,
+  installRepositoryTemplate,
+  readDefinition,
+} from "@kozo/verify";
 import {
   type Answer,
   apiPortFromEnvironment,
@@ -496,8 +502,34 @@ export async function admin(args: readonly string[], out: Lines): Promise<number
     allowPositionals: true,
   });
   if (positionals[0] === "init") return await initFactory(values.json, out);
-  if (positionals[0] !== "db-rebuild") throw new UsageError("admin takes init or db-rebuild");
+  if (positionals[0] === "install") {
+    const path = positionals[1];
+    if (!path) throw new UsageError("admin install takes the repository's path");
+    return await installRepository(resolve(path), values.json, out);
+  }
+  if (positionals[0] !== "db-rebuild")
+    throw new UsageError("admin takes init, install or db-rebuild");
   return postAndPrint(out, values.json, "/api/admin/db-rebuild");
+}
+
+/**
+ * `kozo admin install <path>`: adds kozo's repository template to a repository. In local mode the
+ * CLI writes the files for the human to commit; in GitHub mode they reach the repository only as
+ * a pull request, which only kozod opens.
+ */
+async function installRepository(path: string, json: boolean | undefined, out: Lines) {
+  const home = kozoHome();
+  const tip = await definitionTip(home.factory).catch(() => null);
+  const definition = await readDefinition(home.factory, tip);
+  if (definition.ok && definition.definition.factory.mode === "github")
+    return postAndPrint(out, json, "/api/admin/install", { repository: path });
+  const written = await installRepositoryTemplate(path, "local");
+  const message =
+    written.length === 0
+      ? `${path} has every file kozo installs`
+      : `added ${written.join(", ")} to ${path}; edit them, set status: ready in .kozo/charter.yml and commit them`;
+  out.stdout(json ? JSON.stringify({ message, written }) : message);
+  return ExitCode.success;
 }
 
 /**

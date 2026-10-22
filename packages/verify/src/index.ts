@@ -9,5 +9,6 @@ export * from "./git.ts";
 export * from "./judge.ts";
 export * from "./processes.ts";
 export * from "./prove.ts";
+export * from "./repository-install.ts";
 export * from "./review.ts";
 export * from "./verify.ts";

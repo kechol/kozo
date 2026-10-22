@@ -25,6 +25,10 @@ const commands: Commands = {
   pauseFactory: async () => ({ message: "paused" }),
   resumeFactory: async () => ({ message: "resumed" }),
   rebuildIndex: async () => ({ message: "rebuilt" }),
+  install: async (body) => {
+    calls.push(["install", body]);
+    return { message: "opened" };
+  },
 };
 
 beforeAll(async () => {

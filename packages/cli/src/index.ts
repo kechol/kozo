@@ -72,6 +72,9 @@ Commands:
       Check the factory definition, each repository's Charter, claude and the
       sandbox; with a path, only the definition or .kozo/ in that directory
   admin init [--json]       Create the factory definition from kozo's template
+  admin install <path> [--json]
+      Add kozo's files to a repository; in GitHub mode kozod opens them as a
+      pull request
   admin db-rebuild          Rebuild kozo.db from the event logs
 
   gates [--level fast|full|deep] [--base <ref>] [--json]

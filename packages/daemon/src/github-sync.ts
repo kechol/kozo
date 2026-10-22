@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { mkdir, rm } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import {
   autonomyLevel,
   type GitHub,
@@ -12,18 +13,20 @@ import {
   parseReference,
   type Repository,
   runFiles,
+  sha256,
   stageSchema,
   wrapRequest,
 } from "@kozo/core";
-import { defaultBranch, git } from "@kozo/verify";
+import { defaultBranch, git, installRepositoryTemplate } from "@kozo/verify";
+import { CommandError, type VerbResult } from "./api.ts";
 import type { ControlPlane } from "./control-plane.ts";
 import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
 import { pushConfirmed, upsertComment } from "./github.ts";
-import { quiet, statusBody } from "./github-report.ts";
+import { installBody, quiet, statusBody } from "./github-report.ts";
 import { enqueue } from "./instructions.ts";
 import { readItemFile, requestText, writeItemFile } from "./item-file.ts";
-import { readCharter } from "./repository.ts";
+import { baseOf, readCharter } from "./repository.ts";
 import { taskBranch, worktreePath } from "./worktrees.ts";
 
 /** The label a human adds to an Issue to approve its start. */
@@ -84,6 +87,60 @@ export class GitHubSync {
       (repository): repository is Repository & { github: string } =>
         repository.github !== undefined,
     );
+  }
+
+  /**
+   * GitHub mode's `kozo admin install`: commits kozo's repository template, without what the
+   * repository already has, on `kozo/<factory ID>/install` from origin's default branch and opens
+   * a pull request with the ruleset its owner can apply. kozod never applies it: that needs
+   * admin rights over the repository's settings.
+   */
+  async install(path: string): Promise<VerbResult> {
+    const repository = this.repositories().find((entry) => entry.path === resolve(path));
+    if (!repository) throw new CommandError(422, `${path} is not a registered GitHub repository`);
+    const { github } = repository;
+    const branch = `kozo/${this.store.factoryId}/install`;
+    const open = (await this.github.pullsFor(github, branch)).find((pull) => pull.state === "open");
+    if (open) return { message: `the install waits for your review and merge: ${open.url}` };
+    await this.github.fetch(repository.path);
+    const base = await baseOf(repository.path, "github");
+    const tip = (await git(repository.path, ["rev-parse", base.ref])).trim();
+    const worktree = join(this.home.worktrees, `install-${sha256(repository.path).slice(0, 8)}`);
+    await rm(worktree, { recursive: true, force: true });
+    await git(repository.path, ["worktree", "prune"]);
+    await mkdir(this.home.worktrees, { recursive: true });
+    await git(repository.path, ["worktree", "add", "--quiet", "--detach", worktree, tip]);
+    try {
+      const written = await installRepositoryTemplate(worktree, "github");
+      if (written.length === 0) return { message: `${github} has every file kozo installs` };
+      await git(worktree, ["add", "--all"]);
+      // The commit is the factory's: kozo's identity, unsigned and past the owner's hooks.
+      await git(worktree, [
+        "-c",
+        "user.name=kozo",
+        "-c",
+        "user.email=kozo@localhost.invalid",
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "commit",
+        "--quiet",
+        "--message",
+        "Install kozo",
+      ]);
+      const head = (await git(worktree, ["rev-parse", "HEAD"])).trim();
+      await pushConfirmed(this.github, repository.path, branch, head);
+      const pull = await this.github.createPull(github, {
+        head: branch,
+        base: base.branch,
+        title: "Install kozo",
+        body: installBody(github, written),
+      });
+      return { message: `opened ${pull.url}; edit the files, set status: ready, then merge it` };
+    } finally {
+      await git(repository.path, ["worktree", "remove", "--force", worktree]).catch(() => {});
+    }
   }
 
   /** Records each GitHub repository the first time a definition in use names it. */

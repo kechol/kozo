@@ -52,6 +52,12 @@ export const addItemSchema = z.strictObject({
 });
 export type AddItem = z.infer<typeof addItemSchema>;
 
+export const installSchema = z.strictObject({
+  /** A registered GitHub repository by its path. */
+  repository: text,
+});
+export type Install = z.infer<typeof installSchema>;
+
 /** The JSON body of every error response. */
 export interface ApiError {
   error: string;

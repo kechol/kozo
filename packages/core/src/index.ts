@@ -11,6 +11,7 @@ export * from "./github.ts";
 export * from "./home.ts";
 export * from "./plan.ts";
 export * from "./reference.ts";
+export * from "./repository-template.ts";
 export * from "./run-report.ts";
 export * from "./state.ts";
 export * from "./verdict.ts";

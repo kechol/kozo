@@ -4,6 +4,9 @@ import {
   addItemSchema,
   type Event,
   helloProof,
+  type Install,
+  installSchema,
+  issueText,
   listKindSchema,
   parseReference,
   type Reference,
@@ -49,6 +52,7 @@ export interface Commands {
   pauseFactory(): Promise<VerbResult>;
   resumeFactory(): Promise<VerbResult>;
   rebuildIndex(): Promise<VerbResult>;
+  install(body: Install): Promise<VerbResult>;
 }
 
 export interface ApiOptions {
@@ -241,6 +245,11 @@ export function createApi({
   app.post("/api/factory/pause", async (c) => c.json(await commands.pauseFactory()));
   app.post("/api/factory/resume", async (c) => c.json(await commands.resumeFactory()));
   app.post("/api/admin/db-rebuild", async (c) => c.json(await commands.rebuildIndex()));
+  app.post("/api/admin/install", async (c) => {
+    const body = installSchema.safeParse(await jsonBody(c));
+    if (!body.success) return error(c, 400, "invalid install", body.error.issues.map(issueText));
+    return c.json(await commands.install(body.data));
+  });
 
   app.notFound((c) => error(c, 404, "no such endpoint"));
   return app;
