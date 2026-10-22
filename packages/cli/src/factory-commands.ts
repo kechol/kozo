@@ -11,6 +11,7 @@ import {
   verbsByKind,
   workClassSchema,
 } from "@kozo/core";
+import { GitError, git } from "@kozo/verify";
 import {
   type Answer,
   apiPortFromEnvironment,
@@ -20,7 +21,7 @@ import {
   refPath,
 } from "./client.ts";
 
-export const FactoryExit = {
+export const ExitCode = {
   success: 0,
   failure: 1,
   usage: 2,
@@ -34,7 +35,7 @@ export interface Lines {
 }
 
 /** A usage error found after the arguments parsed. */
-export class FactoryUsageError extends Error {}
+export class UsageError extends Error {}
 
 /**
  * Text from kozod can carry what an agent or a request wrote, so control characters, escape
@@ -47,10 +48,10 @@ export function printable(text: string): string {
 
 /** Maps an API answer to the CLI's exit code: 400 is a usage error and 404 is not found. */
 function exitFor(answer: Answer): number {
-  if (answer.status === 404) return FactoryExit.notFound;
-  if (answer.status === 400) return FactoryExit.usage;
-  if (answer.status >= 300) return FactoryExit.failure;
-  return answer.body.awaitingHuman === true ? FactoryExit.awaitingHuman : FactoryExit.success;
+  if (answer.status === 404) return ExitCode.notFound;
+  if (answer.status === 400) return ExitCode.usage;
+  if (answer.status >= 300) return ExitCode.failure;
+  return answer.body.awaitingHuman === true ? ExitCode.awaitingHuman : ExitCode.success;
 }
 
 function printAnswer(out: Lines, json: boolean | undefined, answer: Answer, text: () => string[]) {
@@ -67,13 +68,21 @@ function printAnswer(out: Lines, json: boolean | undefined, answer: Answer, text
   return exitFor(answer);
 }
 
+/** Posts to the local API and prints kozod's message, or the whole answer with --json. */
+function postAndPrint(out: Lines, json: boolean | undefined, path: string, body?: unknown) {
+  return withClient(out, async (client) => {
+    const answer = await client.post(path, body);
+    return printAnswer(out, json, answer, () => [String(answer.body.message)]);
+  });
+}
+
 async function withClient(out: Lines, work: (client: Client) => Promise<number>) {
   try {
     return await work(await connect());
   } catch (error) {
     if (!(error instanceof KozodUnavailable)) throw error;
     out.stderr(`kozo: ${error.message}`);
-    return FactoryExit.failure;
+    return ExitCode.failure;
   }
 }
 
@@ -88,13 +97,6 @@ const table = (rows: readonly (readonly string[])[]) => {
       .join("  ")
       .trimEnd(),
   );
-};
-
-const waitingLabels: Record<string, string> = {
-  approval: "approval",
-  question: "question",
-  attention: "attention",
-  merge: "awaiting merge",
 };
 
 type Row = Record<string, string | number | null>;
@@ -128,7 +130,7 @@ export async function up(args: readonly string[], out: Lines): Promise<number> {
   const url = `http://127.0.0.1:${apiPortFromEnvironment()}`;
   const report = (message: string) => {
     out.stdout(values.json ? JSON.stringify({ url, message }) : `${message}: ${url}`);
-    return FactoryExit.success;
+    return ExitCode.success;
   };
   if (await running(home)) return report("kozod is already running");
   await mkdir(home.root, { recursive: true, mode: 0o700 });
@@ -138,7 +140,7 @@ export async function up(args: readonly string[], out: Lines): Promise<number> {
     command = kozodCommand();
   } catch (error) {
     out.stderr(`kozo: ${(error as Error).message}`);
-    return FactoryExit.failure;
+    return ExitCode.failure;
   }
   const child = spawn(command[0] ?? "kozod", command.slice(1), {
     detached: true,
@@ -160,7 +162,7 @@ export async function up(args: readonly string[], out: Lines): Promise<number> {
   }
   await log.close();
   out.stderr(`kozo: kozod did not start; see ${join(home.root, "kozod.log")}`);
-  return FactoryExit.failure;
+  return ExitCode.failure;
 }
 
 export async function down(args: readonly string[], out: Lines): Promise<number> {
@@ -168,7 +170,7 @@ export async function down(args: readonly string[], out: Lines): Promise<number>
   const home = kozoHome();
   const report = (message: string) => {
     out.stdout(values.json ? JSON.stringify({ message }) : message);
-    return FactoryExit.success;
+    return ExitCode.success;
   };
   const file = Bun.file(home.pidFile);
   if (!(await file.exists())) return report("kozod is not running");
@@ -187,7 +189,7 @@ export async function down(args: readonly string[], out: Lines): Promise<number>
     await Bun.sleep(100);
   }
   out.stderr(`kozo: kozod (pid ${pid}) did not stop within 15 seconds`);
-  return FactoryExit.failure;
+  return ExitCode.failure;
 }
 
 // --- kozo status ------------------------------------------------------------------------------
@@ -205,7 +207,7 @@ export async function status(args: readonly string[], out: Lines): Promise<numbe
     if (values.line) out.stdout("kozo: down");
     else if (values.json) out.stdout(JSON.stringify({ running: false }));
     else out.stderr(`kozo: ${error.message}`);
-    return FactoryExit.failure;
+    return ExitCode.failure;
   }
   const s = answer.body as {
     mode: string;
@@ -252,20 +254,16 @@ export async function add(args: readonly string[], out: Lines): Promise<number> 
   });
   const workClass =
     values.class === undefined ? undefined : workClassSchema.safeParse(values.class);
-  if (workClass && !workClass.success)
-    throw new FactoryUsageError(`unknown work class '${values.class}'`);
+  if (workClass && !workClass.success) throw new UsageError(`unknown work class '${values.class}'`);
   let text = positionals.join(" ");
   if (values.file) text = `${text}\n${await Bun.file(values.file).text()}`.trim();
   const [title = "", ...rest] = text.trim().split("\n");
-  if (title.trim() === "") throw new FactoryUsageError("add needs the request text");
-  return withClient(out, async (client) => {
-    const answer = await client.post("/api/items", {
-      title: title.trim(),
-      body: rest.join("\n").trim() || undefined,
-      repository: values.repo,
-      class: workClass?.data,
-    });
-    return printAnswer(out, values.json, answer, () => [String(answer.body.message)]);
+  if (title.trim() === "") throw new UsageError("add needs the request text");
+  return postAndPrint(out, values.json, "/api/items", {
+    title: title.trim(),
+    body: rest.join("\n").trim() || undefined,
+    repository: values.repo,
+    class: workClass?.data,
   });
 }
 
@@ -278,7 +276,7 @@ export async function ls(args: readonly string[], out: Lines): Promise<number> {
     allowPositionals: true,
   });
   const kind = listKindSchema.safeParse(positionals[0] ?? "inbox");
-  if (!kind.success) throw new FactoryUsageError(`unknown list '${positionals[0]}'`);
+  if (!kind.success) throw new UsageError(`unknown list '${positionals[0]}'`);
   return withClient(out, async (client) => {
     const answer = await client.get(`/api/ls/${kind.data}`);
     const rows = (Array.isArray(answer.body) ? answer.body : []) as Row[];
@@ -290,7 +288,7 @@ export async function ls(args: readonly string[], out: Lines): Promise<number> {
           return table(
             rows.map((row) => [
               cell(row.ref),
-              waitingLabels[cell(row.waiting)] ?? cell(row.waiting),
+              row.waiting === "merge" ? "awaiting merge" : cell(row.waiting),
               row.reason ? `${row.title} (${row.reason})` : cell(row.title),
             ]),
           );
@@ -361,25 +359,27 @@ function describe(body: Record<string, unknown>): string[] {
   ];
 }
 
+function eventSummary(type: string, data: Record<string, unknown>): string {
+  switch (type) {
+    case "stage.changed":
+      return `${data.target} ${data.from} → ${data.to}: ${data.reason}`;
+    case "hold.set":
+    case "hold.cleared":
+      return `${data.target} ${data.hold}${data.reason ? `: ${data.reason}` : ""}`;
+    case "agent.message":
+      return String(data.text).split("\n")[0] ?? "";
+    case "tool.call":
+      return String(data.tool);
+    case "run.changed":
+      return `${data.from} → ${data.to}`;
+    default:
+      return "";
+  }
+}
+
 /** One line for an event in `kozo show -f`. */
-export function eventLine(event: {
-  ts: string;
-  type: string;
-  data: Record<string, unknown>;
-}): string {
-  const data = event.data;
-  const summary =
-    event.type === "stage.changed"
-      ? `${data.target} ${data.from} → ${data.to}: ${data.reason}`
-      : event.type === "hold.set" || event.type === "hold.cleared"
-        ? `${data.target} ${data.hold}${data.reason ? `: ${data.reason}` : ""}`
-        : event.type === "agent.message"
-          ? String(data.text).split("\n")[0]
-          : event.type === "tool.call"
-            ? String(data.tool)
-            : event.type === "run.changed"
-              ? `${data.from} → ${data.to}`
-              : "";
+function eventLine(event: { ts: string; type: string; data: Record<string, unknown> }): string {
+  const summary = eventSummary(event.type, event.data);
   return `${event.ts.slice(11, 19)}  ${event.type}${summary ? `  ${summary}` : ""}`;
 }
 
@@ -395,35 +395,34 @@ export async function show(args: readonly string[], out: Lines): Promise<number>
   });
   const ref = positionals[0];
   if (!ref || !parseReference(ref))
-    throw new FactoryUsageError("show needs an item, task or run reference");
+    throw new UsageError("show needs an item, task or run reference");
   return withClient(out, async (client) => {
     const answer = await client.get(refPath(ref));
     if (values.diff && answer.status === 200) {
       const location = answer.body.diff as
         | { repository: string; branch: string; base: string }
         | undefined;
-      if (!location) throw new FactoryUsageError("--diff needs a task reference");
-      const child = Bun.spawn(
-        ["git", "-C", location.repository, "diff", `${location.base}...${location.branch}`],
-        { stdout: "pipe", stderr: "pipe" },
-      );
-      const text = await new Response(child.stdout).text();
-      if ((await child.exited) !== 0) {
-        out.stderr(`kozo: ${printable(await new Response(child.stderr).text())}`);
-        return FactoryExit.failure;
+      if (!location) throw new UsageError("--diff needs a task reference");
+      let text: string;
+      try {
+        text = await git(location.repository, ["diff", `${location.base}...${location.branch}`]);
+      } catch (error) {
+        if (!(error instanceof GitError)) throw error;
+        out.stderr(`kozo: ${printable(error.message)}`);
+        return ExitCode.failure;
       }
       for (const line of text.trimEnd().split("\n")) out.stdout(printable(line));
-      return FactoryExit.success;
+      return ExitCode.success;
     }
     const code = printAnswer(out, values.json, answer, () => describe(answer.body));
-    if (!values.follow || code !== FactoryExit.success) return code;
+    if (!values.follow || code !== ExitCode.success) return code;
     const response = await client.stream(`${refPath(ref)}/events`);
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
     for (;;) {
       const chunk = await reader?.read();
-      if (!chunk || chunk.done) return FactoryExit.success;
+      if (!chunk || chunk.done) return ExitCode.success;
       buffer += decoder.decode(chunk.value, { stream: true });
       let end = buffer.indexOf("\n\n");
       while (end >= 0) {
@@ -458,15 +457,12 @@ export async function verb(name: Verb, args: readonly string[], out: Lines): Pro
   const [ref, ...words] = positionals;
   const text = words.join(" ").trim() || undefined;
   if (ref === undefined && (name === "pause" || name === "resume")) {
-    return withClient(out, async (client) => {
-      const answer = await client.post(`/api/factory/${name}`);
-      return printAnswer(out, values.json, answer, () => [String(answer.body.message)]);
-    });
+    return postAndPrint(out, values.json, `/api/factory/${name}`);
   }
   const reference = ref === undefined ? null : parseReference(ref);
-  if (!ref || !reference) throw new FactoryUsageError(`${name} needs a reference`);
+  if (!ref || !reference) throw new UsageError(`${name} needs a reference`);
   if (!verbsByKind[reference.kind].includes(name)) {
-    throw new FactoryUsageError(`a ${reference.kind} does not take ${name}`);
+    throw new UsageError(`a ${reference.kind} does not take ${name}`);
   }
   const bodies: Record<Verb, () => unknown> = {
     say: () => ({ text: text ?? missing("say needs the text to send") }),
@@ -484,14 +480,11 @@ export async function verb(name: Verb, args: readonly string[], out: Lines): Pro
     return: () => ({ text: text ?? missing("return needs what you changed and checked") }),
   };
   const body = bodies[name]();
-  return withClient(out, async (client) => {
-    const answer = await client.post(`${refPath(ref)}/${name}`, body);
-    return printAnswer(out, values.json, answer, () => [String(answer.body.message)]);
-  });
+  return postAndPrint(out, values.json, `${refPath(ref)}/${name}`, body);
 }
 
 function missing(message: string): never {
-  throw new FactoryUsageError(message);
+  throw new UsageError(message);
 }
 
 /** `kozo admin db-rebuild`: rebuilds kozo.db from the event logs. */
@@ -501,9 +494,6 @@ export async function admin(args: readonly string[], out: Lines): Promise<number
     options: { json: { type: "boolean" } },
     allowPositionals: true,
   });
-  if (positionals[0] !== "db-rebuild") throw new FactoryUsageError("admin takes db-rebuild");
-  return withClient(out, async (client) => {
-    const answer = await client.post("/api/admin/db-rebuild");
-    return printAnswer(out, values.json, answer, () => [String(answer.body.message)]);
-  });
+  if (positionals[0] !== "db-rebuild") throw new UsageError("admin takes db-rebuild");
+  return postAndPrint(out, values.json, "/api/admin/db-rebuild");
 }

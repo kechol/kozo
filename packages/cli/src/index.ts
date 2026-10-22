@@ -21,16 +21,16 @@ import {
   add,
   admin,
   down,
-  FactoryExit,
-  FactoryUsageError,
+  ExitCode,
   ls,
   show,
   status,
+  UsageError,
   up,
   verb,
 } from "./factory-commands.ts";
 
-export const ExitCode = FactoryExit;
+export { ExitCode };
 
 /** The model review and verify sessions use unless --model names another. */
 const defaultSessionModel = "claude-sonnet-5-5";
@@ -99,9 +99,6 @@ for a human, 4 not found.
 A <ref> after --base or --head is a full commit ID, HEAD, a full ref such
 as refs/remotes/origin/main, or a branch name, read as refs/heads/<name>.`;
 
-/** A usage error that a command raises after its arguments parsed. */
-class UsageError extends Error {}
-
 export async function run(
   args: readonly string[],
   out: Output,
@@ -130,8 +127,7 @@ export async function run(
     if (named) return await verb(named, rest, out);
   } catch (error) {
     const fromParseArgs = String((error as { code?: unknown }).code).startsWith("ERR_PARSE_ARGS");
-    const usageError = error instanceof UsageError || error instanceof FactoryUsageError;
-    if (usageError || fromParseArgs) return usage(out, (error as Error).message);
+    if (error instanceof UsageError || fromParseArgs) return usage(out, (error as Error).message);
     throw error;
   }
   return usage(out, command === undefined ? undefined : `unknown command '${command}'`);
