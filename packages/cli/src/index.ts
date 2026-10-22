@@ -17,6 +17,7 @@ import {
   writeVerifyVerdict,
 } from "@kozo/verify";
 import pkg from "../package.json" with { type: "json" };
+import { check } from "./check.ts";
 import {
   add,
   admin,
@@ -67,6 +68,9 @@ Commands:
   retry <ref> [text]        Retry a task from its checkpoint or an item
   close <ref> --done | --cancel <reason>
       Complete an item or task that needed no change, or cancel it
+  check [path] [--json]
+      Check the factory definition, each repository's Charter, claude and the
+      sandbox; with a path, only the definition or .kozo/ in that directory
   admin init [--json]       Create the factory definition from kozo's template
   admin db-rebuild          Rebuild kozo.db from the event logs
 
@@ -123,6 +127,7 @@ export async function run(
     if (command === "ls") return await ls(rest, out);
     if (command === "show") return await show(rest, out);
     if (command === "admin") return await admin(rest, out);
+    if (command === "check") return await check(rest, out);
     const verbs = ["say", "approve", "reject", "pause", "resume", "retry", "close"] as const;
     const named = verbs.find((name) => name === command);
     if (named) return await verb(named, rest, out);
