@@ -3,6 +3,7 @@ import type {
   GitHubCheck,
   GitHubComment,
   GitHubIssue,
+  GitHubPermission,
   GitHubPull,
   GitHubRepository,
 } from "@kozo/core";
@@ -21,6 +22,8 @@ export interface FakeGitHub extends GitHub {
   /** Branch tips on each clone's origin, by `<clone> <branch>`. */
   readonly branches: Map<string, string>;
   checksOf: Map<number, GitHubCheck[]>;
+  /** Each login's permission, by `<repository> <login>`; anyone else has none. */
+  permissions: Map<string, GitHubPermission>;
   addIssue(repository: GitHubRepository, issue: Partial<GitHubIssue> & { title: string }): number;
   /** Makes the next `comment` or `push` lose its response, after or before the change. */
   lose(method: "comment" | "push", loss: Loss): void;
@@ -56,6 +59,7 @@ export function fakeGitHub(): FakeGitHub {
     repositories,
     branches,
     checksOf: new Map(),
+    permissions: new Map(),
     addIssue(repository, issue) {
       const entry = repositoryOf(repository);
       const number = entry.issues.length + entry.pulls.length + 1;
@@ -65,6 +69,7 @@ export function fakeGitHub(): FakeGitHub {
         author: "owner",
         state: "open",
         labels: [],
+        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         comments: [],
         ...issue,
@@ -131,6 +136,10 @@ export function fakeGitHub(): FakeGitHub {
     async checks(repository, pull) {
       calls.push(`checks ${repository} #${pull}`);
       return [...(this.checksOf.get(pull) ?? [])];
+    },
+    async permission(repository, login) {
+      calls.push(`permission ${repository} ${login}`);
+      return this.permissions.get(`${repository} ${login}`) ?? "none";
     },
     async login() {
       calls.push("login");
