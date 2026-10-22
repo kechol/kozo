@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { kozoHome, runFiles, sha256 } from "@kozo/core";
 import {
@@ -72,6 +72,7 @@ async function factoryOf(
   judge: Judge = judgeWith("accept"),
   options: {
     charter?: (text: string) => string;
+    constraints?: (text: string) => string;
     factory?: string;
     now?: () => Date;
     launcher?: (fallback: Launcher) => Launcher;
@@ -79,8 +80,13 @@ async function factoryOf(
 ) {
   const repo = await gitRepository();
   const charter = suiteBase[".kozo/charter.yml"] ?? "";
+  const constraints = suiteBase[".kozo/constraints.yml"] ?? "";
   await repo.commit(
-    { ...suiteBase, ".kozo/charter.yml": options.charter ? options.charter(charter) : charter },
+    {
+      ...suiteBase,
+      ".kozo/charter.yml": options.charter ? options.charter(charter) : charter,
+      ".kozo/constraints.yml": options.constraints ? options.constraints(constraints) : constraints,
+    },
     "the suite shop",
   );
   const dir = await tempDirectory();
@@ -474,6 +480,53 @@ describe("the minimal path", () => {
       reason: expect.stringContaining("incomplete, not ready"),
     });
     expect(env.agent.requests.map((request) => request.agent)).toEqual(["triage"]);
+  }, 120_000);
+
+  test("services start outside the command sandbox before prepare, and a failing one holds the task", async () => {
+    await using marks = await tempDirectory();
+    const mark = join(await realpath(marks.path), "db-up");
+    const withServices = (services: string) => ({
+      constraints: (text: string) =>
+        text.replace(
+          "version: 1\n",
+          `version: 1\nservices: [${services}]\nprepare: ["test -f '${mark}'"]\n`,
+        ),
+    });
+    const approveAll = async (env: Awaited<ReturnType<typeof factoryOf>>) => {
+      const { ref } = await env.control.addItem({ title: "Low stock" });
+      for (let pass = 0; pass < 2; pass++) {
+        await env.settle();
+        await env.control.act(
+          ref,
+          { kind: "item", item: { repo: null, number: 1 } },
+          "approve",
+          {},
+        );
+      }
+      await env.settle();
+      return env.store.state.tasks[`${ref}/t1`];
+    };
+    // Outside the worktree only a command outside the sandbox can write the mark prepare looks for.
+    {
+      await using env = await factoryOf(
+        (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+        judgeWith("accept"),
+        withServices(`"echo up > '${mark}'"`),
+      );
+      expect(await approveAll(env)).toMatchObject({ stage: "handoff", hold: null });
+      expect(await Bun.file(mark).text()).toBe("up\n");
+    }
+    {
+      await using env = await factoryOf(
+        (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+        judgeWith("accept"),
+        withServices('"exit 3"'),
+      );
+      expect((await approveAll(env))?.hold).toMatchObject({
+        kind: "attention",
+        reason: "prepare failed: exit 3 exited with 3",
+      });
+    }
   }, 120_000);
 
   test("triage's work class cannot raise the autonomy level above the one asked for", async () => {

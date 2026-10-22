@@ -16,6 +16,8 @@ const levelGates = z
 export const constraintsSchema = z
   .strictObject({
     version: z.literal(1),
+    // Run outside the command sandbox, for what it cannot start, such as a database container.
+    services: z.array(z.string().min(1)).default([]),
     prepare: z.array(z.string().min(1)).default([]),
     // Required: a guessed default could miss test helpers and let a diff edit them unnoticed.
     tests: z.array(z.string().min(1)).nonempty(),

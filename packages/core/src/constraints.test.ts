@@ -3,9 +3,10 @@ import { parseConstraints } from "./constraints.ts";
 
 const sampleShop = `
 version: 1
+services:
+  - pnpm db:up
 prepare:
   - pnpm install --frozen-lockfile
-  - pnpm db:up
 tests:
   - "**/*.test.ts"
   - "**/*.spec.ts"
@@ -41,12 +42,13 @@ describe("parseConstraints", () => {
     const result = parseConstraints(sampleShop);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.prepare).toEqual(["pnpm install --frozen-lockfile", "pnpm db:up"]);
+    expect(result.value.services).toEqual(["pnpm db:up"]);
+    expect(result.value.prepare).toEqual(["pnpm install --frozen-lockfile"]);
     expect(result.value.gates.e2e).toEqual({ run: "pnpm test:e2e" });
     expect(result.value.levels.full).toEqual(["typecheck", "lint", "unit", "integration", "build"]);
   });
 
-  test("prepare may be left out", () => {
+  test("services and prepare may be left out", () => {
     const result = parseConstraints(
       "version: 1\ntests: ['**/*.test.ts']\ngates:\n  lint:\n    run: bun run check\nlevels:\n  fast: [lint]\n",
     );
@@ -54,6 +56,7 @@ describe("parseConstraints", () => {
       ok: true,
       value: {
         version: 1,
+        services: [],
         prepare: [],
         tests: ["**/*.test.ts"],
         gates: { lint: { run: "bun run check" } },

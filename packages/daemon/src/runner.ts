@@ -755,13 +755,22 @@ export class Runner {
             await exit(node, true, "already prepared");
             break;
           }
-          for (const command of constraints.prepare) {
+          // Services come from the base's constraints and run before any diff exists, so they may
+          // run outside the command sandbox, as a database container must.
+          const steps = [
+            ...constraints.services.map((command) => ({ command, confined: undefined })),
+            ...constraints.prepare.map((command) => ({
+              command,
+              confined: this.confined(worktree, true),
+            })),
+          ];
+          for (const { command, confined } of steps) {
             const code = await runCommand(
               command,
               worktree,
               (text) => void log(text),
               this.commandEnv,
-              this.confined(worktree, true),
+              confined,
             );
             if (code !== 0) {
               return await halt(node, {

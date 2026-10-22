@@ -1,6 +1,10 @@
 # How kozo checks a change in this repository. Replace each command with the repository's own.
 version: 1
-# Commands that set up a fresh worktree, such as installing dependencies.
+# Commands that start what the gates need and kozo's sandbox cannot run, such as a database
+# container. kozod runs them outside the sandbox before prepare, as they are on the default branch.
+services: []
+# Commands that set up a fresh worktree, such as installing dependencies. They run in kozo's
+# sandbox, which may reach other hosts and write the package managers' caches.
 prepare: []
 # Globs of the repository's test files; kozo tells tests from other files by these alone.
 tests: ["**/*.test.*", "**/test_*.py", "**/*_test.go"]

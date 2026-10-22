@@ -130,6 +130,7 @@
 | mode | The way kozo connects to the outside: `local` with local branches, or `github` with Issues and pull requests. | `mode` | - | - |
 | protected path | A Charter path pattern that is never changed unattended, so that touching it raises a question; it also covers everything under what it matches, read both as a glob and as a literal path. | `protected_paths` | - | - |
 | risk tier | The plan setting, low, normal or high, that decides verification depth and that kozod may only raise. | `risk` | risk class, risk level | - |
+| service | A command in the constraints that starts what the gates need and the command sandbox cannot run, such as a database container, which kozod runs outside the sandbox before prepare. | `services` in `.kozo/constraints.yml` | - | - |
 | work class | The plan setting that selects the blueprint: docs, deps, bugfix, refactor, perf, migration or feature. | `class` | category, task type | - |
 
 ## Human interface
