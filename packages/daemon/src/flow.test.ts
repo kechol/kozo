@@ -666,6 +666,43 @@ describe("the minimal path", () => {
     expect(resumed?.node).toBe("implement");
   }, 180_000);
 
+  test("a run that kozod fails to carry on ends as failed, and retry starts it again", async () => {
+    let launches = 0;
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+      judgeWith("accept"),
+      {
+        launcher: (fallback) => ({
+          launch(spec, path) {
+            launches += 1;
+            if (spec.agent === "implement" && launches === 2) throw new Error("no worker");
+            return fallback.launch(spec, path);
+          },
+        }),
+      },
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const task = `${ref}/t1`;
+    expect(env.store.state.tasks[task]?.hold).toMatchObject({
+      kind: "attention",
+      reason: "kozod could not run it: no worker",
+    });
+    expect(
+      Object.values(env.store.state.runs).find((run) => run.agent === "implement")?.state,
+    ).toBe("failed");
+    await env.control.act(
+      task,
+      { kind: "task", item: { repo: null, number: 1 }, task: 1 },
+      "retry",
+      {},
+    );
+    await env.settle();
+    expect(env.store.state.tasks[task]?.stage).toBe("handoff");
+  }, 180_000);
+
   test("kozo say reaches a running run at its next turn", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage"

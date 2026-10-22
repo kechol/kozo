@@ -8,6 +8,7 @@ import {
   type Constraints,
   type GateLevel,
   highestTask,
+  isRunOver,
   type KozoHome,
   numberAfter,
   type Plan,
@@ -228,6 +229,19 @@ export class Runner {
     });
   }
 
+  /**
+   * Ends as failed the runs of a task, or of an item's triage, that a throw left open, so that
+   * the scheduler starts the work again once its hold clears.
+   */
+  private async failOpenRuns(ref: string, error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    for (const run of Object.values(this.store.state.runs)) {
+      if (run.task !== ref && !(run.task === null && run.item === ref)) continue;
+      if (!isRunOver(run.state))
+        await this.endRun(run.ref, "failed", `kozod could not finish it: ${message}`.slice(0, 500));
+    }
+  }
+
   private async writeSpec(spec: WorkerSpec): Promise<string> {
     const files = runFiles(this.home, spec.run);
     await mkdir(files.dir, { recursive: true });
@@ -363,6 +377,9 @@ export class Runner {
       await this.store.append({ ...envelope, type: "plan.proposed", data: { plan: draft.data } });
       await this.endRun(run, "succeeded");
       await this.afterTriage(itemRef, draft.data, repository.charter, file.class);
+    } catch (error) {
+      await this.failOpenRuns(itemRef, error);
+      throw error;
     } finally {
       await git(repository.path, ["worktree", "remove", "--force", checkout]).catch(() => {});
     }
@@ -461,7 +478,10 @@ export class Runner {
     let from: Node = start;
     let previous = failure;
     for (let attempts = 1; ; attempts += 1) {
-      const outcome = await this.attempt(taskRef, from, previous);
+      const outcome = await this.attempt(taskRef, from, previous).catch(async (error: unknown) => {
+        await this.failOpenRuns(taskRef, error);
+        throw error;
+      });
       if (outcome.kind !== "retry") return;
       if (attempts >= outcome.rounds) {
         await this.hold(
