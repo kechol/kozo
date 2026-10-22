@@ -54,6 +54,7 @@ export class Scheduler {
   private readonly active = new Map<string, Promise<void>>();
   private ticking: Promise<void> | null = null;
   private again = false;
+  private stopped = false;
 
   constructor(
     private readonly store: EventStore,
@@ -148,7 +149,7 @@ export class Scheduler {
 
   private async plan(): Promise<void> {
     const state = this.store.state;
-    if (state.paused) return;
+    if (state.paused || this.stopped) return;
     // Holds for capacity do not count toward the Charter's limits, so one look per repository
     // serves the whole pass.
     const stops = new Map<string, string | null>();
@@ -206,7 +207,8 @@ export class Scheduler {
    * runs, since it runs the repository's tests too. Returns false when it cannot start now.
    */
   startWork(ref: string, work: () => Promise<void>): boolean {
-    if (this.active.has(ref) || this.active.size >= this.factory.concurrency) return false;
+    if (this.stopped || this.active.has(ref) || this.active.size >= this.factory.concurrency)
+      return false;
     this.start(ref, "task", work);
     return true;
   }
@@ -226,6 +228,12 @@ export class Scheduler {
           this.tick();
         }
       });
+  }
+
+  /** Starts nothing new from now on, and resolves once the work running now has ended. */
+  async stop(): Promise<void> {
+    this.stopped = true;
+    await this.idle();
   }
 
   /** Resolves once nothing runs or schedules any more; for tests and for shutting down. */

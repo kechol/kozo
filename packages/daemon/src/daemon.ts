@@ -70,7 +70,9 @@ export class Daemon {
     readonly port: number,
     private readonly server: ReturnType<typeof serveApi>,
     readonly scheduler: Scheduler,
+    private readonly runner: Runner,
     private readonly timer: ReturnType<typeof setInterval>,
+    private readonly reconciling: () => Promise<void>,
   ) {}
 
   static async start({
@@ -147,12 +149,20 @@ export class Daemon {
       scheduler.tick();
     }, tickMs);
     scheduler.tick();
-    return new Daemon(home, store, port, server, scheduler, timer);
+    return new Daemon(home, store, port, server, scheduler, runner, timer, () => reconciling);
   }
 
+  /**
+   * Stops the sessions and waits for the work running now to end, so that no worker outlives
+   * kozod and every run ends where the next start resumes it.
+   */
   async stop() {
     clearInterval(this.timer);
     await this.server.stop(true);
+    this.runner.stop();
+    const stopped = this.scheduler.stop();
+    await this.reconciling();
+    await stopped;
     this.store.close();
     await rm(this.home.pidFile, { force: true });
   }

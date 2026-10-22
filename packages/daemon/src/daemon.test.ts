@@ -143,7 +143,7 @@ describe("Daemon", () => {
     });
     try {
       const runs = Object.values(second.store.state.runs);
-      expect(runs.find((run) => run.agent === "implement")?.state).toBe("lost");
+      expect(runs.find((run) => run.agent === "implement")?.state).toBe("stopped");
       while (
         second.store.state.tasks["K-1/t1"]?.stage === "building" &&
         !second.store.state.tasks["K-1/t1"]?.hold

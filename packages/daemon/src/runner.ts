@@ -158,6 +158,15 @@ export class Runner {
     }
   }
 
+  /** Set once kozod shuts down: no session keeps running, and attempts stop at their next node. */
+  private stopping = false;
+
+  /** Stops every session for shutting down; each attempt stops where it can resume. */
+  stop() {
+    this.stopping = true;
+    for (const session of this.sessions.values()) session.stop();
+  }
+
   /** Stops a run's session now; the run ends as stopped. Returns whether one was running. */
   stopSession(run: string): boolean {
     const session = this.sessions.get(run);
@@ -260,6 +269,7 @@ export class Runner {
     const specPath = await this.writeSpec(spec);
     const session = this.deps.launcher.launch(spec, specPath);
     this.sessions.set(spec.run, session);
+    if (this.stopping) session.stop();
     let result: SessionResult;
     try {
       result = await pumpSession(this.store, session, envelope, maxMinutes);
@@ -596,10 +606,10 @@ export class Runner {
       const current = this.store.state.tasks[taskRef];
       if (!current || isClosed(current.stage))
         return await stopHere("stopped", "the task is closed");
-      if (current.hold) {
-        // The next attempt resumes at this node, not at the one that finished before the hold.
+      if (current.hold || this.stopping) {
+        // The next attempt resumes at this node, not at the one that finished before the stop.
         await checkpoint(node);
-        return await stopHere("stopped", "the task is held");
+        return await stopHere("stopped", current.hold ? "the task is held" : "kozod stopped");
       }
       switch (node) {
         case "claim": {
