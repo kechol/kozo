@@ -125,6 +125,17 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
     return result.stdout;
   };
   const json = async <T>(args: string[], ok?: number[]) => JSON.parse(await gh(args, { ok })) as T;
+  const events = async (repository: string, issue: number) =>
+    (
+      await json<{ event: string; actor: { login: string } | null; label?: { name: string } }[][]>([
+        "api",
+        "--method",
+        "GET",
+        "--paginate",
+        "--slurp",
+        `repos/${repository}/issues/${issue}/events`,
+      ])
+    ).flat();
 
   return {
     async issues(repository, labels = []) {
@@ -150,12 +161,16 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
       return raw.comments.flatMap(commentOf);
     },
     async issueState(repository, issue) {
-      const raw = await json<{ state: string; stateReason: string | null }>([
+      const raw = await json<{
+        state: string;
+        stateReason: string | null;
+        author: { login: string };
+      }>([
         "issue",
         "view",
         String(issue),
         `--repo=${repository}`,
-        "--json=state,stateReason",
+        "--json=state,stateReason,author",
       ]);
       const reason = (raw.stateReason ?? "").toLowerCase();
       return {
@@ -164,6 +179,7 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
           reason === "completed" || reason === "not_planned" || reason === "duplicate"
             ? reason
             : null,
+        author: raw.author.login,
       };
     },
     async closeIssue(repository, issue) {
@@ -275,20 +291,14 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
       }
     },
     async labelledBy(repository, issue, label) {
-      const pages = await json<
-        { event: string; actor: { login: string } | null; label?: { name: string } }[][]
-      >([
-        "api",
-        "--method",
-        "GET",
-        "--paginate",
-        "--slurp",
-        `repos/${repository}/issues/${issue}/events`,
-      ]);
-      const added = pages
-        .flat()
-        .filter((event) => event.event === "labeled" && event.label?.name === label);
+      const added = (await events(repository, issue)).filter(
+        (event) => event.event === "labeled" && event.label?.name === label,
+      );
       return added.at(-1)?.actor?.login ?? null;
+    },
+    async closedBy(repository, issue) {
+      const closed = (await events(repository, issue)).filter((event) => event.event === "closed");
+      return closed.at(-1)?.actor?.login ?? null;
     },
     async login() {
       const raw = await json<{ hosts: Record<string, { active: boolean; login: string }[]> }>([

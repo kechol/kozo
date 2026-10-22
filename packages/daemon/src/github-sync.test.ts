@@ -215,28 +215,48 @@ describe("GitHubSync", () => {
     });
   });
 
-  test("follows Issues closed, edited and completed on GitHub", async () => {
+  test("follows Issues closed, edited and completed on GitHub, by whom may", async () => {
     await using env = await setup();
     await env.sync.register();
     env.github.permissions.set("me/shop owner", "admin");
+    env.github.permissions.set("me/shop triager", "triage");
     const issues = () => env.github.repositories.get("me/shop")?.issues ?? [];
-    const [done, dropped, edited] = ["Done", "Dropped", "Edited"].map((title) =>
-      env.github.addIssue("me/shop", { title, createdAt: afterRegistration() }),
-    );
+    const open = (title: string, author = "owner") =>
+      env.github.addIssue("me/shop", { title, author, createdAt: afterRegistration() });
+    const done = open("Done");
+    const dropped = open("Dropped", "reader");
+    const stray = open("Stray");
+    const edited = open("Edited");
+    const untrusted = open("Untrusted", "reader");
     await env.sync.poll();
-    for (const [number, reason] of [
-      [done, "completed"],
-      [dropped, "not_planned"],
-    ] as const) {
+    await env.control.act(
+      `shop#${untrusted}`,
+      { kind: "item", item: { repo: "shop", number: untrusted } },
+      "approve",
+      {},
+    );
+    const close = (number: number, reason: "completed" | "not_planned", by: string) => {
       const issue = issues().find((entry) => entry.number === number);
       if (issue) Object.assign(issue, { state: "closed", stateReason: reason });
+      env.github.labellers.set(`me/shop #${number} closed`, by);
+    };
+    close(done, "completed", "owner");
+    close(dropped, "not_planned", "reader");
+    close(stray, "completed", "triager");
+    for (const number of [edited, untrusted]) {
+      const target = issues().find((entry) => entry.number === number);
+      if (target) target.body = "Also cover 0 units.";
     }
-    const target = issues().find((entry) => entry.number === edited);
-    if (target) target.body = "Also cover 0 units.";
     await env.sync.poll();
-    expect(env.store.state.items[`shop#${done}`]?.stage).toBe("complete");
-    expect(env.store.state.items[`shop#${dropped}`]?.stage).toBe("cancelled");
-    expect((await readItemFile(env.home, `shop#${edited}`)).body).toBe("Also cover 0 units.");
+    const { items } = env.store.state;
+    expect(items[`shop#${done}`]?.stage).toBe("complete");
+    expect(items[`shop#${dropped}`]?.stage).toBe("cancelled");
+    expect(items[`shop#${stray}`]).toMatchObject({ stage: "triage", hold: { kind: "attention" } });
+    expect(items[`shop#${edited}`]?.hold).toBeNull();
+    expect(items[`shop#${untrusted}`]?.hold?.reason).toStartWith("reader, who may not write");
+    for (const number of [edited, untrusted]) {
+      expect((await readItemFile(env.home, `shop#${number}`)).body).toBe("Also cover 0 units.");
+    }
 
     // An item kozod completed closes its Issue, once.
     await env.control.act(

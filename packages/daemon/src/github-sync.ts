@@ -123,7 +123,7 @@ export class GitHubSync {
     await this.createLabels(github);
     for (const issue of issues) {
       const ref = `${name}#${issue.number}`;
-      await this.followEdit(ref, issue);
+      await this.followEdit(github, ref, issue);
       await this.mirror(github, ref, issue);
       await this.publish(path, github, ref, issue.number);
       await this.followPulls(github, ref);
@@ -134,7 +134,9 @@ export class GitHubSync {
   /**
    * Follows Issues closed on GitHub: one closed as completed completes its item, one closed as
    * not planned or a duplicate cancels it with its open tasks. GitHub closes as completed unless
-   * told otherwise, so a close without a reason counts as completed.
+   * told otherwise, so a close without a reason counts as completed. Only a writer may complete
+   * an item, and a writer or the Issue's author cancel it; any other close holds the item for
+   * attention, since the author of an Issue can close it but has no say over the work.
    */
   private async followClosedIssues(github: string, name: string, open: ReadonlySet<number>) {
     for (const item of Object.values(this.store.state.items)) {
@@ -142,9 +144,28 @@ export class GitHubSync {
       const reference = parseReference(item.ref);
       if (reference?.kind !== "item" || reference.item.repo !== name) continue;
       if (open.has(reference.item.number)) continue;
-      const { state, reason } = await this.github.issueState(github, reference.item.number);
+      const number = reference.item.number;
+      const { state, reason, author } = await this.github.issueState(github, number);
       if (state === "open") continue;
       const cancelled = reason === "not_planned" || reason === "duplicate";
+      const closer = await this.github.closedBy(github, number);
+      const writer =
+        closer !== null && writers.includes(await this.github.permission(github, closer));
+      if (!writer && !(cancelled && closer === author)) {
+        if (!item.hold) {
+          await this.store.append({
+            type: "hold.set",
+            item: item.ref,
+            data: {
+              target: "item",
+              hold: "attention",
+              by: "kozod",
+              reason: `${closer ?? "someone"} closed the Issue but may not ${cancelled ? "cancel" : "complete"} it; kozo close decides`,
+            },
+          });
+        }
+        continue;
+      }
       await this.control.closeWork(
         item.ref,
         "item",
@@ -156,16 +177,34 @@ export class GitHubSync {
 
   /**
    * Takes an edited Issue as the item's request from the next run on; a run going now gets the
-   * new text in its queue as untrusted data, like the request itself.
+   * new text in its queue as untrusted data, like the request itself. A start approval covers
+   * the text it saw, so once an Issue whose author may not write has started, an edit holds the
+   * item for attention until `kozo retry` accepts the new text.
    */
-  private async followEdit(ref: string, issue: GitHubIssue) {
+  private async followEdit(github: string, ref: string, issue: GitHubIssue) {
     const item = this.store.state.items[ref];
     if (!item || isClosed(item.stage)) return;
     const file = await readItemFile(this.home, ref);
     const title = issue.title.trim();
     if (file.title === title && file.body === issue.body) return;
+    const waiting = item.hold?.kind === "approval" && item.hold.reason === "start approval";
+    // Another hold first needs the human; the edit is taken once it clears.
+    if (item.hold && !waiting) return;
     const edited = { ...file, title, body: issue.body };
     await writeItemFile(this.home, ref, edited);
+    if (!waiting && !writers.includes(await this.github.permission(github, issue.author))) {
+      await this.store.append({
+        type: "hold.set",
+        item: ref,
+        data: {
+          target: "item",
+          hold: "attention",
+          by: "kozod",
+          reason: `${issue.author}, who may not write, edited the request after it started; kozo retry takes the new text`,
+        },
+      });
+      return;
+    }
     const runner = this.control.runner;
     for (const subject of [ref, ...item.tasks]) {
       const run = runner?.sessionFor(subject);

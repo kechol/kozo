@@ -52,6 +52,7 @@ export interface GitHub {
   ): Promise<{
     state: "open" | "closed";
     reason: "completed" | "not_planned" | "duplicate" | null;
+    author: string;
   }>;
   /** Closes an Issue as completed, which kozod does only once its item is complete. */
   closeIssue(repository: GitHubRepository, issue: number): Promise<void>;
@@ -80,6 +81,8 @@ export interface GitHub {
   permission(repository: GitHubRepository, login: string): Promise<GitHubPermission>;
   /** Who added `label` to the Issue most recently, or null when nobody has. */
   labelledBy(repository: GitHubRepository, issue: number, label: string): Promise<string | null>;
+  /** Who closed the Issue most recently, or null when nobody has. */
+  closedBy(repository: GitHubRepository, issue: number): Promise<string | null>;
   /** Fetches the clone's `origin`, so that origin's branches show what happened on GitHub. */
   fetch(clone: string): Promise<void>;
   /** Pushes `commit` to `branch` on the clone's `origin`, replacing only what kozo pushed. */

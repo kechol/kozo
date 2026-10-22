@@ -25,7 +25,10 @@ export interface FakeGitHub extends GitHub {
   checksOf: Map<number, GitHubCheck[]>;
   /** Each pull request's body, by number. */
   bodies: Map<number, string>;
-  /** Who added each label last, by `<repository> #<issue> <label>`. */
+  /**
+   * Who added each label last, by `<repository> #<issue> <label>`, and who closed each Issue,
+   * by `<repository> #<issue> closed`.
+   */
   labellers: Map<string, string>;
   /** Each login's permission, by `<repository> <login>`; anyone else has none. */
   permissions: Map<string, GitHubPermission>;
@@ -103,6 +106,7 @@ export function fakeGitHub(): FakeGitHub {
       return {
         state: found.state,
         reason: found.state === "open" ? null : (found.stateReason ?? null),
+        author: found.author,
       };
     },
     async closeIssue(repository, issue) {
@@ -168,6 +172,10 @@ export function fakeGitHub(): FakeGitHub {
     async permission(repository, login) {
       calls.push(`permission ${repository} ${login}`);
       return this.permissions.get(`${repository} ${login}`) ?? "none";
+    },
+    async closedBy(repository, issue) {
+      calls.push(`closedBy ${repository} #${issue}`);
+      return this.labellers.get(`${repository} #${issue} closed`) ?? null;
     },
     async labelledBy(repository, issue, label) {
       calls.push(`labelledBy ${repository} #${issue} ${label}`);
