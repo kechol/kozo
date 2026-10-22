@@ -67,7 +67,7 @@ import { taskSandbox } from "@kozo/worker";
 import pkg from "../package.json" with { type: "json" };
 import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
-import { checkNotes, ownerNotes } from "./instructions.ts";
+import { checkNotes, ownerNotes, taskOwnerNotes } from "./instructions.ts";
 import { type ItemFile, itemDirectory, readItemFile, requestText } from "./item-file.ts";
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { checkPlan } from "./plan-checks.ts";
@@ -640,7 +640,7 @@ export class Runner {
       ? listed.filter(globMatcher(constraints.tests))
       : [];
 
-    const ownerWords = () => ownerNotes(this.store.state, item.ref, [item.ref, taskRef]);
+    const ownerWords = () => taskOwnerNotes(this.store.state, taskRef);
     const checkpoint = async (node: Node) => {
       const head = await git(worktree, ["rev-parse", "HEAD"]).then(
         (sha) => sha.trim(),

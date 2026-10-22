@@ -212,8 +212,8 @@ export class ControlPlane {
       return { message: `${ref} is not waiting for an approval` };
     const start = subject.hold.reason === "start approval";
     await this.clearHold("item", ref, body.text);
-    if (body.text) await this.note(ref, ref, "approval", body.text);
     if (start) {
+      if (body.text) await this.note(ref, ref, "approval", body.text);
       await this.move("item", ref, "triage", "kozo approve");
       return { message: `approved the start of ${ref}; it goes to Triage` };
     }
@@ -223,6 +223,8 @@ export class ControlPlane {
       item: ref,
       data: { plan: item.draft, by: "human" },
     });
+    // After the acceptance, so that the tasks' runs take it as said about their plan.
+    if (body.text) await this.note(ref, ref, "approval", body.text);
     return {
       message: `approved the plan of ${ref}; ${item.draft.tasks.length} task(s) go to Building`,
     };

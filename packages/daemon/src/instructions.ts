@@ -11,6 +11,20 @@ export function ownerNotes(state: FactoryState, item: string, targets: readonly 
   );
 }
 
+/**
+ * What the owner said that a task's runs follow: what was said about the task, and about its
+ * item from the acceptance of the task's plan on. What was said about the item before then
+ * shaped the plan, which carries it into each task's GOAL and DONE_WHEN; given to every task of
+ * a split item, it would ask each one for the whole item.
+ */
+export function taskOwnerNotes(state: FactoryState, task: string): Note[] {
+  const current = state.tasks[task];
+  if (!current) return [];
+  return ownerNotes(state, current.item, [current.item, task]).filter(
+    (note) => note.target === task || note.ts >= current.createdAt,
+  );
+}
+
 /** What kozod's failed checks at Complete found about an item, oldest first. */
 export function checkNotes(state: FactoryState, item: string): Note[] {
   return (state.items[item]?.notes ?? []).filter((note) => note.kind === "check");

@@ -73,6 +73,8 @@ export interface TaskState {
   checkpoint: Checkpoint | null;
   /** The commit of the default branch that brought the task branch in, once kozod saw it. */
   merged: { commit: string | null; at: string } | null;
+  /** When the plan that made the task was accepted. */
+  createdAt: string;
   updatedAt: string;
 }
 
@@ -373,6 +375,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
           runs: [],
           checkpoint: null,
           merged: null,
+          createdAt: event.ts,
           updatedAt: event.ts,
         };
       });
