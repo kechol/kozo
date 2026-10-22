@@ -7,8 +7,6 @@ export interface LaunchedSession {
   messages: AsyncIterable<WorkerMessage>;
   /** Asks the session to stop; it ends with a stopped outcome. */
   stop(): void;
-  /** The worker's process ID, or null when the session runs inside kozod. */
-  pid: number | null;
 }
 
 export interface Launcher {
@@ -47,7 +45,7 @@ export function processLauncher(command: readonly string[]): Launcher {
         }
         await child.exited;
       }
-      return { messages: messages(), stop: () => child.kill("SIGTERM"), pid: child.pid };
+      return { messages: messages(), stop: () => child.kill("SIGTERM") };
     },
   };
 }
@@ -90,7 +88,7 @@ export function inProcessLauncher(agent: CodingAgent): Launcher {
           wake = null;
         }
       }
-      return { messages: messages(), stop: () => controller.abort(), pid: null };
+      return { messages: messages(), stop: () => controller.abort() };
     },
   };
 }

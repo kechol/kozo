@@ -183,6 +183,8 @@ export function applyEvent(state: FactoryState, event: Event): void {
   }
   const item = event.item === null ? undefined : state.items[event.item];
   const task = event.task === null ? undefined : state.tasks[event.task];
+  const subjectOf = (target: "item" | "task") =>
+    target === "item" ? required(item, `item ${event.item}`) : required(task, `task ${event.task}`);
   switch (event.type) {
     case "factory.created":
       if (state.factoryId !== null)
@@ -213,10 +215,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
       return;
     }
     case "stage.changed": {
-      const subject =
-        event.data.target === "item"
-          ? required(item, `item ${event.item}`)
-          : required(task, `task ${event.task}`);
+      const subject = subjectOf(event.data.target);
       if (subject.stage !== event.data.from) {
         throw new StateError(`${subject.ref} is in ${subject.stage}, not ${event.data.from}`);
       }
@@ -236,10 +235,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
       return;
     }
     case "hold.set": {
-      const subject =
-        event.data.target === "item"
-          ? required(item, `item ${event.item}`)
-          : required(task, `task ${event.task}`);
+      const subject = subjectOf(event.data.target);
       if (subject.hold) {
         throw new StateError(`${subject.ref} is already held by ${subject.hold.kind}`);
       }
@@ -252,10 +248,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
       return;
     }
     case "hold.cleared": {
-      const subject =
-        event.data.target === "item"
-          ? required(item, `item ${event.item}`)
-          : required(task, `task ${event.task}`);
+      const subject = subjectOf(event.data.target);
       if (subject.hold?.kind !== event.data.hold) {
         throw new StateError(`${subject.ref} is not held by ${event.data.hold}`);
       }

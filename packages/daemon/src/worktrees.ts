@@ -2,7 +2,7 @@ import { mkdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { type KozoHome, parseReference, sha256 } from "@kozo/core";
 import { GitError, git } from "@kozo/verify";
-import { defaultBranch } from "./repository.ts";
+import { branchTip, defaultBranch } from "./repository.ts";
 
 function taskParts(task: string) {
   const reference = parseReference(task);
@@ -48,17 +48,6 @@ async function exists(path: string) {
   );
 }
 
-async function branchCommit(repository: string, branch: string): Promise<string | null> {
-  try {
-    return (
-      await git(repository, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`])
-    ).trim();
-  } catch (error) {
-    if (error instanceof GitError) return null;
-    throw error;
-  }
-}
-
 /**
  * Claims a task by creating its branch at the tip of the default branch and checks it out in
  * the task's worktree. A branch that already exists belongs to whoever created it, so only
@@ -75,7 +64,7 @@ export async function claimTask(
   const tip = (
     await git(repository, ["rev-parse", `refs/heads/${await defaultBranch(repository)}`])
   ).trim();
-  const existing = await branchCommit(repository, branch);
+  const existing = await branchTip(repository, branch);
   if (existing !== null && !resume) {
     return { claimed: false, reason: `${branch} already exists in ${repository}` };
   }
@@ -107,7 +96,7 @@ export async function releaseTask(
     await git(repository, ["worktree", "remove", "--force", worktree]);
   }
   await git(repository, ["worktree", "prune"]);
-  if (deleteBranch && (await branchCommit(repository, branch)) !== null) {
+  if (deleteBranch && (await branchTip(repository, branch)) !== null) {
     await git(repository, ["branch", "-D", branch]);
   }
 }

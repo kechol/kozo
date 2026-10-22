@@ -15,7 +15,7 @@ import {
 } from "@kozo/core";
 import type { z } from "zod";
 import { CommandError, type VerbResult } from "./api.ts";
-import type { EventStore, NewEvent } from "./event-store.ts";
+import type { EventStore } from "./event-store.ts";
 import { enqueue } from "./instructions.ts";
 import { itemPath, writeItemFile } from "./item-file.ts";
 import { readCharter } from "./repository.ts";
@@ -155,7 +155,7 @@ export class ControlPlane {
       item,
       task,
       data: { target: kind, hold: subject.hold.kind, by: "human", ...(reason ? { reason } : {}) },
-    } as NewEvent);
+    });
   }
 
   private async setHold(kind: "item" | "task", ref: string, hold: "paused", reason: string) {
@@ -165,7 +165,7 @@ export class ControlPlane {
       item,
       task,
       data: { target: kind, hold, by: "human", reason },
-    } as NewEvent);
+    });
   }
 
   /** Keeps what a human said about an item or a task for the runs that follow. */
@@ -187,7 +187,7 @@ export class ControlPlane {
       item,
       task,
       data: { target: kind, from: subject.stage, to, by: "human", reason },
-    } as NewEvent);
+    });
   }
 
   private async approve(ref: string, body: Body<"approve">): Promise<VerbResult> {
@@ -246,15 +246,8 @@ export class ControlPlane {
     if (!run) throw new CommandError(404, `${ref} does not exist`);
     const owner = run.task ?? run.item;
     const kind = run.task ? "task" : "item";
-    if (verb === "say") {
-      if (this.runner?.sessionFor(owner) === ref) {
-        const { text } = body as Body<"say">;
-        await this.note(run.item, owner, "instruction", text);
-        await enqueue(runFiles(this.home, ref).queue, text);
-        return { message: `sent to ${ref}, which reads it at its next turn` };
-      }
-      return await this.say(owner, kind, body as Body<"say">);
-    }
+    // Text for a run belongs to its task or item, and reaches the run while it is running.
+    if (verb === "say") return await this.say(owner, kind, body as Body<"say">);
     if (verb === "pause") return await this.pause(owner, kind, body as Body<"pause">);
     return await this.resume(owner, kind);
   }
@@ -319,19 +312,19 @@ export class ControlPlane {
   ): Promise<VerbResult> {
     const { subject, item } = this.subject(ref, kind);
     if (isClosed(subject.stage)) return { message: `${ref} is already ${subject.stage}` };
+    const done = "done" in body;
+    const [to, reason] = done
+      ? (["complete", "kozo close --done"] as const)
+      : (["cancelled", `kozo close --cancel: ${body.cancel}`] as const);
     const tasks = kind === "item" ? (this.store.state.items[ref]?.tasks ?? []) : [ref];
     for (const task of tasks) {
       const state = this.store.state.tasks[task];
       if (!state || isClosed(state.stage)) continue;
       const running = this.runner?.sessionFor(task);
       if (running) this.runner?.stopSession(running);
-      if ("done" in body) {
-        await this.clearHold("task", task);
-        await this.move("task", task, "complete", "kozo close --done");
-      } else {
-        await this.move("task", task, "cancelled", `kozo close --cancel: ${body.cancel}`);
-        await this.runner?.release(task, true);
-      }
+      if (done) await this.clearHold("task", task);
+      await this.move("task", task, to, reason);
+      if (!done) await this.runner?.release(task, true);
     }
     if (
       kind === "item" ||
@@ -339,13 +332,8 @@ export class ControlPlane {
     ) {
       const owner = this.store.state.items[item];
       if (owner && !isClosed(owner.stage)) {
-        if ("done" in body) await this.clearHold("item", item);
-        await this.move(
-          "item",
-          item,
-          "done" in body ? "complete" : "cancelled",
-          "done" in body ? "kozo close --done" : `kozo close --cancel: ${body.cancel}`,
-        );
+        if (done) await this.clearHold("item", item);
+        await this.move("item", item, to, reason);
       }
     }
     return {

@@ -48,7 +48,6 @@ describe("pumpSession", () => {
           yield* messages;
         })(),
         stop() {},
-        pid: null,
       },
       run,
       1,

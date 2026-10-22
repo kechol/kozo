@@ -126,9 +126,6 @@ describe("runSession", () => {
       { answer: { outcome: "blocked" } },
     ]);
     expect(blocked.outcome).toMatchObject({ status: "answered" });
-    expect(blocked.messages).toContainEqual({
-      blocked: { reason: "ambiguous", question: "Is zero Sold out or Only 0 left?" },
-    });
   });
 
   test("the guard refuses what the task may not do", async () => {

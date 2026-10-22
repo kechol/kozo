@@ -1,4 +1,4 @@
-import { type BlockedReason, blockedReasonSchema, gateLevelSchema } from "@kozo/core";
+import { agentNameSchema, blockedReasonSchema, gateLevelSchema } from "@kozo/core";
 import { z } from "zod";
 import type {
   AgentOutcome,
@@ -15,7 +15,7 @@ import type { SandboxPaths } from "./task-sandbox.ts";
 export const workerSpecSchema = z.strictObject({
   version: z.literal(1),
   run: z.string(),
-  agent: z.enum(["triage", "plan", "implement", "review", "verify", "explorer"]),
+  agent: agentNameSchema,
   model: z.string(),
   cwd: z.string(),
   instructions: z.string(),
@@ -52,18 +52,8 @@ export const workerSpecSchema = z.strictObject({
 });
 export type WorkerSpec = z.infer<typeof workerSpecSchema>;
 
-export interface Blocked {
-  reason: BlockedReason;
-  question: string;
-  split?: { goal: string; done_when: string[]; scope: string[] }[];
-}
-
 /** One line a worker writes to kozod on stdout. */
-export type WorkerMessage =
-  | { record: AgentRecord }
-  | { note: string }
-  | { blocked: Blocked }
-  | { outcome: AgentOutcome };
+export type WorkerMessage = { record: AgentRecord } | { note: string } | { outcome: AgentOutcome };
 
 /** One line of a run's instruction queue as kozod writes it. */
 export const queueLineSchema = z.strictObject({
@@ -112,7 +102,7 @@ export async function runSession(
 ): Promise<AgentOutcome> {
   let delivered = -1;
   let notes = 0;
-  let blocked: Blocked | null = null;
+  let blocked = false;
   let gatesPassed = false;
   let gatesCall: string | null = null;
 
@@ -145,9 +135,8 @@ export async function runSession(
           )
           .optional(),
       },
-      async run(input) {
-        blocked = input as unknown as Blocked;
-        emit({ blocked });
+      async run() {
+        blocked = true;
         return "Recorded. Finish now with a run report whose outcome is blocked, with this reason and question.";
       },
     },

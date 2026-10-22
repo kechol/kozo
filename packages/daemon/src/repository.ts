@@ -1,12 +1,14 @@
 import { type Charter, parseCharter } from "@kozo/core";
 import { charterPath, GitError, git, showFile } from "@kozo/verify";
 
-async function branchExists(repository: string, branch: string) {
+/** The commit a local branch points at, or null when there is no such branch. */
+export async function branchTip(repository: string, branch: string): Promise<string | null> {
   try {
-    await git(repository, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}^{commit}`]);
-    return true;
+    return (
+      await git(repository, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}^{commit}`])
+    ).trim();
   } catch (error) {
-    if (error instanceof GitError) return false;
+    if (error instanceof GitError) return null;
     throw error;
   }
 }
@@ -26,7 +28,7 @@ export async function defaultBranch(repository: string): Promise<string> {
   }
   const candidates = [remoteHead.replace(/^origin\//, ""), "main", "master"].filter(Boolean);
   for (const branch of candidates) {
-    if (await branchExists(repository, branch)) return branch;
+    if ((await branchTip(repository, branch)) !== null) return branch;
   }
   throw new GitError(`${repository} has no main, master or origin/HEAD branch`);
 }

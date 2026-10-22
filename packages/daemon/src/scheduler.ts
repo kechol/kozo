@@ -1,5 +1,4 @@
 import {
-  type Charter,
   type Factory,
   type FactoryState,
   isClosed,
@@ -7,9 +6,9 @@ import {
   startBlocker,
   type TaskState,
 } from "@kozo/core";
-import type { EventStore, NewEvent } from "./event-store.ts";
+import type { EventStore } from "./event-store.ts";
 import { costSince } from "./queries.ts";
-import { readCharter } from "./repository.ts";
+import { type CharterResult, readCharter } from "./repository.ts";
 import { bugfixNodes, type Node, type Runner } from "./runner.ts";
 
 /** The last implement run of a task, the one that carries its blueprint. */
@@ -96,7 +95,7 @@ export class Scheduler {
               by: "kozod",
               reason: `kozod could not run it: ${message}`.slice(0, 2000),
             },
-          } as NewEvent)
+          })
           .catch(() => {});
       })
       .finally(() => {
@@ -107,9 +106,9 @@ export class Scheduler {
   }
 
   /** Why nothing new may start in this repository now, or null when work may start. */
-  private capacity(repository: string, charter: Charter | string): string | null {
-    if (typeof charter === "string")
-      return `the Charter keeps the repository from running: ${charter}`;
+  private capacity(repository: string, result: CharterResult): string | null {
+    if (!result.ok) return `the Charter keeps the repository from running: ${result.reason}`;
+    const { charter } = result;
     const midnight = this.now();
     midnight.setHours(0, 0, 0, 0);
     const spent = costSince(this.store.db, midnight);
@@ -140,33 +139,33 @@ export class Scheduler {
     const state = this.store.state;
     if (task.hold || isClosed(task.stage) || this.active.has(task.ref)) return false;
     if (startBlocker(state, task) !== null) return false;
+    const last = lastBlueprintRun(state, task);
     if (task.stage === "building" || task.stage === "reviewing") {
-      const last = lastBlueprintRun(state, task);
       return last === null || isRunOver(last.state);
     }
-    const last = lastBlueprintRun(state, task);
     return last !== null && isRunOver(last.state) && last.state !== "succeeded";
   }
 
   private async plan(): Promise<void> {
     const state = this.store.state;
     if (state.paused) return;
-    const charters = new Map<string, Charter | string>();
-    const charterOf = async (repository: string) => {
-      if (!charters.has(repository)) {
-        const result = await readCharter(repository).catch((error: Error) => ({
-          ok: false as const,
-          reason: error.message,
-        }));
-        charters.set(repository, result.ok ? result.charter : result.reason);
+    // Holds for capacity do not count toward the Charter's limits, so one look per repository
+    // serves the whole pass.
+    const stops = new Map<string, string | null>();
+    const stopOf = async (repository: string) => {
+      if (!stops.has(repository)) {
+        const result = await readCharter(repository).catch(
+          (error: Error): CharterResult => ({ ok: false, reason: error.message }),
+        );
+        stops.set(repository, this.capacity(repository, result));
       }
-      return charters.get(repository) as Charter | string;
+      return stops.get(repository) ?? null;
     };
 
     for (const task of Object.values(this.store.state.tasks)) {
       if (task.hold?.kind !== "capacity" || this.active.has(task.ref)) continue;
       const repository = this.store.state.items[task.item]?.repository ?? "";
-      if (this.capacity(repository, await charterOf(repository)) !== null) continue;
+      if ((await stopOf(repository)) !== null) continue;
       await this.store.append({
         type: "hold.cleared",
         item: task.item,
@@ -178,14 +177,14 @@ export class Scheduler {
     for (const item of Object.values(this.store.state.items)) {
       if (this.active.size >= this.factory.concurrency) return;
       if (item.stage !== "triage" || item.hold || this.active.has(item.ref)) continue;
-      if (this.capacity(item.repository, await charterOf(item.repository)) !== null) continue;
+      if ((await stopOf(item.repository)) !== null) continue;
       this.start(item.ref, "item", () => this.runner.triage(item.ref));
     }
     for (const task of Object.values(this.store.state.tasks)) {
       if (this.active.size >= this.factory.concurrency) return;
       if (!this.needsRun(task)) continue;
       const repository = this.store.state.items[task.item]?.repository ?? "";
-      const stop = this.capacity(repository, await charterOf(repository));
+      const stop = await stopOf(repository);
       if (stop !== null) {
         await this.store.append({
           type: "hold.set",

@@ -1,7 +1,7 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { runFiles } from "@kozo/core";
-import { type AgentOutcome, type Blocked, recordTypes } from "@kozo/worker";
+import { type AgentOutcome, recordTypes } from "@kozo/worker";
 import type { EventStore } from "./event-store.ts";
 import type { LaunchedSession } from "./launcher.ts";
 
@@ -17,11 +17,10 @@ type Ended = {
   [S in AgentOutcome["status"]]: { status: S; outcome: Extract<AgentOutcome, { status: S }> };
 };
 
-export type SessionResult = (
+export type SessionResult =
   | Ended[AgentOutcome["status"]]
   | { status: "lost"; costUsd: number }
-  | { status: "timed-out"; costUsd: number }
-) & { blocked: Blocked | null; notes: number };
+  | { status: "timed-out"; costUsd: number };
 
 // A tool result larger than this is kept in a file beside the log, and the event names it.
 const inlineOutputLimit = 4000;
@@ -38,8 +37,6 @@ export async function pumpSession(
   maxMinutes: number,
 ): Promise<SessionResult> {
   const files = runFiles(store.home, envelope.run_id);
-  let blocked: Blocked | null = null;
-  let notes = 0;
   let costUsd = 0;
   let timedOut = false;
   const timer = setTimeout(() => {
@@ -49,11 +46,8 @@ export async function pumpSession(
   try {
     for await (const message of session.messages) {
       if ("note" in message) {
-        notes += 1;
         await mkdir(files.dir, { recursive: true });
         await appendFile(files.decisions, `- ${message.note.replace(/\s+/g, " ")}\n`);
-      } else if ("blocked" in message) {
-        blocked = message.blocked;
       } else if ("record" in message) {
         // Only the record types a worker may send, and only their type and data, become events.
         const record = {
@@ -91,20 +85,16 @@ export async function pumpSession(
           await store.append({ ...envelope, ...record } as Parameters<EventStore["append"]>[0]);
         }
       } else {
-        if (timedOut) return { status: "timed-out", blocked, notes, costUsd };
+        if (timedOut) return { status: "timed-out", costUsd };
         return {
-          ...({
-            status: message.outcome.status,
-            outcome: message.outcome,
-          } as Ended[AgentOutcome["status"]]),
-          blocked,
-          notes,
-        };
+          status: message.outcome.status,
+          outcome: message.outcome,
+        } as Ended[AgentOutcome["status"]];
       }
     }
   } finally {
     clearTimeout(timer);
   }
-  if (timedOut) return { status: "timed-out", blocked, notes, costUsd };
-  return { status: "lost", blocked, notes, costUsd };
+  if (timedOut) return { status: "timed-out", costUsd };
+  return { status: "lost", costUsd };
 }

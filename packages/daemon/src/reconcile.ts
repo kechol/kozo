@@ -2,21 +2,10 @@ import { isRunOver, type TaskState } from "@kozo/core";
 import { GitError, git } from "@kozo/verify";
 import { factoryGitEnvironment } from "@kozo/worker";
 import type { EventStore } from "./event-store.ts";
-import { defaultBranch } from "./repository.ts";
+import { branchTip, defaultBranch } from "./repository.ts";
 import type { Runner } from "./runner.ts";
 import { awaitingMerge } from "./scheduler.ts";
 import { taskBranch } from "./worktrees.ts";
-
-async function branchTip(repository: string, branch: string): Promise<string | null> {
-  try {
-    return (
-      await git(repository, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`])
-    ).trim();
-  } catch (error) {
-    if (error instanceof GitError) return null;
-    throw error;
-  }
-}
 
 /** Whether `head` is in `commit`, merged as it is or rebased into patch-equivalent commits. */
 async function contains(repository: string, head: string, commit: string): Promise<boolean> {
