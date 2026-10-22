@@ -38,6 +38,7 @@ import {
   globMatcher,
   type Judge,
   listFiles,
+  protectedPathMatcher,
   proveLine,
   readBaseDocuments,
   runCommand,
@@ -389,15 +390,60 @@ export class Runner {
         await this.endRun(run, "failed", "the plan draft is invalid");
         return;
       }
-      await this.store.append({ ...envelope, type: "plan.proposed", data: { plan: draft.data } });
+      const checked = await this.underCharter(draft.data, repository);
+      if ("problem" in checked) {
+        await this.hold(itemRef, null, "attention", checked.problem, run);
+        await this.endRun(run, "failed", "the plan exceeds the Charter");
+        return;
+      }
+      await this.store.append({ ...envelope, type: "plan.proposed", data: { plan: checked.plan } });
       await this.endRun(run, "succeeded");
-      await this.afterTriage(itemRef, draft.data, repository.charter, file.class);
+      await this.afterTriage(itemRef, checked.plan, repository.charter, file.class);
     } catch (error) {
       await this.failOpenRuns(itemRef, error);
       throw error;
     } finally {
       await git(repository.path, ["worktree", "remove", "--force", checkout]).catch(() => {});
     }
+  }
+
+  /**
+   * The plan as kozod takes it under the Charter, or why it does not fit the Charter's limits.
+   * The risk tier comes from a session that read the request, so it may only raise the tier:
+   * a task whose scope reaches a protected path or covers every file is high risk.
+   */
+  private async underCharter(
+    plan: Plan,
+    repository: Repository,
+  ): Promise<{ plan: Plan } | { problem: string }> {
+    const { limits, protected_paths } = repository.charter;
+    if (plan.tasks.length > limits.max_tasks_per_item) {
+      return {
+        problem: `the plan has ${plan.tasks.length} tasks, more than the Charter's max_tasks_per_item of ${limits.max_tasks_per_item}`,
+      };
+    }
+    const over = plan.tasks.find(
+      (task) =>
+        task.estimate.lines > limits.max_changed_lines || task.estimate.files > limits.max_files,
+    );
+    if (over) {
+      return {
+        problem: `${over.id} is estimated at ${over.estimate.lines} lines in ${over.estimate.files} files, over the Charter's ${limits.max_changed_lines} lines in ${limits.max_files} files`,
+      };
+    }
+    const files = await listFiles(repository.path, repository.tip);
+    const guarded = protected_paths.map(protectedPathMatcher);
+    const isProtected = (path: string) => guarded.some((matches) => matches(path));
+    const high = plan.tasks.some((task) => {
+      const inScope = globMatcher(task.scope);
+      return (
+        (files.length > 0 && files.every(inScope)) ||
+        task.scope.some(isProtected) ||
+        protected_paths.some(inScope) ||
+        files.some((path) => inScope(path) && isProtected(path))
+      );
+    });
+    return { plan: high ? { ...plan, risk: "high" } : plan };
   }
 
   private async afterTriage(

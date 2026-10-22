@@ -723,6 +723,39 @@ describe("the minimal path", () => {
     ]);
   }, 120_000);
 
+  test("kozod raises the risk of a plan that reaches a protected path and holds one over the limits", async () => {
+    const withTask = (task: object) => ({
+      ...plan,
+      plan: { ...plan.plan, risk: "low", tasks: [{ ...plan.plan.tasks[0], ...task }] },
+    });
+    const answers = [
+      withTask({ scope: ["src/**", "db/migrations/**"] }),
+      withTask({ scope: ["**"] }),
+      withTask({ estimate: { lines: 500, files: 2 } }),
+    ];
+    let triaged = 0;
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: answers[triaged++] }] : [{ hang: true }],
+    );
+    for (const title of ["Protected", "Everything"]) {
+      const { ref } = await env.control.addItem({ title, class: "docs" });
+      await env.settle();
+      const proposed = env.store.db
+        .query<{ risk: string }, [string]>(
+          "select json_extract(line, '$.data.plan.risk') as risk from events where type = 'plan.proposed' and item = ?",
+        )
+        .get(ref);
+      expect(proposed?.risk).toBe("high");
+      expect(env.store.state.items[ref]?.hold).toMatchObject({ kind: "approval" });
+    }
+    const { ref } = await env.control.addItem({ title: "Too big", class: "docs" });
+    await env.settle();
+    expect(env.store.state.items[ref]?.hold).toMatchObject({
+      kind: "attention",
+      reason: "t1 is estimated at 500 lines in 2 files, over the Charter's 60 lines in 4 files",
+    });
+  }, 120_000);
+
   test("kozo say reaches a running run at its next turn", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage"
