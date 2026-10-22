@@ -2,7 +2,14 @@ import type { AutonomyLevel, Charter, WorkClass } from "./charter.ts";
 import type { Event, EventType, NoteKind } from "./event.ts";
 import type { Plan } from "./plan.ts";
 import type { ReviewVerdict } from "./verdict.ts";
-import { type HoldKind, type RunState, type Stage, stageSchema } from "./work-model.ts";
+import {
+  type HoldKind,
+  type RiskTier,
+  type RunState,
+  riskTierSchema,
+  type Stage,
+  stageSchema,
+} from "./work-model.ts";
 
 export interface Hold {
   kind: HoldKind;
@@ -54,6 +61,8 @@ export interface TaskState {
   done_when: string[];
   scope: string[];
   depends_on: string[];
+  /** The plan's tier, or the higher one kozod rated the task's diff at. */
+  risk: RiskTier;
   stage: Stage;
   hold: Hold | null;
   /** How many times Reviewing sent the task back to Building. */
@@ -328,6 +337,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
           done_when: planned.done_when,
           scope: planned.scope,
           depends_on: planned.depends_on.map((id) => `${plan.item}/${id}`),
+          risk: plan.risk,
           stage: "building",
           hold: null,
           revisions: 0,
@@ -383,6 +393,21 @@ export function applyEvent(state: FactoryState, event: Event): void {
       const subject = required(task, `task ${event.task}`);
       if (subject.merged) throw new StateError(`${subject.ref} is already merged`);
       subject.merged = { commit: event.data.commit, at: event.ts };
+      return;
+    }
+    case "risk.raised": {
+      const subject = required(task, `task ${event.task}`);
+      if (subject.risk !== event.data.from) {
+        throw new StateError(`${subject.ref} is rated ${subject.risk}, not ${event.data.from}`);
+      }
+      const tiers = riskTierSchema.options;
+      if (tiers.indexOf(event.data.to) <= tiers.indexOf(event.data.from)) {
+        throw new StateError(
+          `a risk tier only goes up, not from ${event.data.from} to ${event.data.to}`,
+        );
+      }
+      subject.risk = event.data.to;
+      subject.updatedAt = event.ts;
       return;
     }
     case "checkpoint": {

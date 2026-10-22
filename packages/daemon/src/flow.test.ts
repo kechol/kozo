@@ -924,6 +924,60 @@ describe("the minimal path", () => {
     });
   }, 120_000);
 
+  test("a low risk task runs the fast gates without prove, and a diff that changes code raises it", async () => {
+    const fastGates = {
+      tool: "Bash",
+      input: { command: "kozo gates --level fast --base main" },
+      output: { stdout: "KOZO_GATES: level=fast status=pass gates=lint,test duration=1s" },
+    } as const;
+    const lowPlan = {
+      ...plan,
+      plan: {
+        ...plan.plan,
+        risk: "low",
+        tasks: [{ ...plan.plan.tasks[0], scope: ["src/**", "docs/**"] }],
+      },
+    };
+    const docs: FakeStep[] = [
+      { write: { "docs/stock.md": "Stock labels say Only N left from 1 to 3 units.\n" } },
+      { commit: "docs: describe the low stock label" },
+      fastGates,
+      { use: "kozo_note", input: { choice: "Documented it", reason: "Docs only" } },
+      { answer: { ...report, tests: [] } },
+    ];
+    // A low task's agent runs the fast gates, whatever the diff turns out to change.
+    const code = implement().map((step) => ("tool" in step ? fastGates : step));
+    for (const [steps, risk] of [
+      [docs, "low"],
+      [code, "normal"],
+    ] as const) {
+      await using env = await factoryOf((request) =>
+        request.agent === "triage" ? [{ answer: lowPlan }] : [...steps],
+      );
+      const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+      await env.settle();
+      await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+      await env.settle();
+      const task = env.store.state.tasks[`${ref}/t1`];
+      expect({ risk, stage: task?.stage, hold: task?.hold }).toEqual({
+        risk,
+        stage: "handoff",
+        hold: null,
+      });
+      expect(task?.risk).toBe(risk);
+      const gates = env.store.db
+        .query<{ level: string }, []>(
+          "select json_extract(line, '$.data.level') as level from events where type = 'gates.result' order by id limit 1",
+        )
+        .get();
+      expect(gates?.level).toBe(risk === "low" ? "fast" : "full");
+      const verifyRuns = Object.values(env.store.state.runs).filter(
+        (run) => run.agent === "verify",
+      );
+      expect(verifyRuns).toHaveLength(risk === "low" ? 0 : 1);
+    }
+  }, 240_000);
+
   test("kozo say reaches a running run at its next turn", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage"

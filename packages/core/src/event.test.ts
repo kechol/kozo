@@ -68,6 +68,7 @@ const examples: Record<EventType, unknown> = {
   "note.added": { kind: "answer", text: "Show Sold out for zero." },
   "plan.proposed": { plan },
   "plan.accepted": { plan, by: "kozod" },
+  "risk.raised": { from: "low", to: "normal", reason: "the diff changes src/stock.ts" },
   "node.enter": { kind: "D" },
   "node.exit": { ok: false, summary: "unit failed" },
   "agent.message": { agent: "implement", text: "The test now fails before the fix." },

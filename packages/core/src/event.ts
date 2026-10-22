@@ -10,7 +10,13 @@ import {
   taskReferenceSchema,
 } from "./reference.ts";
 import { reviewVerdictSchema } from "./verdict.ts";
-import { agentNameSchema, holdKindSchema, runStateSchema, stageSchema } from "./work-model.ts";
+import {
+  agentNameSchema,
+  holdKindSchema,
+  riskTierSchema,
+  runStateSchema,
+  stageSchema,
+} from "./work-model.ts";
 
 const text = z.string().min(1);
 const amount = z.number().nonnegative();
@@ -128,6 +134,11 @@ export const eventSchema = z
     event("note.added", z.strictObject({ kind: noteKindSchema, text })),
     event("plan.proposed", z.strictObject({ plan: planSchema })),
     event("plan.accepted", z.strictObject({ plan: planSchema, by: actor })),
+    /** kozod re-rated the event's task from its diff; a tier only ever goes up. */
+    event(
+      "risk.raised",
+      z.strictObject({ from: riskTierSchema, to: riskTierSchema, reason: text }),
+    ),
     event("node.enter", z.strictObject({ kind: z.enum(["D", "A"]) })),
     event("node.exit", z.strictObject({ ok: z.boolean(), summary: text.optional() })),
     event("agent.message", z.strictObject({ agent: agentNameSchema, text })),

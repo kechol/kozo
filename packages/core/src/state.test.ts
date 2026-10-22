@@ -485,4 +485,23 @@ describe("holds", () => {
       expect(startBlocker(paused, pausedFirst)).toBe("the factory is paused: kozo pause");
     }
   });
+
+  test("a task starts at the plan's risk tier and is only ever raised", () => {
+    const write = eventWriter();
+    const t1 = { item: "K-1", task: "K-1/t1" };
+    const base = planned(write, plan(1, "low"));
+    expect(replay(base).tasks["K-1/t1"]?.risk).toBe("low");
+    const raised = [
+      ...base,
+      write("risk.raised", { from: "low", to: "normal", reason: "src changed" }, t1),
+    ];
+    const state = replay(raised);
+    expect(state.tasks["K-1/t1"]?.risk).toBe("normal");
+    expect(() =>
+      applyEvent(state, write("risk.raised", { from: "normal", to: "low", reason: "x" }, t1)),
+    ).toThrow("a risk tier only goes up, not from normal to low");
+    expect(() =>
+      applyEvent(state, write("risk.raised", { from: "low", to: "high", reason: "x" }, t1)),
+    ).toThrow("K-1/t1 is rated normal, not low");
+  });
 });

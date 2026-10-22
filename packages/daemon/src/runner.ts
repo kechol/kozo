@@ -105,7 +105,15 @@ export type Node = (typeof bugfixNodes)[number];
 /** How one attempt ended: done, or retried in a new run until `rounds` attempts. */
 type Attempt = { kind: "done" } | { kind: "retry"; failure: string; rounds: number };
 
-const gatesFor: Record<RiskTier, GateLevel> = { low: "fast", normal: "full", high: "deep" };
+/** What each risk tier verifies beyond diff-guard and review, which every tier runs. */
+const layersFor: Record<RiskTier, { gates: GateLevel; prove: boolean; verify: boolean }> = {
+  low: { gates: "fast", prove: false, verify: false },
+  normal: { gates: "full", prove: true, verify: true },
+  high: { gates: "deep", prove: true, verify: true },
+};
+
+/** The files a diff may change and still be the documentation-only change of the low tier. */
+const documentation = /\.(md|mdx|markdown|rst|txt|adoc)$/i;
 
 /** A plan as the triage and plan agents write it, without the fields kozod adds. */
 const draftOf = ({ version: _version, item: _item, ...draft }: Plan) => draft;
@@ -597,7 +605,8 @@ export class Runner {
     const plan = item.plan;
     const worktree = worktreePath(this.home, repository.path, taskRef);
     const branch = taskBranch(this.store.factoryId, taskRef);
-    const level = gatesFor[plan.risk];
+    let layers = layersFor[task.risk];
+    let level = layers.gates;
     const run = await this.startRun({ item: item.ref, task: taskRef }, "implement", repository.tip);
     const envelope: Envelope = { run_id: run, item: item.ref, task: taskRef };
     const files = runFiles(this.home, run);
@@ -905,6 +914,29 @@ export class Runner {
         }
         case "verify-deterministic": {
           await enter(node, "D");
+          if (current.risk === "low") {
+            const changed = await git(worktree, [
+              "diff",
+              "--name-only",
+              "-z",
+              `${repository.branch}...HEAD`,
+            ]);
+            const code = changed.split("\0").find((path) => path && !documentation.test(path));
+            if (code) {
+              await this.store.append({
+                ...envelope,
+                node,
+                type: "risk.raised",
+                data: {
+                  from: "low",
+                  to: "normal",
+                  reason: `the diff changes ${code}, which is not documentation`,
+                },
+              });
+              layers = layersFor.normal;
+              level = layers.gates;
+            }
+          }
           const recorded = await this.recordedGates(
             { ...envelope, node },
             level,
@@ -929,14 +961,16 @@ export class Runner {
           if (gates.status === "fail")
             return await retry(node, `the ${gates.failed} gate failed:\n${tail(output)}`);
           output = "";
-          const prove = await runProve({
-            cwd: worktree,
-            base: repository.branch,
-            log: collect,
-            env: this.commandEnv,
-          });
-          if (prove.status !== "pass")
-            return await retry(node, `${proveLine(prove)}\n${tail(output)}`);
+          if (layers.prove) {
+            const prove = await runProve({
+              cwd: worktree,
+              base: repository.branch,
+              log: collect,
+              env: this.commandEnv,
+            });
+            if (prove.status !== "pass")
+              return await retry(node, `${proveLine(prove)}\n${tail(output)}`);
+          }
           const guard = await runDiffGuard({
             cwd: worktree,
             base: repository.branch,
@@ -955,7 +989,12 @@ export class Runner {
             });
           }
           await exit(node, true);
-          await this.moveTask(current, "reviewing", run, "gates, prove and diff-guard passed");
+          await this.moveTask(
+            current,
+            "reviewing",
+            run,
+            `the checks of the ${this.store.state.tasks[taskRef]?.risk} risk tier passed`,
+          );
           break;
         }
         case "review": {
@@ -1022,7 +1061,7 @@ export class Runner {
         }
         case "verify-app": {
           await enter(node, "A");
-          if (plan.risk === "low") {
+          if (!layers.verify) {
             await exit(node, true, "skipped for the low risk tier");
             break;
           }
@@ -1319,7 +1358,7 @@ export class Runner {
     if (!task || !item?.plan || task.stage !== "handoff") return;
     const repository = await this.repository(item.repository);
     const worktree = worktreePath(this.home, repository.path, taskRef);
-    const level = gatesFor[item.plan.risk];
+    const level = layersFor[task.risk].gates;
     await git(worktree, [
       "-c",
       "core.hooksPath=/dev/null",
