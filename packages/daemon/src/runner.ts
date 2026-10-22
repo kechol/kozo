@@ -992,6 +992,9 @@ export class Runner {
           });
           if (guard.status !== "pass") {
             const line = diffGuardLine(guard);
+            // Only a changed diff passes diff-guard, so once the owner answers, the task resumes
+            // with a new brief that carries the answer and the refusal to the agent.
+            await checkpoint("brief");
             return await halt(node, {
               hold: "question",
               reason: `diff-guard refused the diff: ${line}`,

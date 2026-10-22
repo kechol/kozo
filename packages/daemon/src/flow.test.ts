@@ -321,6 +321,38 @@ describe("the minimal path", () => {
     );
   }, 120_000);
 
+  test("an answer to a diff-guard refusal reaches the agent with the refusal", async () => {
+    let calls = 0;
+    await using env = await factoryOf((request) => {
+      if (request.agent === "triage") return [{ answer: plan }];
+      calls += 1;
+      if (calls > 1) return [{ write: { "scripts/extra.ts": null } }, ...implement().slice(2)];
+      const [say, , ...rest] = implement();
+      return [
+        ...(say ? [say] : []),
+        { write: { ...goodChange, "scripts/extra.ts": "export {};\n" } },
+        ...rest,
+      ];
+    });
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const taskRef = `${ref}/t1`;
+    expect(env.store.state.tasks[taskRef]?.hold?.reason).toStartWith("diff-guard refused the diff");
+    await env.control.act(
+      taskRef,
+      { kind: "task", item: { repo: null, number: 1 }, task: 1 },
+      "say",
+      { text: "Leave scripts/ alone." },
+    );
+    await env.settle();
+    expect(env.store.state.tasks[taskRef]?.stage).toBe("handoff");
+    const prompt = env.agent.requests.at(-1)?.prompt ?? "";
+    expect(prompt).toContain("The owner said (answer): Leave scripts/ alone.");
+    expect(prompt).toContain("The previous attempt did not pass: KOZO_DIFF_GUARD: status=fail");
+  }, 120_000);
+
   test("reject, pause, resume, retry and close do what they say, and twice is once", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage" || request.agent === "plan"
