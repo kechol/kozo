@@ -42,7 +42,7 @@ describe("taskSandbox", () => {
     await Bun.write(join(task.worktree, "src", "cart.test.ts"), "test\n");
     const paths = await taskSandbox(task.home, task.worktree, "kozo/k3x9q2/K-1-t1", {
       writable: true,
-      protectedPaths: [".kozo/**", "src/*.test.ts"],
+      protectedPaths: [".kozo/**", "src/*.test.ts", "app/[id]"],
       existingTests: ["src/cart.test.ts"],
     });
     const common = await task.repo.git("rev-parse", "--path-format=absolute", "--git-common-dir");
@@ -61,6 +61,7 @@ describe("taskSandbox", () => {
       join(common, "refs", "heads", "kozo", "k3x9q2", "K-1-t1"),
     );
     expect(paths.denyWrite).toContain(join(task.worktree, ".kozo"));
+    expect(paths.denyWrite).toContain(join(task.worktree, "app", "[id]"));
     expect(paths.denyWrite).toContain(join(task.worktree, "src", "cart.test.ts"));
     const reading = await taskSandbox(task.home, task.worktree, "kozo/k3x9q2/K-1-t1", {
       writable: false,

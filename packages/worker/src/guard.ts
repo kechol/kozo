@@ -384,11 +384,22 @@ function analyzeScript(text: string, context: Analysis): GuardDecision {
   return allow;
 }
 
-async function readScript(context: Analysis, path: string): Promise<string | null> {
-  const rel = insideWorktree(context.policy, path);
+async function readScript(policy: TaskPolicy, path: string): Promise<string | null> {
+  const rel = insideWorktree(policy, path);
   if (rel === null) return null;
-  const file = Bun.file(resolve(context.policy.worktree, rel));
+  const file = Bun.file(resolve(policy.worktree, rel));
   return (await file.exists()) ? await file.text() : null;
+}
+
+/**
+ * A script in the worktree that `how` runs: it must have been read beforehand, and it must be
+ * the whole Bash call, so that nothing in the same call can change it between check and run.
+ */
+function runScript(how: string, path: string, context: Analysis): GuardDecision {
+  const script = context.scripts.get(path) ?? null;
+  if (script === null) return refuse(`${how} ${path}: only scripts inside the worktree may run`);
+  if (!context.alone) return refuse(`run ${path} in a Bash call of its own`);
+  return analyzeScript(script, context);
 }
 
 function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
@@ -454,11 +465,7 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
   if (name === "source" || name === ".") {
     const path = args[0];
     if (!path || path.dynamic) return refuse(`${name} of a path built from an expansion`);
-    const script = context.scripts.get(path.text) ?? null;
-    if (script === null)
-      return refuse(`${name} ${path.text}: only scripts inside the worktree may run`);
-    if (!context.alone) return refuse(`run ${path.text} in a Bash call of its own`);
-    return analyzeScript(script, context);
+    return runScript(name, path.text, context);
   }
   if (shells.has(name)) {
     const command = args.findIndex((arg) => /^-[a-z]*c[a-z]*$/.test(arg.text));
@@ -471,11 +478,7 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
     const file = args.find((arg) => !arg.text.startsWith("-"));
     if (file) {
       if (file.dynamic) return refuse(`${name} with a script path built from an expansion`);
-      const script = context.scripts.get(file.text) ?? null;
-      if (script === null)
-        return refuse(`${name} ${file.text}: only scripts inside the worktree may run`);
-      if (!context.alone) return refuse(`run ${file.text} in a Bash call of its own`);
-      return analyzeScript(script, context);
+      return runScript(name, file.text, context);
     }
     if (context.heredocs.length === 0) return refuse(`${name} reading its script from a pipe`);
     for (const heredoc of context.heredocs) {
@@ -498,10 +501,8 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
     // without a #! line runs as sh too.
     const script = context.scripts.get(first.text) ?? null;
     const interpreter = script?.startsWith("#!") ? (script.split("\n")[0] ?? "") : "#!/bin/sh";
-    if (script !== null && /\b(sh|bash|zsh|dash|ksh)\b/.test(interpreter)) {
-      if (!context.alone) return refuse(`run ${first.text} in a Bash call of its own`);
-      return analyzeScript(script, context);
-    }
+    const shell = interpreter.split(/[\s/]+/).some((part) => shells.has(part));
+    if (script !== null && shell) return runScript("run", first.text, context);
   }
   return allow;
 }
@@ -518,19 +519,12 @@ async function scriptsOf(
   } catch {
     return seen;
   }
-  const context: Analysis = {
-    policy,
-    heredocs: parsed.heredocs,
-    depth: 0,
-    scripts: seen,
-    alone: true,
-  };
   const candidates = parsed.commands.flatMap((words) =>
     words.filter((word) => !word.dynamic && !word.text.startsWith("-")).map((word) => word.text),
   );
   for (const candidate of candidates) {
     if (seen.has(candidate) || seen.size > 32) continue;
-    const script = await readScript(context, candidate);
+    const script = await readScript(policy, candidate);
     seen.set(candidate, script);
     if (script !== null) await scriptsOf(script, policy, seen);
   }

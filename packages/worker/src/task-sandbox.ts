@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { KozoHome } from "@kozo/core";
-import { git } from "@kozo/verify";
+import { git, protectedPathMatcher } from "@kozo/verify";
 
 /** The paths a task's sandboxed shell may and may not read and write, beyond its defaults. */
 export interface SandboxPaths {
@@ -11,21 +11,18 @@ export interface SandboxPaths {
 }
 
 /**
- * The paths in the worktree that a protected path pattern covers: the directory itself for a
- * pattern like `dir/**` or a literal path, so that new files under it are covered too, and
- * every existing match for any other glob.
+ * The paths in the worktree that the protected path patterns cover, read the way the guard and
+ * diff-guard read them: each pattern as a literal path, a file or a directory whose new files
+ * are covered too, and every tracked file it matches as a glob.
  */
 async function protectedTargets(worktree: string, patterns: readonly string[]): Promise<string[]> {
+  if (patterns.length === 0) return [];
+  const tracked = (await git(worktree, ["ls-files", "-z"])).split("\0").filter(Boolean);
   const targets = new Set<string>();
   for (const pattern of patterns) {
-    const literal = pattern.replace(/\/\*\*$/, "").replace(/\/+$/, "");
-    if (!/[*?[\]{}]/.test(literal)) {
-      targets.add(join(worktree, literal));
-      continue;
-    }
-    for await (const match of new Bun.Glob(pattern).scan({ cwd: worktree, dot: true })) {
-      targets.add(join(worktree, match));
-    }
+    targets.add(join(worktree, pattern.replace(/\/\*\*$/, "").replace(/\/+$/, "")));
+    const matches = protectedPathMatcher(pattern);
+    for (const path of tracked) if (matches(path)) targets.add(join(worktree, path));
   }
   return [...targets];
 }
@@ -54,9 +51,6 @@ export async function taskSandbox(
   )
     .trim()
     .split("\n");
-  const branches = (await git(worktree, ["for-each-ref", "--format=%(refname)", "refs/heads"]))
-    .split("\n")
-    .filter((ref) => ref !== "" && ref !== `refs/heads/${taskBranch}`);
   if (!writable) {
     return {
       denyRead: [home.root],
@@ -65,6 +59,9 @@ export async function taskSandbox(
       denyWrite: [worktree, commonDir],
     };
   }
+  const branches = (await git(worktree, ["for-each-ref", "--format=%(refname)", "refs/heads"]))
+    .split("\n")
+    .filter((ref) => ref !== "" && ref !== `refs/heads/${taskBranch}`);
   return {
     denyRead: [home.root],
     allowRead: [worktree],
