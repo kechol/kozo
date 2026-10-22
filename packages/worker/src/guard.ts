@@ -462,7 +462,12 @@ function analyzeGit(args: Word[], context: Analysis): GuardDecision {
     }
     if (option === "-C") {
       const path = words.shift();
-      if (!path || path.dynamic || insideWorktree(context.policy, path.text) === null) {
+      if (
+        !path ||
+        path.dynamic ||
+        path.text.includes("{}") ||
+        insideWorktree(context.policy, path.text) === null
+      ) {
         return refuse("git -C must name a directory inside the worktree");
       }
     }
@@ -549,6 +554,8 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
   const first = words[0];
   if (!first) return allow;
   if (first.dynamic) return refuse("a command name built from an expansion");
+  // find -exec and xargs put found paths in place of {}, so the name could be any program.
+  if (first.text.includes("{}")) return refuse("a command name that find or xargs fills in");
   const name = basename(first.text);
   const args = words.slice(1);
   const refused = refusedCommands.get(name);
@@ -610,8 +617,6 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
     for (let index = 0; index < args.length; index += 1) {
       if (!/^-(exec|execdir|ok|okdir)$/.test(args[index]?.text ?? "")) continue;
       const end = args.findIndex((arg, at) => at > index && (arg.text === ";" || arg.text === "+"));
-      if (args[index + 1]?.text.includes("{}"))
-        return refuse("find with a found path as the command it runs");
       const decision = analyzeCommand(args.slice(index + 1, end === -1 ? undefined : end), context);
       if (!decision.allow) return decision;
     }

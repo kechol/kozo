@@ -169,6 +169,8 @@ describe("guardToolCall", () => {
         "echo git | xargs -I{} {} push",
         "echo git | xargs -I % % push",
         "find /usr/bin -name git -exec {} push \\;",
+        "find /usr/bin -name git -exec env {} push \\;",
+        "find / -name repo -execdir git -C {} commit -m x \\;",
         "echo '-exec git push ;' | xargs find .",
         "env -S 'git\\_push'",
         "git checkout other -- $X",
