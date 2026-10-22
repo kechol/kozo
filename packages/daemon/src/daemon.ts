@@ -1,13 +1,7 @@
 import { mkdir, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { apiPort, type KozoHome, kozoHome } from "@kozo/core";
-import {
-  type Confine,
-  claudeJudge,
-  claudeVerifier,
-  platformConfine,
-  shellQuote,
-} from "@kozo/verify";
+import { type Confine, claudeJudge, claudeVerifier, platformConfine } from "@kozo/verify";
 import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
 import { ControlPlane } from "./control-plane.ts";
@@ -39,16 +33,6 @@ const compiled = !process.execPath.endsWith("/bun");
 /** The worker command: kozod's own executable in worker mode. */
 function kozodCommand(): string[] {
   return compiled ? [process.execPath] : [process.execPath, join(import.meta.dir, "main.ts")];
-}
-
-/** The kozo CLI as the agent runs it in its sandbox, for `kozo gates`, quoted for `sh`. */
-function kozoCommand(): string {
-  if (!compiled)
-    return [process.execPath, join(import.meta.dir, "..", "..", "cli", "src", "main.ts")]
-      .map(shellQuote)
-      .join(" ");
-  const sibling = join(dirname(process.execPath), "kozo");
-  return shellQuote(Bun.file(sibling).size > 0 ? sibling : (Bun.which("kozo") ?? "kozo"));
 }
 
 function alive(pid: number): boolean {
@@ -111,7 +95,6 @@ export class Daemon {
       launcher,
       judge: claudeJudge(claude),
       verifier: claudeVerifier(claude),
-      kozoCommand: kozoCommand(),
       definition,
       confine: confined,
     });

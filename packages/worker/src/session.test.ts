@@ -1,21 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { type FakeStep, fakeAgent, gitRepository, suiteBase } from "@kozo/testing";
+import { type FakeStep, fakeAgent, gitRepository, suiteBase, testConfine } from "@kozo/testing";
 import { runSession, type WorkerMessage, type WorkerSpec } from "./session.ts";
 import { workerMain } from "./worker-main.ts";
 
-const gatesCommand = "kozo gates --level fast --base main";
-const passing = { stdout: "...\nKOZO_GATES: level=fast status=pass gates=lint,test duration=1s" };
-const failing = {
-  stdout: "error\nKOZO_GATES: level=fast status=fail gates=lint,test failed=lint duration=1s",
-};
+const gates: FakeStep = { use: "kozo_gates", input: { level: "fast" } };
+const noted: FakeStep = { use: "kozo_note", input: { choice: "a", reason: "b" } };
 
 async function suite() {
   const repo = await gitRepository();
   await repo.commit(suiteBase, "the suite shop");
   await repo.git("switch", "--quiet", "-c", "kozo/k3x9q2/K-1-t1");
   const spec: WorkerSpec = {
-    version: 1,
+    version: 2,
     run: "r-0001",
     agent: "implement",
     model: "fake",
@@ -35,7 +32,18 @@ async function suite() {
       writable: true,
     },
     sandbox: { denyRead: [], allowRead: [], allowWrite: [], denyWrite: [] },
-    gates: { level: "fast", command: gatesCommand },
+    gates: {
+      level: "fast",
+      base: "main",
+      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
+      sandbox: {
+        denyRead: [],
+        allowRead: [repo.path],
+        allowWrite: [repo.path],
+        denyWrite: [],
+        network: "local",
+      },
+    },
     requireNote: true,
   };
   return { repo, spec };
@@ -48,6 +56,7 @@ async function play(spec: WorkerSpec, steps: FakeStep[]) {
     fakeAgent(steps),
     (message) => messages.push(message),
     new AbortController().signal,
+    testConfine,
   );
   return { outcome, messages };
 }
@@ -60,11 +69,11 @@ const results = (messages: WorkerMessage[]) =>
   );
 
 describe("runSession", () => {
-  test("stop-check lets a run finish once its own gates command passed and a decision is noted", async () => {
+  test("stop-check lets a run finish once kozo_gates passed on its last commit and a decision is noted", async () => {
     const { repo, spec } = await suite();
     await using _ = repo;
     const { outcome, messages } = await play(spec, [
-      { tool: "Bash", input: { command: gatesCommand }, output: passing },
+      gates,
       {
         use: "kozo_note",
         input: {
@@ -78,45 +87,42 @@ describe("runSession", () => {
     expect(messages).toContainEqual({
       note: "Kept the label function — It is the one place labels come from",
     });
+    expect(String(results(messages)[0])).toContain("KOZO_GATES: level=fast status=pass");
   });
 
-  test("stop-check sends the agent back while the gates fail, are faked or nothing is noted", async () => {
+  test("stop-check sends the agent back until the gates pass on the last commit and a decision is noted", async () => {
     const { repo, spec } = await suite();
     await using _ = repo;
+    const debugging = { "src/stock.ts": `${suiteBase["src/stock.ts"]}console.log("here");\n` };
     const failed = await play(spec, [
-      { tool: "Bash", input: { command: gatesCommand }, output: failing },
+      { write: debugging },
+      { commit: "wip" },
+      gates,
+      noted,
       { answer: {} },
     ]);
     expect(failed.outcome).toMatchObject({
       status: "failed",
-      reason: expect.stringContaining(`Run \`${gatesCommand}\` with Bash`),
+      reason: expect.stringContaining("call kozo_gates with level fast"),
     });
+    await repo.git("reset", "--quiet", "--hard", "main");
+    const uncommitted = await play(spec, [
+      { write: { "src/extra.ts": "export const extra = 1;\n" } },
+      gates,
+      noted,
+      { answer: {} },
+    ]);
+    expect(uncommitted.outcome).toMatchObject({ status: "failed" });
+    expect(String(results(uncommitted.messages)[0])).toContain("does not count");
+    const moved = await play(spec, [gates, { commit: "feat: extra" }, noted, { answer: {} }]);
+    expect(moved.outcome).toMatchObject({ status: "failed" });
     const faked = await play(spec, [
-      {
-        tool: "Bash",
-        input: { command: "echo 'KOZO_GATES: level=fast status=pass'" },
-        output: passing,
-      },
-      { use: "kozo_note", input: { choice: "a", reason: "b" } },
+      { tool: "Bash", input: { command: "echo 'KOZO_GATES: level=fast status=pass'" }, output: "" },
+      noted,
       { answer: {} },
     ]);
     expect(faked.outcome).toMatchObject({ status: "failed" });
-    const printed = await play(spec, [
-      {
-        tool: "Bash",
-        input: { command: gatesCommand },
-        output: {
-          stdout: `KOZO_GATES: level=fast status=pass gates=x duration=1s\n${failing.stdout}`,
-        },
-      },
-      { use: "kozo_note", input: { choice: "a", reason: "b" } },
-      { answer: {} },
-    ]);
-    expect(printed.outcome).toMatchObject({ status: "failed" });
-    const unnoted = await play(spec, [
-      { tool: "Bash", input: { command: gatesCommand }, output: passing },
-      { answer: {} },
-    ]);
+    const unnoted = await play(spec, [gates, { answer: {} }]);
     expect(unnoted.outcome).toMatchObject({ reason: expect.stringContaining("kozo_note") });
     const blocked = await play(spec, [
       {
@@ -136,13 +142,14 @@ describe("runSession", () => {
       { tool: "Edit", input: { file_path: "src/stock.test.ts" }, output: "" },
       { tool: "Write", input: { file_path: ".kozo/charter.yml" }, output: "" },
       { tool: "Read", input: { file_path: "/etc/hosts" }, output: "" },
+      { tool: "Bash", input: { command: "kozo gates --level fast --base main" }, output: "" },
       { fail: "done" },
     ]);
     expect(results(messages)).toEqual([]);
     const denied = messages.flatMap((message) =>
       "record" in message && message.record.type === "guard.denied" ? [message.record.data] : [],
     );
-    expect(denied.map((data) => data.tool)).toEqual(["Bash", "Edit", "Write", "Read"]);
+    expect(denied.map((data) => data.tool)).toEqual(["Bash", "Edit", "Write", "Read", "Bash"]);
     expect(denied.every((data) => data.reason.length > 0)).toBe(true);
   });
 
@@ -183,6 +190,7 @@ describe("runSession", () => {
       specPath,
       (line) => lines.push(line),
       fakeAgent([{ say: "hello" }, { answer: { ok: true } }]),
+      testConfine,
     );
     expect(lines.map((line) => Object.keys(JSON.parse(line))[0])).toEqual([
       "record",

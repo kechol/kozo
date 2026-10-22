@@ -92,6 +92,7 @@ describe("Daemon", () => {
         fakeAgent((request) =>
           request.agent === "triage" ? [{ answer: triage }] : [{ hang: true }],
         ),
+        testConfine,
       ),
     });
     const token = (await Bun.file(home.apiToken).text()).trim();
@@ -144,6 +145,7 @@ describe("Daemon", () => {
             },
           },
         ]),
+        testConfine,
       ),
     });
     try {

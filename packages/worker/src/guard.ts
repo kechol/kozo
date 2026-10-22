@@ -133,6 +133,7 @@ const refusedCommands = new Map([
   ["podman", "it runs outside the sandbox"],
   ["ssh", "the run has no network beyond this machine"],
   ["scp", "the run has no network beyond this machine"],
+  ["kozo", "the gates run through the kozo_gates tool"],
 ]);
 
 const shells = new Set(["sh", "bash", "zsh", "dash", "ksh"]);

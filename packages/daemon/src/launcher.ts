@@ -1,4 +1,4 @@
-import { sessionEnvironmentFrom } from "@kozo/verify";
+import { type Confine, sessionEnvironmentFrom } from "@kozo/verify";
 import { type CodingAgent, runSession, type WorkerMessage, type WorkerSpec } from "@kozo/worker";
 
 /** One agent session that kozod started, whose messages it reads until the outcome. */
@@ -51,7 +51,7 @@ export function processLauncher(command: readonly string[]): Launcher {
 }
 
 /** Runs each session inside kozod with the given agent, as tests do with the fake agent. */
-export function inProcessLauncher(agent: CodingAgent): Launcher {
+export function inProcessLauncher(agent: CodingAgent, confine: Confine): Launcher {
   return {
     launch(spec) {
       const controller = new AbortController();
@@ -62,7 +62,7 @@ export function inProcessLauncher(agent: CodingAgent): Launcher {
         queue.push(message);
         wake?.();
       };
-      runSession(spec, agent, push, controller.signal).then(
+      runSession(spec, agent, push, controller.signal, confine).then(
         (outcome) => {
           push({ outcome });
           done = true;

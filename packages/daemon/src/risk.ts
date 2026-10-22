@@ -14,15 +14,6 @@ export function atLeast(level: GateLevel, floor: GateLevel | undefined): GateLev
   return floor && order.indexOf(floor) > order.indexOf(level) ? floor : level;
 }
 
-/**
- * The level the implement agent runs in its sandbox: deep gates such as end-to-end tests serve
- * the app through more than the sandbox allows, so the agent stops at full and kozod's own gates
- * after the session run the deep ones.
- */
-export function agentLevel(level: GateLevel): GateLevel {
-  return level === "deep" ? "full" : level;
-}
-
 // `.txt` and `.mdx` are left out: requirements.txt pins dependencies, and MDX runs components.
 const documentation = /\.(md|markdown|rst|adoc)$/i;
 

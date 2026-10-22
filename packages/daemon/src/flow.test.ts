@@ -95,12 +95,11 @@ async function factoryOf(
   const definition = { current: loaded.definition };
   const store = await EventStore.open(home);
   const agent = fakeAgent(script);
-  const inProcess = inProcessLauncher(agent);
+  const inProcess = inProcessLauncher(agent, testConfine);
   const runner = new Runner(home, store, {
     launcher: options.launcher ? options.launcher(inProcess) : inProcess,
     judge,
     verifier: noVerifier,
-    kozoCommand: "kozo",
     definition,
     confine: testConfine,
   });
@@ -139,17 +138,11 @@ async function factoryOf(
   };
 }
 
-const implement = (gatesPass = true): FakeStep[] => [
+const implement = (): FakeStep[] => [
   { say: "Writing the test first." },
   { write: goodChange },
   { commit: "feat: say only N left when stock is low" },
-  {
-    tool: "Bash",
-    input: { command: "kozo gates --level full --base main" },
-    output: {
-      stdout: `KOZO_GATES: level=full status=${gatesPass ? "pass" : "fail"} gates=lint,test duration=1s`,
-    },
-  },
+  { use: "kozo_gates", input: { level: "full" } },
   {
     use: "kozo_note",
     input: { choice: "Kept the label in one function", reason: "It is the only place" },
@@ -183,7 +176,7 @@ describe("the minimal path", () => {
     const implementRequest = env.agent.requests[1];
     expect(implementRequest?.agent).toBe("implement");
     expect(implementRequest?.prompt).toContain(
-      "GATES       Run `kozo gates --level full --base main` with Bash",
+      "GATES       Call kozo_gates with level full; it must pass on your last commit.",
     );
     expect(
       await env.repo.git("log", "-1", "--format=%s %an", `kozo/${env.store.factoryId}/K-1-t1`),
@@ -258,11 +251,7 @@ describe("the minimal path", () => {
         return [
           { write: { "src/stock.ts": goodChange["src/stock.ts"] ?? "" } },
           { commit: "fix: low stock" },
-          {
-            tool: "Bash",
-            input: { command: "kozo gates --level full --base main" },
-            output: { stdout: "KOZO_GATES: level=full status=pass gates=lint,test duration=1s" },
-          },
+          { use: "kozo_gates", input: { level: "full" } },
           { use: "kozo_note", input: { choice: "a", reason: "b" } },
           { answer: report },
         ];
@@ -993,11 +982,7 @@ describe("the minimal path", () => {
   }, 120_000);
 
   test("a low risk task runs the fast gates without prove, and a diff that changes code raises it", async () => {
-    const fastGates = {
-      tool: "Bash",
-      input: { command: "kozo gates --level fast --base main" },
-      output: { stdout: "KOZO_GATES: level=fast status=pass gates=lint,test duration=1s" },
-    } as const;
+    const fastGates = { use: "kozo_gates", input: { level: "fast" } } as const;
     const lowPlan = {
       ...plan,
       plan: {
@@ -1046,7 +1031,7 @@ describe("the minimal path", () => {
     }
   }, 240_000);
 
-  test("a dependency update runs the deps blueprint: no reproduction and the deep gates, which kozod runs", async () => {
+  test("a dependency update runs the deps blueprint: no reproduction and the deep gates", async () => {
     const depsPlan = {
       ...plan,
       plan: {
@@ -1072,11 +1057,7 @@ describe("the minimal path", () => {
         : [
             { write: { "package.json": manifest } },
             { commit: "chore: pin left-pad" },
-            {
-              tool: "Bash",
-              input: { command: "kozo gates --level full --base main" },
-              output: { stdout: "KOZO_GATES: level=full status=pass gates=lint,test duration=1s" },
-            },
+            { use: "kozo_gates", input: { level: "deep" } },
             { use: "kozo_note", input: { choice: "Pinned 1.3.0", reason: "The latest" } },
             { answer: { ...report, tests: [] } },
           ],
@@ -1095,7 +1076,7 @@ describe("the minimal path", () => {
     expect(env.agent.requests.at(-1)?.prompt).toContain(
       "This blueprint starts from no failing test",
     );
-    expect(env.agent.requests.at(-1)?.prompt).toContain("kozo gates --level full --base main");
+    expect(env.agent.requests.at(-1)?.prompt).toContain("Call kozo_gates with level deep");
   }, 120_000);
 
   test("kozo say reaches a running run at its next turn", async () => {

@@ -1,4 +1,5 @@
-import { agentNameSchema, blockedReasonSchema, gateLevelSchema } from "@kozo/core";
+import { agentNameSchema, blockedReasonSchema, type GateLevel, gateLevelSchema } from "@kozo/core";
+import { type Confine, gatesLine, git, runGates } from "@kozo/verify";
 import { z } from "zod";
 import type {
   AgentOutcome,
@@ -13,7 +14,7 @@ import type { SandboxPaths } from "./task-sandbox.ts";
 
 /** Everything a worker needs to run one session, written by kozod into the run directory. */
 export const workerSpecSchema = z.strictObject({
-  version: z.literal(1),
+  version: z.literal(2),
   run: z.string(),
   agent: agentNameSchema,
   model: z.string(),
@@ -43,10 +44,24 @@ export const workerSpecSchema = z.strictObject({
     denyWrite: z.array(z.string()),
   }),
   /**
-   * The gates stop-check requires: the exact shell command the agent runs, `kozo gates` with
-   * the level and the base, and the level its KOZO_GATES line must pass; null requires none.
+   * The gates the agent runs with kozo_gates and stop-check requires: the level that must pass,
+   * the ref whose constraints define them, and the environment and command sandbox kozod's own
+   * gates run them with; null gives the agent no gates.
    */
-  gates: z.strictObject({ level: gateLevelSchema, command: z.string() }).nullable(),
+  gates: z
+    .strictObject({
+      level: gateLevelSchema,
+      base: z.string(),
+      env: z.record(z.string(), z.string()),
+      sandbox: z.strictObject({
+        denyRead: z.array(z.string()),
+        allowRead: z.array(z.string()),
+        allowWrite: z.array(z.string()),
+        denyWrite: z.array(z.string()),
+        network: z.enum(["local", "any"]),
+      }),
+    })
+    .nullable(),
   /** Whether stop-check requires at least one kozo_note. */
   requireNote: z.boolean(),
 });
@@ -73,38 +88,33 @@ async function queued(path: string, delivered: number): Promise<Instruction[]> {
     .filter((instruction) => instruction.seq > delivered);
 }
 
-/**
- * Whether a Bash result of the gates command exited cleanly and ends with a passing KOZO_GATES
- * line, which kozo gates prints after every gate's own output. Stop-check only keeps the agent
- * working: a gate that went out of its way to fake this line could still end the session, and
- * kozod's own gates after the session decide whether the change passes.
- */
-function passed(output: unknown, level: string): boolean {
-  const stdout =
-    typeof output === "string"
-      ? output
-      : String((output as { stdout?: unknown } | null)?.stdout ?? "");
-  const last = stdout.trimEnd().split("\n").at(-1) ?? "";
-  return last.startsWith(`KOZO_GATES: level=${level} status=pass `);
+const gateRank = (level: GateLevel) => gateLevelSchema.options.indexOf(level);
+
+/** The commit the worktree is at, or null while it has changes that are not committed. */
+async function committedHead(cwd: string): Promise<string | null> {
+  if ((await git(cwd, ["status", "--porcelain"])).trim() !== "") return null;
+  return (await git(cwd, ["rev-parse", "HEAD"])).trim();
 }
 
 /**
  * Runs one session for a run: the guard and sandbox of its task, the agent tools, delivery of
  * queued instructions and stop-check. Every record, note and block goes to `emit`. The agent
- * runs its gates through Bash, inside its sandbox, rather than through a tool in this process,
- * which would run the diff's code outside it.
+ * runs its gates with kozo_gates, which runs them here in the command sandbox that `confine`
+ * applies, the one kozod's own gates run in, rather than in the agent's shell, whose sandbox
+ * cannot run a browser.
  */
 export async function runSession(
   spec: WorkerSpec,
   agent: CodingAgent,
   emit: (message: WorkerMessage) => void,
   signal: AbortSignal,
+  confine: Confine,
 ): Promise<AgentOutcome> {
   let delivered = -1;
   let notes = 0;
   let blocked = false;
-  let gatesPassed = false;
-  let gatesCall: string | null = null;
+  /** The level and commit of the last kozo_gates call, when it passed on a committed worktree. */
+  let passedAt: { level: GateLevel; head: string } | null = null;
 
   const tools: AgentTool[] = [
     {
@@ -141,6 +151,35 @@ export async function runSession(
       },
     },
   ];
+  const gates = spec.gates;
+  if (gates !== null) {
+    tools.push({
+      name: "kozo_gates",
+      description: `Run the repository's gates at a level on the worktree as it is, in the factory's sandbox, and get the end of their output and the KOZO_GATES line. The ${gates.level} gates must pass on your last commit, with nothing left uncommitted, before you finish.`,
+      input: { level: gateLevelSchema },
+      async run(input) {
+        const level = gateLevelSchema.parse(input.level);
+        const head = await committedHead(spec.cwd);
+        let output = "";
+        const result = await runGates({
+          cwd: spec.cwd,
+          level,
+          base: gates.base,
+          env: gates.env,
+          confined: { confine, sandbox: gates.sandbox },
+          log: (text) => {
+            output += text;
+          },
+        });
+        passedAt = result.status === "pass" && head !== null ? { level, head } : null;
+        const note =
+          result.status === "pass" && head === null
+            ? "\nThe worktree had uncommitted changes, so this pass does not count; commit and run kozo_gates again."
+            : "";
+        return `${output.slice(-8000)}${gatesLine(result)}${note}`;
+      },
+    });
+  }
   const policy = {
     worktree: spec.cwd,
     scope: spec.policy.writable ? spec.policy.scope : [],
@@ -164,17 +203,7 @@ export async function runSession(
     env: factoryGitEnvironment,
     sandbox,
     tools,
-    record: (record) => {
-      if (spec.gates !== null) {
-        if (record.type === "tool.call" && record.data.tool === "Bash") {
-          const command = (record.data.input as { command?: unknown } | null)?.command;
-          if (command === spec.gates.command) gatesCall = record.data.call_id;
-        } else if (record.type === "tool.result" && record.data.call_id === gatesCall) {
-          gatesPassed = !record.data.is_error && passed(record.data.output, spec.gates.level);
-        }
-      }
-      emit({ record });
-    },
+    record: (record) => emit({ record }),
     guard: (tool, input) => guardToolCall(tool, input, policy),
     async pendingInstructions() {
       const instructions = await queued(spec.queue, delivered);
@@ -184,8 +213,16 @@ export async function runSession(
     },
     async beforeStop() {
       if (blocked) return null;
-      if (spec.gates !== null && !gatesPassed) {
-        return `Run \`${spec.gates.command}\` with Bash and make the ${spec.gates.level} gates pass before you finish, or call kozo_blocked if you cannot.`;
+      if (gates !== null) {
+        const passed = passedAt;
+        const current = await committedHead(spec.cwd);
+        if (
+          passed === null ||
+          gateRank(passed.level) < gateRank(gates.level) ||
+          passed.head !== current
+        ) {
+          return `Commit your change, then call kozo_gates with level ${gates.level} and make it pass before you finish, or call kozo_blocked if you cannot.`;
+        }
       }
       if (spec.requireNote && notes === 0) {
         return "Record your main decisions with kozo_note before you finish.";

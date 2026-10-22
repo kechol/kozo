@@ -46,11 +46,7 @@ const plan = {
 const implement: FakeStep[] = [
   { write: goodChange },
   { commit: "feat: say only N left when stock is low" },
-  {
-    tool: "Bash",
-    input: { command: "kozo gates --level full --base refs/remotes/origin/main" },
-    output: { stdout: "KOZO_GATES: level=full status=pass gates=lint,test duration=1s" },
-  },
+  { use: "kozo_gates", input: { level: "full" } },
   { use: "kozo_note", input: { choice: "Kept the label in one function", reason: "One place" } },
   {
     answer: {
@@ -108,10 +104,10 @@ describe("GitHub mode", () => {
     const runner = new Runner(home, store, {
       launcher: inProcessLauncher(
         fakeAgent((request) => (request.agent === "triage" ? [{ answer: plan }] : implement)),
+        testConfine,
       ),
       judge: accept,
       verifier: noVerifier,
-      kozoCommand: "kozo",
       definition,
       confine: testConfine,
     });

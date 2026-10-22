@@ -72,7 +72,7 @@ import { type ItemFile, itemDirectory, readItemFile, requestText } from "./item-
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { checkPlan } from "./plan-checks.ts";
 import { type Base, baseOf } from "./repository.ts";
-import { agentLevel, atLeast, firstCodeChange, layersFor, onlyDependencyFiles } from "./risk.ts";
+import { atLeast, firstCodeChange, layersFor, onlyDependencyFiles } from "./risk.ts";
 import { type Envelope, pumpSession, type SessionResult } from "./session-pump.ts";
 import {
   claimTask,
@@ -86,8 +86,6 @@ export interface RunnerDeps {
   launcher: Launcher;
   judge: Judge;
   verifier: Verifier;
-  /** The shell words that run the kozo CLI inside the agent's sandbox, such as `kozo`. */
-  kozoCommand: string;
   /** The factory definition; a run reads it once, when it starts. */
   definition: DefinitionInUse;
   /** Confines the diff's commands in prepare, the gates and prove to the task's sandbox. */
@@ -426,7 +424,7 @@ export class Runner {
     ].join("\n");
     const result = await this.session(
       {
-        version: 1,
+        version: 2,
         run,
         agent,
         model: modelFor(definition, agent),
@@ -844,7 +842,7 @@ export class Runner {
               ],
             },
             request: requestText(file),
-            gates: agentLevel(level),
+            gates: level,
             limits: {
               max_changed_lines: charter.limits.max_changed_lines,
               max_files: charter.limits.max_files,
@@ -858,10 +856,7 @@ export class Runner {
               "Reading or sending credentials and contacting hosts other than this machine",
             ],
           };
-          prompt = renderBrief(brief, {
-            gatesCommand: this.gatesCommand(agentLevel(level), repository.base),
-            reportSchema: runReportJsonSchema,
-          });
+          prompt = renderBrief(brief, { reportSchema: runReportJsonSchema });
           await exit(node, true);
           break;
         }
@@ -872,7 +867,7 @@ export class Runner {
           const processesBefore = await runningProcesses();
           const result = await this.session(
             {
-              version: 1,
+              version: 2,
               run,
               agent: "implement",
               model: modelFor(definition, "implement"),
@@ -897,8 +892,10 @@ export class Runner {
                 existingTests,
               }),
               gates: {
-                level: agentLevel(level),
-                command: this.gatesCommand(agentLevel(level), repository.base),
+                level,
+                base: repository.base,
+                env: this.commandEnv,
+                sandbox: this.confined(worktree).sandbox,
               },
               requireNote: true,
             },
@@ -1281,11 +1278,6 @@ export class Runner {
       if (await file.exists()) return await file.text();
     }
     throw new RunnerError(`${task.ref} has no brief to resume its implement node with`);
-  }
-
-  /** `kozo gates` as the agent runs it in its sandbox: the level and the base are fixed. */
-  gatesCommand(level: GateLevel, base: string): string {
-    return `${this.deps.kozoCommand} gates --level ${level} --base ${base}`;
   }
 
   private async refs(repository: string, branch: string): Promise<Map<string, string>> {

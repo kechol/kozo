@@ -57,12 +57,9 @@ const bullets = (items: readonly string[], indent = "            ") =>
 
 /**
  * The brief as the agent reads it: every field under its fixed label, the request wrapped as
- * untrusted data, the exact gates command and the run report's schema.
+ * untrusted data, the gates level and the run report's schema.
  */
-export function renderBrief(
-  brief: Brief,
-  { gatesCommand, reportSchema }: { gatesCommand: string; reportSchema: unknown },
-): string {
+export function renderBrief(brief: Brief, { reportSchema }: { reportSchema: unknown }): string {
   const { item, limits, context } = brief;
   const contextLines = [
     ...context.files.map((file) => `file: ${file}`),
@@ -80,7 +77,7 @@ export function renderBrief(
     `DO_NOT_ACT  ${bullets(brief.do_not_act)}`,
     `CONTEXT     ${contextLines.length > 0 ? bullets(contextLines) : "- Read AGENTS.md first."}`,
     `REQUEST     ${wrapRequest(brief.request)}`,
-    `GATES       Run \`${gatesCommand}\` with Bash; the ${brief.gates} gates must pass.`,
+    `GATES       Call kozo_gates with level ${brief.gates}; it must pass on your last commit.`,
     `LIMITS      ${limits.max_changed_lines} changed lines, ${limits.max_files} files, ${limits.max_turns} turns, ${limits.max_minutes} minutes, ${limits.max_cost_usd} USD`,
     `FORBIDDEN   ${bullets(brief.forbidden)}`,
     `REPORT      Finish by answering with the run report, which must match this JSON Schema:`,

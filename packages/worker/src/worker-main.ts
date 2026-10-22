@@ -1,3 +1,4 @@
+import { type Confine, platformConfine } from "@kozo/verify";
 import { claudeAgent } from "./claude-agent.ts";
 import type { CodingAgent } from "./coding-agent.ts";
 import { runSession, workerSpecSchema } from "./session.ts";
@@ -10,6 +11,7 @@ export async function workerMain(
   specPath: string,
   write: (line: string) => void,
   agent: CodingAgent = claudeAgent(process.env.KOZO_CLAUDE ?? Bun.which("claude") ?? "claude"),
+  confine?: Confine,
 ): Promise<number> {
   const spec = workerSpecSchema.parse(JSON.parse(await Bun.file(specPath).text()));
   const controller = new AbortController();
@@ -21,6 +23,7 @@ export async function workerMain(
       agent,
       (message) => write(JSON.stringify(message)),
       controller.signal,
+      confine ?? (await platformConfine()),
     );
     write(JSON.stringify({ outcome }));
     return 0;
