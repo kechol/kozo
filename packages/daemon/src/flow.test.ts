@@ -692,6 +692,67 @@ describe("the minimal path", () => {
     });
   }, 180_000);
 
+  test("a failing check after merging a task that is not the item's last holds it and its dependents", async () => {
+    const split = {
+      ...plan,
+      plan: {
+        ...plan.plan,
+        tasks: [
+          plan.plan.tasks[0],
+          {
+            ...plan.plan.tasks[0],
+            id: "t2",
+            goal: "Mention the low-stock notice in the docs",
+            done_when: ["The docs mention the low-stock notice"],
+            scope: ["docs/**"],
+            depends_on: ["t1"],
+          },
+        ],
+      },
+    };
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: split }] : implement(),
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    for (let pass = 0; pass < 2; pass++) {
+      await env.settle();
+      await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    }
+    await env.settle();
+    await env.repo.git(
+      "merge",
+      "--no-ff",
+      "--quiet",
+      "-m",
+      "merge",
+      `kozo/${env.store.factoryId}/K-1-t1`,
+    );
+    await env.repo.commit({ "src/debug.ts": "console.log('left over');\n" }, "debug");
+    await env.reconciler.reconcile();
+    await env.scheduler.idle();
+    await env.settle();
+    const [first, second] = [`${ref}/t1`, `${ref}/t2`].map((task) => env.store.state.tasks[task]);
+    expect([first?.stage, first?.hold?.kind, second?.hold?.kind, second?.runs]).toEqual([
+      "handoff",
+      "attention",
+      "dependency",
+      [],
+    ]);
+    expect(first?.hold?.reason).toContain("after the merge");
+    expect(env.store.state.items[ref]?.stage).not.toBe("triage");
+
+    await env.repo.git("rm", "--quiet", "src/debug.ts");
+    await env.repo.git("commit", "--quiet", "-m", "remove the debug file");
+    await env.control.act(
+      `${ref}/t1`,
+      { kind: "task", item: { repo: null, number: 1 }, task: 1 },
+      "retry",
+      {},
+    );
+    await env.settle();
+    expect(env.store.state.tasks[`${ref}/t1`]?.stage).toBe("complete");
+  }, 180_000);
+
   test("a branch deleted unmerged needs attention, and a human's commit sends the task back to Reviewing", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage" ? [{ answer: plan }] : implement(),

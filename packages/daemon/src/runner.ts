@@ -1410,7 +1410,7 @@ export class Runner {
   async complete(taskRef: string): Promise<void> {
     const task = this.store.state.tasks[taskRef];
     const item = task ? this.store.state.items[task.item] : undefined;
-    if (!task || !item?.plan || task.stage !== "handoff") return;
+    if (!task || !item?.plan || task.stage !== "handoff" || task.hold) return;
     const repository = await this.repository(item.repository);
     const worktree = worktreePath(this.home, repository.path, taskRef);
     const level = layersFor[task.risk].gates;
@@ -1429,6 +1429,27 @@ export class Runner {
       repository.base,
       join(itemDirectory(this.home, item.ref), `check-${taskRef.split("/").at(-1)}.log`),
     );
+    const failed = `After the merge, the ${level} gates on ${repository.branch} failed, so DONE_WHEN is not met:\n${tail(output)}`;
+    const last = item.tasks.every(
+      (ref) => ref === taskRef || this.store.state.tasks[ref]?.stage === "complete",
+    );
+    // Before the item's last task the item cannot go back to Triage, so the task waits, and
+    // with it every task that depends on it, until a human retries the check or closes it.
+    if (result.status !== "pass" && !last) {
+      await this.store.append({
+        type: "note.added",
+        item: item.ref,
+        task: taskRef,
+        data: { kind: "check", text: failed },
+      });
+      await this.hold(
+        item.ref,
+        taskRef,
+        "attention",
+        `the ${level} gates failed on ${repository.branch} after the merge; kozo retry checks again`,
+      );
+      return;
+    }
     await this.moveTask(
       task,
       "complete",
@@ -1459,7 +1480,7 @@ export class Runner {
         item: item.ref,
         data: {
           kind: "check",
-          text: `After the merge, the ${level} gates on ${repository.branch} failed, so DONE_WHEN is not met:\n${tail(output)}`,
+          text: failed,
         },
       });
       await this.store.append({

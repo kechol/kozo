@@ -227,7 +227,8 @@ export class Scheduler {
     // new work would otherwise take every slot it could start in.
     for (const task of Object.values(this.store.state.tasks)) {
       if (this.active.size >= this.factory().concurrency) return;
-      if (!task.merged || task.stage !== "handoff" || this.active.has(task.ref)) continue;
+      if (!task.merged || task.stage !== "handoff" || task.hold || this.active.has(task.ref))
+        continue;
       this.start(task.ref, "task", () => this.runner.complete(task.ref));
     }
     for (const item of Object.values(this.store.state.items)) {
