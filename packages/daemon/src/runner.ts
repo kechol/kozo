@@ -68,7 +68,7 @@ import { type ItemFile, itemDirectory, readItemFile, requestText } from "./item-
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { checkPlan } from "./plan-checks.ts";
 import { type Base, baseOf } from "./repository.ts";
-import { atLeast, firstCodeChange, layersFor } from "./risk.ts";
+import { atLeast, firstCodeChange, layersFor, onlyDependencyFiles } from "./risk.ts";
 import { type Envelope, pumpSession, type SessionResult } from "./session-pump.ts";
 import {
   claimTask,
@@ -686,9 +686,8 @@ export class Runner {
       return await stopHere("failed", "final verification failed");
     };
 
-    const nodes = blueprintNodes
-      .slice(blueprintNodes.indexOf(start))
-      .filter((node) => blueprint.nodes.includes(node));
+    // Every node runs: verify-app decides from the risk tier, which a blueprint never lowers.
+    const nodes = blueprintNodes.slice(blueprintNodes.indexOf(start));
     for (const node of nodes) {
       const current = this.store.state.tasks[taskRef];
       if (!current || isClosed(current.stage))
@@ -966,8 +965,12 @@ export class Runner {
           if (gates.status === "fail")
             return await retry(node, `the ${gates.failed} gate failed:\n${tail(output)}`);
           output = "";
-          // A blueprint that starts from no failing test has nothing for prove to check.
-          if (layers.prove && blueprint.reproduce) {
+          // A blueprint that starts from no failing test has nothing for prove to check, but the
+          // class comes from a session that read the request, so only a diff of dependency
+          // files may go without it.
+          const skipProve =
+            !blueprint.reproduce && (await onlyDependencyFiles(worktree, repository.base));
+          if (layers.prove && !skipProve) {
             const prove = await runProve({
               cwd: worktree,
               base: repository.base,
