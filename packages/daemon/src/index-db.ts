@@ -27,6 +27,8 @@ create table events (
   run_id text, item text, task text, type text not null, line text not null
 );
 create index events_item on events (item, id);
+create index events_item_type on events (item, type, id);
+create index events_ts on events (ts);
 create index events_task on events (task, id);
 create index events_run on events (run_id, id);
 `;

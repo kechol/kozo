@@ -161,11 +161,14 @@ export class GitHubSync {
   }
 
   private async pollRepository({ path, github, label }: Repository & { github: string }) {
-    await this.github.fetch(path);
     const name = github.slice(github.indexOf("/") + 1);
-    const listed = await this.github.issues(github, label ? [label] : []);
     // A pausing Issue need not carry the intake label.
-    if (label) listed.push(...(await this.github.issues(github, [pausedLabel])));
+    const [, listed, pausing] = await Promise.all([
+      this.github.fetch(path),
+      this.github.issues(github, label ? [label] : []),
+      label ? this.github.issues(github, [pausedLabel]) : [],
+    ]);
+    listed.push(...pausing);
     const open = new Map(listed.map((issue) => [issue.number, issue]));
     const closed = await this.readUnlisted(github, name, open);
     const issues = [...open.values()];
