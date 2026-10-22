@@ -9,6 +9,7 @@ import {
   suiteBase,
   suiteTask,
   tempDirectory,
+  testConfine,
 } from "@kozo/testing";
 import { Daemon } from "./daemon.ts";
 import { inProcessLauncher } from "./launcher.ts";
@@ -17,11 +18,13 @@ describe("Daemon", () => {
   test("serves the local API on 127.0.0.1 with the home's token, and only once per home", async () => {
     await using dir = await tempDirectory();
     const home = kozoHome(dir.path);
-    const daemon = await Daemon.start({ home, port: 0 });
+    const daemon = await Daemon.start({ home, port: 0, confine: testConfine });
     try {
       expect(await Bun.file(home.pidFile).text()).toBe(`${process.pid}\n`);
       await Bun.write(home.pidFile, "1\n");
-      await expect(Daemon.start({ home, port: 0 })).rejects.toThrow("already running as pid 1");
+      await expect(Daemon.start({ home, port: 0, confine: testConfine })).rejects.toThrow(
+        "already running as pid 1",
+      );
     } finally {
       await daemon.stop();
     }
@@ -32,7 +35,7 @@ describe("Daemon", () => {
     await using dir = await tempDirectory();
     const home = kozoHome(dir.path);
     const port = 17000 + Math.floor(Math.random() * 1000);
-    const daemon = await Daemon.start({ home, port });
+    const daemon = await Daemon.start({ home, port, confine: testConfine });
     try {
       const token = (await Bun.file(home.apiToken).text()).trim();
       const response = await fetch(`http://127.0.0.1:${port}/api/status`, {
@@ -84,6 +87,7 @@ describe("Daemon", () => {
       home,
       port,
       tickMs: 50,
+      confine: testConfine,
       launcher: inProcessLauncher(
         fakeAgent((request) =>
           request.agent === "triage" ? [{ answer: triage }] : [{ hang: true }],
@@ -123,6 +127,7 @@ describe("Daemon", () => {
       home,
       port,
       tickMs: 50,
+      confine: testConfine,
       launcher: inProcessLauncher(
         fakeAgent([
           { write: goodChange },

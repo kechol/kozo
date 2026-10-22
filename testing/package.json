@@ -6,6 +6,7 @@
   "exports": "./src/index.ts",
   "dependencies": {
     "@kozo/core": "workspace:*",
+    "@kozo/verify": "workspace:*",
     "@kozo/worker": "workspace:*"
   }
 }

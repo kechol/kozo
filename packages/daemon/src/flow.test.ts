@@ -10,6 +10,7 @@ import {
   suiteBase,
   suiteTask,
   tempDirectory,
+  testConfine,
 } from "@kozo/testing";
 import type { Judge, Verifier } from "@kozo/verify";
 import { readDefinition } from "@kozo/verify";
@@ -101,6 +102,7 @@ async function factoryOf(
     verifier: noVerifier,
     kozoCommand: "kozo",
     definition,
+    confine: testConfine,
   });
   const control = new ControlPlane(home, store, definition, runner);
   const scheduler = new Scheduler(

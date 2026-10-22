@@ -34,8 +34,11 @@ import {
 } from "@kozo/core";
 import {
   blueprintFor,
+  type Confine,
+  type Confined,
   commandEnvironmentFrom,
   type Definition,
+  deniedCredentials,
   diffGuardLine,
   GitError,
   git,
@@ -43,6 +46,7 @@ import {
   type Judge,
   listFiles,
   modelFor,
+  packageCaches,
   proveLine,
   readBaseDocuments,
   runCommand,
@@ -86,6 +90,8 @@ export interface RunnerDeps {
   kozoCommand: string;
   /** The factory definition; a run reads it once, when it starts. */
   definition: DefinitionInUse;
+  /** Confines the diff's commands in prepare, the gates and prove to the task's sandbox. */
+  confine: Confine;
 }
 
 export type Node = BlueprintNode;
@@ -125,6 +131,25 @@ export class Runner {
 
   /** The environment of the diff's own code in prepare, the gates and prove: no credentials. */
   private readonly commandEnv = commandEnvironmentFrom(process.env);
+
+  /**
+   * The sandbox of the commands run in `worktree`: they read neither the factory's home, which
+   * holds the API token and every other task, nor credentials, and write only the worktree, but
+   * not the file that ties it to its repository. Only prepare, which installs the base's
+   * dependencies before any diff exists, reaches other hosts and writes the package caches.
+   */
+  private confined(worktree: string, prepare = false): Confined {
+    return {
+      confine: this.deps.confine,
+      sandbox: {
+        denyRead: [this.home.root, ...deniedCredentials(process.env)],
+        allowRead: [worktree],
+        allowWrite: [worktree, ...(prepare ? packageCaches : [])],
+        denyWrite: [join(worktree, ".git")],
+        network: prepare ? "any" : "local",
+      },
+    };
+  }
 
   /**
    * Three sessions in a row that fail on the API, rather than on a limit or a stop-check,
@@ -738,6 +763,7 @@ export class Runner {
               worktree,
               (text) => void log(text),
               this.commandEnv,
+              this.confined(worktree, true),
             );
             if (code !== 0) {
               return await halt(node, {
@@ -979,6 +1005,7 @@ export class Runner {
               base: repository.base,
               log: collect,
               env: this.commandEnv,
+              confined: this.confined(worktree),
             });
             if (prove.status !== "pass")
               return await retry(node, `${proveLine(prove)}\n${tail(output)}`);
@@ -1224,6 +1251,7 @@ export class Runner {
       level,
       base,
       env: this.commandEnv,
+      confined: this.confined(cwd),
       log: (text) => {
         output += text;
       },

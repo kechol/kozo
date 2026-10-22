@@ -1,5 +1,3 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import {
   createSdkMcpServer,
   type HookCallback,
@@ -8,27 +6,18 @@ import {
   tool,
 } from "@anthropic-ai/claude-agent-sdk";
 import { sha256 } from "@kozo/core";
-import { credentialPaths, localSandbox, scrubbedShell, sessionEnvironmentFrom } from "@kozo/verify";
+import {
+  deniedCredentials,
+  localSandbox,
+  scrubbedShell,
+  sessionEnvironmentFrom,
+} from "@kozo/verify";
 import type { AgentOutcome, CodingAgent, Instruction } from "./coding-agent.ts";
 
 /** The built-in tools an agent may use; anything else is not offered at all. */
 export const builtInTools = ["Read", "Glob", "Grep", "Edit", "Write", "Bash"];
 
 const toolServer = "kozo";
-
-/**
- * Credential paths a session's shell never reads: the usual ones under the home directory,
- * gh and git under XDG_CONFIG_HOME, and Claude Code's own configuration directory.
- */
-function deniedCredentials(env: NodeJS.ProcessEnv): string[] {
-  const xdg = env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
-  return [
-    ...[...credentialPaths, ".config/git/credentials"].map((path) => join(homedir(), path)),
-    join(xdg, "gh"),
-    join(xdg, "git", "credentials"),
-    ...(env.CLAUDE_CONFIG_DIR ? [env.CLAUDE_CONFIG_DIR] : []),
-  ];
-}
 
 function deliveredContext(instructions: Instruction[]) {
   return instructions

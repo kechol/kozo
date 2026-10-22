@@ -2,7 +2,7 @@ import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { type BaseDocumentsProblem, readBaseDocuments } from "./base-documents.ts";
 import { changedFiles, diffCommand, globMatcher, literal, resolveRange } from "./changes.ts";
-import { guarded, runCommand, secondsSince, shellQuote } from "./command.ts";
+import { type Confined, guarded, runCommand, secondsSince, shellQuote } from "./command.ts";
 import { GitError, git } from "./git.ts";
 
 export interface ProveRun {
@@ -34,6 +34,8 @@ export interface ProveOptions {
   log(text: string): void;
   /** The test commands' environment; they inherit this process's when it is unset. */
   env?: Record<string, string>;
+  /** The sandbox the test commands run in; they run unconfined when it is unset. */
+  confined?: Confined;
 }
 
 /**
@@ -45,7 +47,7 @@ export async function runProve(options: ProveOptions): Promise<ProveResult> {
   return await guarded(options.log, [GitError], () => prove(options));
 }
 
-async function prove({ cwd, base, log, env }: ProveOptions): Promise<ProveResult> {
+async function prove({ cwd, base, log, env, confined }: ProveOptions): Promise<ProveResult> {
   const { baseTip, head, mergeBase } = await resolveRange(cwd, base, "HEAD");
   const documents = await readBaseDocuments(cwd, baseTip);
   if (!documents.ok) {
@@ -97,7 +99,7 @@ async function prove({ cwd, base, log, env }: ProveOptions): Promise<ProveResult
   for (const run of runs) {
     log(`==> with the change: ${run.command}\n`);
     const started = performance.now();
-    run.withChange = await runCommand(run.command, cwd, log, env);
+    run.withChange = await runCommand(run.command, cwd, log, env, confined);
     run.seconds += secondsSince(started);
     if (run.withChange !== 0) {
       log(`kozo: the tests fail with the change applied: ${run.files.join(", ")}\n`);
@@ -110,7 +112,7 @@ async function prove({ cwd, base, log, env }: ProveOptions): Promise<ProveResult
     for (const run of runs) {
       log(`==> without the change: ${run.command}\n`);
       const started = performance.now();
-      run.withoutChange = await runCommand(run.command, cwd, log, env);
+      run.withoutChange = await runCommand(run.command, cwd, log, env, confined);
       run.seconds += secondsSince(started);
     }
   } finally {

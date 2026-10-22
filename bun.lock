@@ -81,6 +81,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@kozo/core": "workspace:*",
+        "@kozo/verify": "workspace:*",
         "@kozo/worker": "workspace:*",
       },
     },

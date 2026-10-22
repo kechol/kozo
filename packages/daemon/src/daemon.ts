@@ -1,7 +1,13 @@
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { apiPort, type KozoHome, kozoHome } from "@kozo/core";
-import { claudeJudge, claudeVerifier, shellQuote } from "@kozo/verify";
+import {
+  type Confine,
+  claudeJudge,
+  claudeVerifier,
+  platformConfine,
+  shellQuote,
+} from "@kozo/verify";
 import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
 import { ControlPlane } from "./control-plane.ts";
@@ -23,6 +29,8 @@ export interface DaemonOptions {
   launcher?: Launcher;
   /** How often the scheduler looks for work to start, in milliseconds. */
   tickMs?: number;
+  /** How the diff's commands are confined; this machine's sandbox when unset. */
+  confine?: Confine;
 }
 
 // A compiled kozod runs alone; under bun the entry points are files beside this one.
@@ -82,7 +90,10 @@ export class Daemon {
     port = Number(process.env.KOZO_PORT ?? apiPort),
     launcher = processLauncher(kozodCommand()),
     tickMs = 2000,
+    confine,
   }: DaemonOptions = {}): Promise<Daemon> {
+    // Without a sandbox kozod would run the diff's code with the owner's access, so it stops here.
+    const confined = confine ?? (await platformConfine());
     await mkdir(home.root, { recursive: true, mode: 0o700 });
     await claimHome(home);
     const store = await EventStore.open(home);
@@ -102,6 +113,7 @@ export class Daemon {
       verifier: claudeVerifier(claude),
       kozoCommand: kozoCommand(),
       definition,
+      confine: confined,
     });
     const control = new ControlPlane(home, store, definition, runner);
     const scheduler = new Scheduler(store, runner, definition, report);

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
 import type { z } from "zod";
 import { pickEnvironment } from "./command.ts";
+import { credentialPaths } from "./sandbox.ts";
 
 export interface SessionRequest {
   instructions: string;
@@ -159,23 +160,6 @@ export function claudeJudge(executable: string): Judge {
 // Only the shell, because only the shell runs inside the sandbox below; Read, Glob and Grep run
 // in Claude Code's own process and could read outside the worktree.
 const verifyTools = ["Bash"];
-
-// Credentials a session never needs; the sandbox denies reading them from the shell.
-export const credentialPaths = [
-  ".ssh",
-  ".aws",
-  ".gnupg",
-  ".config/gh",
-  ".config/gcloud",
-  ".kube",
-  ".docker",
-  ".npmrc",
-  ".pypirc",
-  ".git-credentials",
-  ".netrc",
-  ".claude",
-  "Library/Keychains",
-];
 
 /**
  * A verifier that runs the user's own `claude` in the worktree with the shell as its only tool.

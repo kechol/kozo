@@ -11,6 +11,7 @@ import {
   suiteBase,
   suiteTask,
   tempDirectory,
+  testConfine,
 } from "@kozo/testing";
 import { type Judge, readDefinition, type Verifier } from "@kozo/verify";
 import { ControlPlane } from "./control-plane.ts";
@@ -112,6 +113,7 @@ describe("GitHub mode", () => {
       verifier: noVerifier,
       kozoCommand: "kozo",
       definition,
+      confine: testConfine,
     });
     const control = new ControlPlane(home, store, definition, runner);
     const scheduler = new Scheduler(store, runner, definition);

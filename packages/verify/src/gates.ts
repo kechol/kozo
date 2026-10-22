@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { type GateLevel, parseConstraints } from "@kozo/core";
 import { constraintsPath } from "./base-documents.ts";
 import { resolveRef } from "./changes.ts";
-import { runCommand, secondsSince } from "./command.ts";
+import { type Confined, runCommand, secondsSince } from "./command.ts";
 import { GitError, showFile } from "./git.ts";
 
 export interface GateRun {
@@ -36,9 +36,18 @@ export interface GatesOptions {
   log(text: string): void;
   /** The gates' environment; they inherit this process's when it is unset. */
   env?: Record<string, string>;
+  /** The sandbox the gates run in; they run unconfined when it is unset. */
+  confined?: Confined;
 }
 
-export async function runGates({ cwd, level, base, log, env }: GatesOptions): Promise<GatesResult> {
+export async function runGates({
+  cwd,
+  level,
+  base,
+  log,
+  env,
+  confined,
+}: GatesOptions): Promise<GatesResult> {
   const started = performance.now();
   const elapsed = () => secondsSince(started);
   const misconfigured = (reason: MisconfiguredReason): GatesResult => ({
@@ -89,7 +98,7 @@ export async function runGates({ cwd, level, base, log, env }: GatesOptions): Pr
     // The constraints schema guarantees every listed gate is defined.
     const run = parsed.value.gates[name]?.run ?? "";
     const gateStarted = performance.now();
-    const exitCode = await runCommand(run, cwd, emit, env);
+    const exitCode = await runCommand(run, cwd, emit, env, confined);
     gates.push({ name, exitCode, seconds: secondsSince(gateStarted) });
     if (exitCode !== 0) {
       endLine();

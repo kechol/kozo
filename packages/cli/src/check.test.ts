@@ -119,6 +119,7 @@ esac
       ["claude sign-in", "ok"],
       ["hooks", "ok"],
       ["sandbox", expect.any(String)],
+      ["kozo sandbox", process.platform === "darwin" ? "ok" : "fail"],
     ]);
     expect(report.checks.find((entry) => entry.name === "claude flags")?.detail).toBe(
       "missing --no-session-persistence; update claude",

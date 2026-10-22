@@ -1,22 +1,41 @@
+import { type CommandSandbox, type Confine, withSandboxTemp } from "./sandbox.ts";
+
+/** A sandbox and the way to confine a command to it. */
+export interface Confined {
+  confine: Confine;
+  sandbox: CommandSandbox;
+}
+
 /**
  * Runs `command` through `sh -c` in `cwd`, passing its output to `log`, and returns its exit
- * code. Without `env` the command inherits this process's environment.
+ * code. Without `env` the command inherits this process's environment. With `confined` it runs
+ * in that sandbox, with a temporary directory of its own as TMPDIR.
  */
 export async function runCommand(
   command: string,
   cwd: string,
   log: (text: string) => void,
   env?: Record<string, string>,
+  confined?: Confined,
 ) {
-  const child = Bun.spawn(["sh", "-c", command], {
-    cwd,
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-    ...(env ? { env } : {}),
-  });
-  await Promise.all([forward(child.stdout, log), forward(child.stderr, log)]);
-  return await child.exited;
+  const run = async (argv: string[], environment = env) => {
+    const child = Bun.spawn(argv, {
+      cwd,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      ...(environment ? { env: environment } : {}),
+    });
+    await Promise.all([forward(child.stdout, log), forward(child.stderr, log)]);
+    return await child.exited;
+  };
+  if (!confined) return await run(["sh", "-c", command]);
+  return await withSandboxTemp(confined.sandbox, (sandbox, temp) =>
+    run(confined.confine(sandbox, ["sh", "-c", command]), {
+      ...(env ?? (process.env as Record<string, string>)),
+      TMPDIR: temp,
+    }),
+  );
 }
 
 async function forward(stream: ReadableStream<Uint8Array>, log: (text: string) => void) {

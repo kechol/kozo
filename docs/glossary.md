@@ -82,6 +82,7 @@
 | brief | The fixed-format instructions, with every field filled, that kozod builds from the plan for one run. | `brief.md` | prompt, work order | - |
 | checkpoint | A recorded point at a node entry from which a new run can resume. | `checkpoint` | snapshot | - |
 | child run | A run in a separate session, such as review, that is grouped under its parent run. | `parent_run` | sub-run | - |
+| command sandbox | The sandbox of kozo's own in which the diff's commands of prepare, the gates and prove run, as opposed to Claude Code's sandbox around an agent's shell. | `CommandSandbox`, `seatbeltProfile` | jail | - |
 | decision log | The per-run file in which the agent records, one line each, what it chose and why. | `decisions.md` in the run directory, `kozo_note` | - | - |
 | deterministic node | A blueprint node that kozod executes without a model. | `D` | - | - |
 | guard | The check in the worker that decides every tool call of a session before it runs and refuses the ones that leave the worktree, the scope or the allowed commands. | `guardToolCall`, `guard.denied` | filter, hook | - |

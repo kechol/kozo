@@ -1,4 +1,5 @@
 export * from "./bad-changes.ts";
+export * from "./confine.ts";
 export * from "./documents.ts";
 export * from "./events.ts";
 export * from "./fake-agent.ts";

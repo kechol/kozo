@@ -10,7 +10,9 @@ import {
   definitionTip,
   GitError,
   git,
+  platformConfine,
   readDefinition,
+  SandboxUnavailable,
   showFile,
   verifyAppPath,
 } from "@kozo/verify";
@@ -179,7 +181,7 @@ async function checkFactory(): Promise<Check[]> {
     status: "ok",
     detail: "the worker registers the guard in code and loads no settings file",
   });
-  checks.push(sandboxCheck());
+  checks.push(sandboxCheck(), await kozoSandboxCheck());
   return checks;
 }
 
@@ -250,6 +252,17 @@ async function claudeChecks(): Promise<Check[]> {
       : { name: "claude sign-in", status: "fail", detail: "not signed in; run claude auth login" },
   );
   return checks;
+}
+
+/** Whether kozod can confine the diff's commands in prepare, the gates and prove. */
+async function kozoSandboxCheck(): Promise<Check> {
+  try {
+    await platformConfine();
+    return { name: "kozo sandbox", status: "ok", detail: "sandbox-exec confines the gates" };
+  } catch (error) {
+    if (!(error instanceof SandboxUnavailable)) throw error;
+    return { name: "kozo sandbox", status: "fail", detail: error.message };
+  }
 }
 
 /** The tools Claude Code's sandbox needs on this platform. */
