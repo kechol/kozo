@@ -199,6 +199,11 @@ export class GitHubSync {
     }
     await this.followClosedIssues(github, name, closed);
     await this.createLabels(github);
+    // A closed Issue is read only in the pass that sees it closed, so its labels follow then.
+    for (const issue of closed) {
+      const ref = `${name}#${issue.number}`;
+      await this.forIssue(ref, () => this.mirror(github, ref, issue));
+    }
     for (const issue of issues) {
       const ref = `${name}#${issue.number}`;
       await this.forIssue(ref, async () => {

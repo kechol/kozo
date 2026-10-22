@@ -432,6 +432,9 @@ describe("GitHubSync", () => {
     const { items } = env.store.state;
     expect(items[`shop#${done}`]?.stage).toBe("complete");
     expect(items[`shop#${dropped}`]?.stage).toBe("cancelled");
+    expect(env.labels(dropped ?? 0)?.filter((label) => label.startsWith("kozo:"))).toEqual([
+      "kozo:cancelled",
+    ]);
     expect(items[`shop#${stray}`]).toMatchObject({ stage: "triage", hold: { kind: "attention" } });
     expect(items[`shop#${edited}`]?.hold).toBeNull();
     expect(items[`shop#${untrusted}`]?.hold?.reason).toStartWith("reader, who may not write");
