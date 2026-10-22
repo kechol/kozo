@@ -17,7 +17,7 @@ import { CommandError, type VerbResult } from "./api.ts";
 import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
 import { enqueue } from "./instructions.ts";
-import { itemPath, writeItemFile } from "./item-file.ts";
+import { type ItemFile, itemPath, writeItemFile } from "./item-file.ts";
 import { readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
 
@@ -74,33 +74,46 @@ export class ControlPlane {
     if (duplicate) throw new CommandError(409, `${duplicate.ref} already asks for this`);
 
     const ref = this.store.nextLocalItem();
-    await writeItemFile(this.home, ref, {
-      repository,
-      class: body.class ?? null,
-      title: body.title.trim(),
-      body: body.body ?? "",
-    });
+    const started = await this.admit(
+      ref,
+      { repository, class: body.class ?? null, title: body.title.trim(), body: body.body ?? "" },
+      "local",
+      autonomyLevel(charter.charter, body.class ?? null) === "L1",
+    );
+    return started
+      ? { ref, message: `added ${ref}; it goes to Triage` }
+      : { ref, message: `added ${ref}; it waits for your start approval`, awaitingHuman: true };
+  }
+
+  /**
+   * Writes an item's file and records it, then holds it for a start approval or sends it to
+   * Triage. Returns whether it went to Triage.
+   */
+  async admit(
+    ref: string,
+    file: ItemFile,
+    source: "local" | "github",
+    startApproval: boolean,
+  ): Promise<boolean> {
+    const { repository, title } = file;
+    await writeItemFile(this.home, ref, file);
     try {
       await this.store.append({
         type: "item.created",
         item: ref,
-        data: { repository, title: body.title.trim(), source: "local" },
+        data: { repository, title, source },
       });
     } catch (error) {
       await rm(itemPath(this.home, ref), { force: true });
       throw error;
     }
-    if (autonomyLevel(charter.charter, body.class ?? null) === "L1") {
+    if (startApproval) {
       await this.store.append({
         type: "hold.set",
         item: ref,
         data: { target: "item", hold: "approval", by: "kozod", reason: "start approval" },
       });
-      return {
-        ref,
-        message: `added ${ref}; it waits for your start approval`,
-        awaitingHuman: true,
-      };
+      return false;
     }
     await this.store.append({
       type: "stage.changed",
@@ -113,7 +126,7 @@ export class ControlPlane {
         reason: "its autonomy level needs no start approval",
       },
     });
-    return { ref, message: `added ${ref}; it goes to Triage` };
+    return true;
   }
 
   // --- Judgment and control verbs ---------------------------------------------------------------

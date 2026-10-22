@@ -7,6 +7,8 @@ import { apiToken } from "./api-token.ts";
 import { ControlPlane } from "./control-plane.ts";
 import { type DefinitionInUse, refreshDefinition, startingDefinition } from "./definition.ts";
 import { EventStore } from "./event-store.ts";
+import { ghGitHub } from "./github.ts";
+import { GitHubSync } from "./github-sync.ts";
 import { type Launcher, processLauncher } from "./launcher.ts";
 import { Reconciler } from "./reconcile.ts";
 import { Runner } from "./runner.ts";
@@ -141,13 +143,21 @@ export class Daemon {
       scheduler.startWork(ref, work),
     );
     await reconciler.recover();
-    let reconciling = Promise.resolve();
+    const github = new GitHubSync(store, definition, control, ghGitHub(), report);
+    const pollGitHub = () =>
+      definition.current.factory.mode === "github"
+        ? github.poll().catch((error: unknown) => report(`kozod: polling GitHub failed: ${error}`))
+        : Promise.resolve();
+    let reconciling = pollGitHub().then(() => scheduler.tick());
     let ticks = 0;
+    const every = (ms: number) => ticks % Math.max(1, Math.round(ms / tickMs)) === 0;
     const timer = setInterval(() => {
       ticks += 1;
+      // GitHub is read every five minutes, with no webhook and no open port.
+      if (every(300_000)) reconciling = reconciling.then(pollGitHub).then(() => scheduler.tick());
       // The factory definition is read and reconciliation runs once a minute; looking for work
       // to start, every tick.
-      if (ticks % Math.max(1, Math.round(60_000 / tickMs)) === 0) {
+      if (every(60_000)) {
         reconciling = reconciling
           .then(() => refreshDefinition(home, store, definition, report))
           .catch((error: unknown) =>

@@ -15,8 +15,12 @@ export interface GitHubIssue {
   author: string;
   state: "open" | "closed";
   labels: string[];
+  createdAt: string;
   updatedAt: string;
 }
+
+/** What a user may do in a repository, as GitHub names it. */
+export type GitHubPermission = "admin" | "maintain" | "write" | "triage" | "read" | "none";
 
 export interface GitHubPull {
   number: number;
@@ -61,6 +65,7 @@ export interface GitHub {
   checks(repository: GitHubRepository, pull: number): Promise<GitHubCheck[]>;
   /** The login gh acts as on github.com, which kozod's own comments carry as their author. */
   login(): Promise<string>;
+  permission(repository: GitHubRepository, login: string): Promise<GitHubPermission>;
   /** Pushes `commit` to `branch` on the clone's `origin`, replacing only what kozo pushed. */
   push(clone: string, branch: string, commit: string): Promise<void>;
   /** The commit `branch` points at on the clone's `origin`, or null when it has none. */

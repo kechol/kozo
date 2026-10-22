@@ -26,6 +26,7 @@ describe("ghAllowed", () => {
       ["pr", "create", "--head=kozo/x/12-t1"],
       ["pr", "checks", "3"],
       ["api", "--method", "PATCH", "repos/me/app/issues/comments/99", "--field", "body=@-"],
+      ["api", "--method", "GET", "repos/me/app/collaborators/someone/permission"],
     ]) {
       expect({ args, allowed: ghAllowed(args) }).toEqual({ args, allowed: true });
     }
@@ -42,6 +43,8 @@ describe("ghAllowed", () => {
       ["api", "--method", "PUT", "repos/me/app/pulls/3/merge", "--field", "body=@-"],
       ["api", "--method", "PATCH", "repos/me/app/issues/comments/99", "--field", "body=x"],
       ["api", "graphql", "-f", "query=mutation"],
+      ["api", "--method", "GET", "repos/me/app/collaborators"],
+      ["api", "--method", "GET", "repos/me/app/collaborators/x/permission", "--paginate"],
       ["--repo", "me/app", "pr", "merge"],
     ]) {
       expect({ args, allowed: ghAllowed(args) }).toEqual({ args, allowed: false });

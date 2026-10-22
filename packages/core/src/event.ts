@@ -110,6 +110,11 @@ export const eventSchema = z
     /** The factory's ID, drawn once at its first start and written into branch names. */
     event("factory.created", z.strictObject({ factory_id: factoryIdSchema })),
     event("factory.changed", z.strictObject({ paused: z.boolean(), reason: text })),
+    /** An applied factory definition named this GitHub repository for the first time. */
+    event(
+      "factory.repository",
+      z.strictObject({ path: text, github: z.string().regex(/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/) }),
+    ),
     /** The factory definition at `commit` validated and is in use for runs that start after. */
     event("factory.applied", z.strictObject({ commit: text })),
     /** The factory definition at `commit` did not validate; the one in use stays. */

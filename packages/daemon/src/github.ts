@@ -26,7 +26,8 @@ export type GhExec = (
   stdin?: string,
 ) => Promise<{ stdout: string; stderr: string; code: number }>;
 
-// Every gh command kozod may run. There is no merge, and the one API call edits a comment.
+// Every gh command kozod may run. There is no merge, and the API calls edit a comment or read a
+// user's permission.
 const listed = new Set([
   "issue list",
   "issue view",
@@ -39,9 +40,14 @@ const listed = new Set([
   "auth status",
 ]);
 const commentEndpoint = /^repos\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/issues\/comments\/[0-9]+$/;
+const permissionEndpoint =
+  /^repos\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/collaborators\/[A-Za-z0-9-]+\/permission$/;
 
 /** Whether kozod may run gh with `args`. */
 export function ghAllowed(args: readonly string[]): boolean {
+  if (args[0] === "api" && args[2] === "GET") {
+    return args.length === 4 && args[1] === "--method" && permissionEndpoint.test(args[3] ?? "");
+  }
   if (args[0] === "api") {
     return (
       args.length === 6 &&
@@ -101,7 +107,7 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
         `--repo=${repository}`,
         "--state=open",
         "--limit=200",
-        "--json=number,title,body,author,state,labels,updatedAt",
+        "--json=number,title,body,author,state,labels,createdAt,updatedAt",
         ...labels.map((label) => `--label=${label}`),
       ]);
       return raw.map(issueOf);
@@ -193,6 +199,29 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
       );
       return raw.map(({ name, bucket }) => ({ name, bucket }));
     },
+    async permission(repository, login) {
+      // A login outside GitHub's alphabet, such as a bot's `name[bot]`, has no permission to ask
+      // for and would not pass the list.
+      if (!/^[A-Za-z0-9-]+$/.test(login)) return "none";
+      try {
+        const raw = await json<{ permission: string; role_name?: string }>([
+          "api",
+          "--method",
+          "GET",
+          `repos/${repository}/collaborators/${login}/permission`,
+        ]);
+        const role = raw.role_name ?? raw.permission;
+        return (
+          (["admin", "maintain", "write", "triage", "read"] as const).find(
+            (name) => name === role,
+          ) ?? "none"
+        );
+      } catch (error) {
+        // GitHub answers 404 for a login that is no collaborator.
+        if (error instanceof GhError) return "none";
+        throw error;
+      }
+    },
     async login() {
       const raw = await json<{ hosts: Record<string, { active: boolean; login: string }[]> }>([
         "auth",
@@ -228,6 +257,7 @@ interface RawIssue {
   author: { login: string };
   state: string;
   labels: { name: string }[];
+  createdAt: string;
   updatedAt: string;
 }
 
@@ -254,6 +284,7 @@ const issueOf = (raw: RawIssue): GitHubIssue => ({
   author: raw.author.login,
   state: raw.state.toLowerCase() === "open" ? "open" : "closed",
   labels: raw.labels.map((label) => label.name),
+  createdAt: raw.createdAt,
   updatedAt: raw.updatedAt,
 });
 

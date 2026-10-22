@@ -69,6 +69,7 @@ const examples: Record<EventType, unknown> = {
   "plan.proposed": { plan },
   "plan.accepted": { plan, by: "kozod" },
   "factory.applied": { commit: "a1b2c3d" },
+  "factory.repository": { path: "/src/shop", github: "me/shop" },
   "factory.refused": { commit: "a1b2c3d", issues: ["factory.yml: concurrency: expected a number"] },
   "risk.raised": { from: "low", to: "normal", reason: "the diff changes src/stock.ts" },
   "node.enter": { kind: "D" },

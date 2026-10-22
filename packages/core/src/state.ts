@@ -100,6 +100,8 @@ export interface FactoryState {
    * null while the definition is not a git repository.
    */
   definition: { applied: string | null; refused: string | null };
+  /** When kozod first ran a definition naming each GitHub repository, by `<owner>/<name>`. */
+  repositories: Record<string, { path: string; registeredAt: string }>;
   items: Record<string, ItemState>;
   tasks: Record<string, TaskState>;
   runs: Record<string, RunInfo>;
@@ -136,6 +138,7 @@ export function emptyState(): FactoryState {
     paused: false,
     pausedReason: null,
     definition: { applied: null, refused: null },
+    repositories: {},
     items: {},
     tasks: {},
     runs: {},
@@ -231,6 +234,11 @@ export function applyEvent(state: FactoryState, event: Event): void {
     case "factory.changed":
       state.paused = event.data.paused;
       state.pausedReason = event.data.paused ? event.data.reason : null;
+      return;
+    case "factory.repository":
+      if (state.repositories[event.data.github])
+        throw new StateError(`${event.data.github} is registered already`);
+      state.repositories[event.data.github] = { path: event.data.path, registeredAt: event.ts };
       return;
     case "factory.applied":
       state.definition = { applied: event.data.commit, refused: null };
