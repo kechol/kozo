@@ -8,6 +8,10 @@ import { EventStore } from "./event-store.ts";
 import { GitHubSync } from "./github-sync.ts";
 import { readItemFile } from "./item-file.ts";
 
+// kozod keeps event times strictly increasing, so registration can be stamped a little after
+// the clock; an Issue meant to come after it says so outright.
+const afterRegistration = () => new Date(Date.now() + 60_000).toISOString();
+
 async function setup() {
   const repo = await gitRepository();
   await repo.commit(
@@ -60,8 +64,13 @@ describe("GitHubSync", () => {
     const trusted = env.github.addIssue("me/shop", {
       title: "Low stock",
       body: "Say only N left.",
+      createdAt: afterRegistration(),
     });
-    const reader = env.github.addIssue("me/shop", { title: "Sort", author: "reader" });
+    const reader = env.github.addIssue("me/shop", {
+      title: "Sort",
+      author: "reader",
+      createdAt: afterRegistration(),
+    });
     const old = env.github.addIssue("me/shop", { title: "Old", createdAt: before });
     env.github.addIssue("me/shop", { title: "Bump", author: "dependabot[bot]" });
 
@@ -103,7 +112,10 @@ describe("GitHubSync", () => {
     await using env = await setup();
     await env.sync.register();
     env.github.permissions.set("me/shop owner", "admin");
-    const number = env.github.addIssue("me/shop", { title: "Low stock" });
+    const number = env.github.addIssue("me/shop", {
+      title: "Low stock",
+      createdAt: afterRegistration(),
+    });
     await env.sync.poll();
     const ref = `shop#${number}`;
     const comments = () =>
