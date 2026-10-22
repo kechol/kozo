@@ -78,6 +78,7 @@ describe("guardToolCall", () => {
         "env -i PATH=/usr/bin bun test",
         "xargs -n1 echo < files.txt",
         "command -v bun",
+        "git ls-files | xargs grep -n cart",
       ]) {
         expect({ command, decision: await guardToolCall(...bash(command), policy) }).toEqual({
           command,
@@ -164,6 +165,10 @@ describe("guardToolCall", () => {
         "env -P /usr/bin git push",
         "stdbuf -oL git push",
         "timeout --frobnicate 5 bun test",
+        "echo push | xargs git",
+        "echo '-exec git push ;' | xargs find .",
+        "env -S 'git\\_push'",
+        "git checkout other -- $X",
         "git grep -O foo",
         "git grep -nOless foo",
         "git grep --open-files foo",

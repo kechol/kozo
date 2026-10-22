@@ -137,6 +137,30 @@ const refusedCommands = new Map([
 
 const shells = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
 
+// Commands whose arguments the guard reads to decide, so xargs may not add any to them.
+const argumentsRead = new Set([
+  ...shells,
+  "git",
+  "eval",
+  "source",
+  ".",
+  "find",
+  "export",
+  "declare",
+  "typeset",
+  "local",
+  "command",
+  "builtin",
+  "exec",
+  "time",
+  "caffeinate",
+  "env",
+  "nice",
+  "timeout",
+  "stdbuf",
+  "xargs",
+]);
+
 // git subcommands that only read, or only change the worktree, the index and the task branch.
 const gitAllowed = new Set([
   "add",
@@ -299,8 +323,9 @@ const gitRefusedReasons: Record<string, string> = {
 
 // The options of each command that runs another, and whether each takes a value, as the next
 // word or attached (`-n1`, `--max-args=1`). An option missing here could take the command's
-// place as its value, so the guard refuses it. `script` is a value read as a shell script.
-const wrapperOptions: Record<string, Record<string, boolean | "script">> = {
+// place as its value, so the guard refuses it. `env -S` is missing on purpose: env splits its
+// string by escapes and expansions of its own, which a shell parse does not reproduce.
+const wrapperOptions: Record<string, Record<string, boolean>> = {
   command: { "-p": false, "-v": false, "-V": false },
   builtin: {},
   exec: { "-c": false, "-l": false, "-a": true },
@@ -318,8 +343,6 @@ const wrapperOptions: Record<string, Record<string, boolean | "script">> = {
     "-C": true,
     "--chdir": true,
     "-P": true,
-    "-S": "script",
-    "--split-string": "script",
   },
   nice: { "-n": true, "--adjustment": true },
   timeout: {
@@ -367,15 +390,11 @@ const wrapperOptions: Record<string, Record<string, boolean | "script">> = {
 };
 
 /**
- * Splits a wrapper's arguments into the command it runs and a script it reads, refusing an
- * option the wrapper does not list or one built from an expansion.
+ * The command a wrapper runs, after its options, refusing an option the wrapper does not list
+ * or one built from an expansion.
  */
-function wrapped(
-  name: string,
-  args: readonly Word[],
-): { command: Word[]; script: Word | null } | { refused: string } {
+function wrapped(name: string, args: readonly Word[]): { command: Word[] } | { refused: string } {
   const options = wrapperOptions[name] ?? {};
-  let script: Word | null = null;
   let index = 0;
   while (index < args.length) {
     const word = args[index] as Word;
@@ -406,10 +425,9 @@ function wrapped(
       : args[index + 1];
     if (!value) return { refused: `${name} ${flag} without its value` };
     if (value.dynamic) return { refused: `${name} ${flag} with a value built from an expansion` };
-    if (takes === "script") script = value;
     index += attached ? 1 : 2;
   }
-  return { command: args.slice(index), script };
+  return { command: args.slice(index) };
 }
 
 interface Analysis {
@@ -453,7 +471,10 @@ function analyzeGit(args: Word[], context: Analysis): GuardDecision {
   if (!subcommand) return allow;
   if (subcommand.dynamic) return refuse("a git subcommand built from an expansion");
   const name = subcommand.text;
-  const rest = words.map((word) => word.text);
+  // A path built from an expansion may be empty, which would leave `checkout <commit> --` alone.
+  const rest = words
+    .filter((word) => name !== "checkout" || !word.dynamic)
+    .map((word) => word.text);
   // An argument built from an expansion could turn into any option. Only paths after a literal
   // --, and the message of git commit or git stash, as in commit -m "$(cat <<EOF ...)", may be.
   const paths = words.findIndex((word) => !word.dynamic && word.text === "--");
@@ -542,7 +563,6 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
   if (name in wrapperOptions) {
     const parsed = wrapped(name, args);
     if ("refused" in parsed) return refuse(parsed.refused);
-    if (parsed.script) return analyzeScript(parsed.script.text, context);
     const rest = [...parsed.command];
     if (name === "timeout") rest.shift();
     while (name === "env" && /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[0]?.text ?? "")) {
@@ -550,6 +570,11 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
       if (assignment.startsWith("GIT_"))
         return refuse(`${assignment.split("=")[0]} would redirect git`);
     }
+    const target = basename(rest[0]?.text ?? "");
+    if (name === "xargs" && argumentsRead.has(target))
+      return refuse(
+        `xargs ${target}: xargs adds arguments from its input that the guard never reads`,
+      );
     return analyzeCommand(rest, context);
   }
   if (name === "eval") {
