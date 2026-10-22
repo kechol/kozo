@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { jsonSchema } from "./document.ts";
 
 const text = z.string().min(1);
 
@@ -53,7 +54,4 @@ const runReportWire = z.strictObject({
     .optional(),
 });
 
-// Draft-07 is the JSON Schema draft that Claude Code's structured output reads.
-export const runReportJsonSchema = z.toJSONSchema(runReportWire, {
-  target: "draft-7",
-}) as Record<string, unknown>;
+export const runReportJsonSchema = jsonSchema(runReportWire);

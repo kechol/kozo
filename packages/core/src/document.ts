@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import { z } from "zod";
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; issues: string[] };
 
@@ -30,3 +30,7 @@ export function parseYamlDocument<S extends z.ZodType>(schema: S, text: string) 
 export function parseJsonDocument<S extends z.ZodType>(schema: S, text: string) {
   return parseText(schema, text, JSON.parse);
 }
+
+/** The JSON Schema of `schema` in draft-07, the draft that Claude Code's structured output reads. */
+export const jsonSchema = (schema: z.ZodType) =>
+  z.toJSONSchema(schema, { target: "draft-7" }) as Record<string, unknown>;

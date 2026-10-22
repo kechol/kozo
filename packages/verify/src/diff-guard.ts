@@ -10,7 +10,7 @@ import {
   resolveRange,
 } from "./changes.ts";
 import { guarded } from "./command.ts";
-import { GitError, git, showFile } from "./git.ts";
+import { GitError, git, listFiles, showFile } from "./git.ts";
 import {
   changedGateScripts,
   findTestWeakening,
@@ -127,9 +127,7 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
   );
   violations.push(...scriptChanges.flat());
   const rootScripts = scriptsOf(await showFile(cwd, mergeBase, "package.json"));
-  const baseFiles = (await git(cwd, ["ls-tree", "-r", "--name-only", "-z", mergeBase]))
-    .split("\0")
-    .filter(Boolean);
+  const baseFiles = await listFiles(cwd, mergeBase);
   const runByGates = await includedFiles(
     gateFiles([...gateCommands, ...reachedScripts(gateCommands, rootScripts)]),
     (path: string) => showFile(cwd, mergeBase, path).catch(() => null),

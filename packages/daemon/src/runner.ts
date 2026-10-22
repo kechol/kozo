@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { appendFile, mkdir, rm } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import {
@@ -21,6 +20,7 @@ import {
   runReportJsonSchema,
   runReportSchema,
   type Stage,
+  sha256,
   type TaskState,
   triageAnswerJsonSchema,
   triageAnswerSchema,
@@ -34,6 +34,7 @@ import {
   git,
   globMatcher,
   type Judge,
+  listFiles,
   proveLine,
   readBaseDocuments,
   runCommand,
@@ -201,7 +202,7 @@ export class Runner {
         factory_commit: null,
         kozo_version: pkg.version,
         runtime: this.deps.runtime,
-        request_sha: createHash("sha256").update(request).digest("hex"),
+        request_sha: sha256(request),
       },
     });
     return run;
@@ -514,11 +515,7 @@ export class Runner {
     // The diff's own code runs in prepare, the gates and prove, so they get no credentials.
     const environment = commandEnvironmentFrom(process.env);
     // Computed for every attempt, wherever it starts: the guard and the sandbox protect these.
-    const listed = (
-      await git(repository.path, ["ls-tree", "-r", "-z", "--name-only", repository.tip])
-    )
-      .split("\0")
-      .filter(Boolean);
+    const listed = await listFiles(repository.path, repository.tip);
     const existingTests = charter.existing_tests_protected
       ? listed.filter(globMatcher(constraints.tests))
       : [];

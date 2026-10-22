@@ -11,13 +11,13 @@ import {
   formatReference,
   isRunOver,
   type KozoHome,
-  lineHash,
   mergeLogs,
   parseEventLog,
   parseReference,
   replay,
   runFiles,
   sealIssues,
+  sha256,
 } from "@kozo/core";
 import { IndexDb } from "./index-db.ts";
 
@@ -211,7 +211,7 @@ export class EventStore {
     }
     this.current = next;
     this.lastMs = now;
-    this.logs.set(log, { seq: line.seq + 1, last: lineHash(text) });
+    this.logs.set(log, { seq: line.seq + 1, last: sha256(text) });
     const id = this.index.record(line, next);
     for (const listener of this.listeners) listener(line, id);
     return line;

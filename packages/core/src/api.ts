@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { workClassSchema } from "./charter.ts";
 import type { Reference } from "./reference.ts";
@@ -65,4 +65,11 @@ export interface ApiError {
  */
 export function helloProof(token: string, nonce: string): string {
   return createHmac("sha256", token).update(`kozo-hello:${nonce}`).digest("hex");
+}
+
+/** Compares a secret given by the other side with the expected one in constant time. */
+export function secretMatches(given: string, expected: string): boolean {
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
 }

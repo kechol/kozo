@@ -25,3 +25,10 @@ export async function showFile(cwd: string, commit: string, path: string): Promi
   if (listed === "") return null;
   return await git(cwd, ["show", `${commit}:${path}`]);
 }
+
+/** Every file path at a commit. */
+export async function listFiles(cwd: string, commit: string): Promise<string[]> {
+  return (await git(cwd, ["ls-tree", "-r", "--name-only", "-z", commit]))
+    .split("\0")
+    .filter(Boolean);
+}

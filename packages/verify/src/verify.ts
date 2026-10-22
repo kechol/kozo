@@ -14,6 +14,7 @@ import { guarded } from "./command.ts";
 import { GitError, showFile } from "./git.ts";
 import {
   defuseSections,
+  ownerNotesSection,
   parseAnswer,
   type SessionAnswer,
   SessionError,
@@ -132,12 +133,7 @@ export function verifyPrompt(
     `GOAL: ${defuse(goal)}`,
     "DONE_WHEN:",
     ...doneWhen.map((condition) => `- ${defuse(condition)}`),
-    ...(ownerNotes.length > 0
-      ? [
-          "The owner has since said, which takes precedence where it differs:",
-          ...ownerNotes.map((note) => `- ${defuse(note)}`),
-        ]
-      : []),
+    ...ownerNotesSection(ownerNotes, defuse),
     "</instructions>",
     "",
     "<verify-app>",

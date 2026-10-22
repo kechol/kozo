@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { workClassSchema } from "./charter.ts";
-import { type ParseResult, parseYamlDocument } from "./document.ts";
+import { jsonSchema, type ParseResult, parseYamlDocument } from "./document.ts";
 import { itemReferenceSchema } from "./reference.ts";
 import { riskTierSchema } from "./work-model.ts";
 
@@ -87,7 +87,4 @@ const triageAnswerWire = z.strictObject({
   question: z.string().min(1).optional(),
 });
 
-// Draft-07 is the JSON Schema draft that Claude Code's structured output reads.
-export const triageAnswerJsonSchema = z.toJSONSchema(triageAnswerWire, {
-  target: "draft-7",
-}) as Record<string, unknown>;
+export const triageAnswerJsonSchema = jsonSchema(triageAnswerWire);

@@ -1,4 +1,4 @@
-import { type Event, type EventType, lineHash } from "@kozo/core";
+import { type Event, type EventType, sha256 } from "@kozo/core";
 
 type Data<T extends EventType> = Extract<Event, { type: T }>["data"];
 type Envelope = Partial<
@@ -35,7 +35,7 @@ export function eventWriter(start = "2026-10-21T09:00:00.000Z") {
       type,
       data,
     } as Event;
-    lasts.set(run, lineHash(JSON.stringify(event)));
+    lasts.set(run, sha256(JSON.stringify(event)));
     return event;
   };
 }

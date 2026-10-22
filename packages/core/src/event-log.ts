@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import type { ParseResult } from "./document.ts";
 import { type Event, parseEvent } from "./event.ts";
 
-/** The hash that the next line of a log carries as `prev`: the SHA-256 of this line's text. */
-export function lineHash(line: string): string {
-  return createHash("sha256").update(line).digest("hex");
+/** The SHA-256 of `text` in hex, as a line's `prev` and the hashes in events carry it. */
+export function sha256(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
 }
 
 /** The events of one `events.jsonl` and the hash of its last line, null when it is empty. */
@@ -27,7 +27,7 @@ export function parseEventLog(text: string, name: string): ParseResult<EventLog>
   lines.forEach((line, index) => {
     const where = `${name}:${index + 1}`;
     const expected = last;
-    last = lineHash(line);
+    last = sha256(line);
     const result = parseEvent(line);
     if (!result.ok) {
       issues.push(...result.issues.map((issue) => `${where}: ${issue}`));

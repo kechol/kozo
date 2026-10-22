@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -8,7 +7,8 @@ import {
   query,
   tool,
 } from "@anthropic-ai/claude-agent-sdk";
-import { credentialPaths, sessionEnvironmentFrom } from "@kozo/verify";
+import { sha256 } from "@kozo/core";
+import { credentialPaths, localSandbox, scrubbedShell, sessionEnvironmentFrom } from "@kozo/verify";
 import type { AgentOutcome, CodingAgent, Instruction } from "./coding-agent.ts";
 
 /** The built-in tools an agent may use; anything else is not offered at all. */
@@ -29,8 +29,6 @@ function deniedCredentials(env: NodeJS.ProcessEnv): string[] {
     ...(env.CLAUDE_CONFIG_DIR ? [env.CLAUDE_CONFIG_DIR] : []),
   ];
 }
-
-const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
 
 function deliveredContext(instructions: Instruction[]) {
   return instructions
@@ -164,26 +162,14 @@ export function claudeAgent(executable: string): CodingAgent {
             env: {
               ...sessionEnvironmentFrom(process.env),
               ...request.env,
-              // Claude Code removes its own sign-in variables from the shell's environment.
-              CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1",
+              ...scrubbedShell,
             },
-            sandbox: {
-              enabled: true,
-              failIfUnavailable: true,
-              autoAllowBashIfSandboxed: true,
-              allowUnsandboxedCommands: false,
-              network: {
-                allowedDomains: ["localhost", "127.0.0.1"],
-                strictAllowlist: true,
-                allowLocalBinding: true,
-              },
-              filesystem: {
-                denyRead: [...deniedCredentials(process.env), ...(request.sandbox?.denyRead ?? [])],
-                allowRead: request.sandbox?.allowRead ?? [],
-                allowWrite: request.sandbox?.allowWrite ?? [],
-                denyWrite: request.sandbox?.denyWrite ?? [],
-              },
-            },
+            sandbox: localSandbox({
+              denyRead: [...deniedCredentials(process.env), ...(request.sandbox?.denyRead ?? [])],
+              allowRead: request.sandbox?.allowRead ?? [],
+              allowWrite: request.sandbox?.allowWrite ?? [],
+              denyWrite: request.sandbox?.denyWrite ?? [],
+            }),
             hooks: {
               PreToolUse: [{ hooks: [preToolUse] }],
               PostToolUse: [{ hooks: [afterTool] }],

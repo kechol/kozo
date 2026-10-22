@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { eventWriter } from "@kozo/testing";
-import { lineHash, mergeLogs, parseEventLog, sealIssues } from "./event-log.ts";
+import { mergeLogs, parseEventLog, sealIssues, sha256 } from "./event-log.ts";
 
 describe("parseEventLog", () => {
   test("parses every line and ignores the final newline", () => {
@@ -13,7 +13,7 @@ describe("parseEventLog", () => {
       .join("\n")}\n`;
     const result = parseEventLog(text, "events.jsonl");
     expect(result.ok && result.value.events.map((event) => event.seq)).toEqual([0, 1]);
-    expect(result.ok && result.value.last).toBe(lineHash(text.trimEnd().split("\n")[1] ?? ""));
+    expect(result.ok && result.value.last).toBe(sha256(text.trimEnd().split("\n")[1] ?? ""));
   });
 
   test("a changed or removed line breaks the hash chain", () => {
@@ -73,13 +73,13 @@ describe("sealIssues", () => {
     ];
     const own = [write("log.sealed", { run: "r-0001", lines, last }, { item: "K-1" })];
     return {
-      run: { events: run, last: lineHash(JSON.stringify(run[1])) },
-      own: { events: own, last: lineHash(JSON.stringify(own[0])) },
+      run: { events: run, last: sha256(JSON.stringify(run[1])) },
+      own: { events: own, last: sha256(JSON.stringify(own[0])) },
     };
   }
 
   test("a run log that matches its seal has no issue", () => {
-    const { own, run } = sealed(2, lineHash(JSON.stringify(sealed(2, "").run.events[1])));
+    const { own, run } = sealed(2, sha256(JSON.stringify(sealed(2, "").run.events[1])));
     expect(sealIssues([own, run])).toEqual([]);
   });
 

@@ -3,6 +3,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
 import type { z } from "zod";
+import { pickEnvironment } from "./command.ts";
 
 export interface SessionRequest {
   instructions: string;
@@ -39,6 +40,18 @@ export function defuseSections(text: string, sections: readonly string[]): strin
   return text.replace(new RegExp(`</(${sections.join("|")})`, "gi"), "<\\/$1");
 }
 
+/** The lines of a judge's instructions that give what the owner said since the plan. */
+export function ownerNotesSection(
+  notes: readonly string[],
+  defuse: (text: string) => string,
+): string[] {
+  if (notes.length === 0) return [];
+  return [
+    "The owner has since said, which takes precedence where it differs:",
+    ...notes.map((note) => `- ${defuse(note)}`),
+  ];
+}
+
 /** Checks a session's output against the judgment schema it was asked to answer with. */
 export function parseAnswer<T>(schema: z.ZodType<T>, name: string, output: unknown): T {
   const judgment = schema.safeParse(output);
@@ -68,14 +81,35 @@ const sessionEnvironment = [
 ];
 
 /** The variables of `source` that a session may see: what claude needs to run and to sign in. */
-export function sessionEnvironmentFrom(source: Record<string, string | undefined>) {
-  return Object.fromEntries(
-    sessionEnvironment.flatMap((name) => {
-      const value = source[name];
-      return value === undefined ? [] : [[name, value]];
-    }),
-  ) as Record<string, string>;
+export const sessionEnvironmentFrom = (source: Record<string, string | undefined>) =>
+  pickEnvironment(source, sessionEnvironment);
+
+/**
+ * Claude Code's sandbox for a session's shell: it must start, the shell runs nowhere else, the
+ * network reaches only this machine, and the filesystem rules are the caller's.
+ */
+export function localSandbox(filesystem: {
+  denyRead: string[];
+  allowRead?: string[];
+  allowWrite?: string[];
+  denyWrite?: string[];
+}) {
+  return {
+    enabled: true,
+    failIfUnavailable: true,
+    autoAllowBashIfSandboxed: true,
+    allowUnsandboxedCommands: false,
+    network: {
+      allowedDomains: ["localhost", "127.0.0.1"],
+      strictAllowlist: true,
+      allowLocalBinding: true,
+    },
+    filesystem,
+  };
 }
+
+/** Lets Claude Code remove its own sign-in variables from the environment of the shell. */
+export const scrubbedShell = { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1" };
 
 /**
  * A judge that runs the user's own `claude` through the Agent SDK. The session has no tools and
@@ -129,21 +163,9 @@ export function claudeVerifier(executable: string): Verifier {
         tools: verifyTools,
         maxTurns: 80,
         permissionMode: "dontAsk",
-        // Claude Code removes its own sign-in variables from the environment of the shell, where
-        // the app under test, built from the diff, could otherwise read them.
-        env: { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1" },
-        sandbox: {
-          enabled: true,
-          failIfUnavailable: true,
-          autoAllowBashIfSandboxed: true,
-          allowUnsandboxedCommands: false,
-          network: {
-            allowedDomains: ["localhost", "127.0.0.1"],
-            strictAllowlist: true,
-            allowLocalBinding: true,
-          },
-          filesystem: { denyRead: credentialPaths.map((path) => join(homedir(), path)) },
-        },
+        // The app under test, built from the diff, could otherwise read the sign-in variables.
+        env: scrubbedShell,
+        sandbox: localSandbox({ denyRead: credentialPaths.map((path) => join(homedir(), path)) }),
       });
     },
   };

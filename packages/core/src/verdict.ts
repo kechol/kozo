@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { jsonSchema } from "./document.ts";
 
 export const reviewVerdictSchema = z.enum(["accept", "revise", "escalate"]);
 export type ReviewVerdict = z.infer<typeof reviewVerdictSchema>;
@@ -62,10 +63,6 @@ export const verdictFileSchema = z.strictObject({
   verify: verifyRecordSchema.optional(),
 });
 export type VerdictFile = z.infer<typeof verdictFileSchema>;
-
-// Draft-07 is the JSON Schema draft that Claude Code's structured output reads.
-const jsonSchema = (schema: z.ZodType) =>
-  z.toJSONSchema(schema, { target: "draft-7" }) as Record<string, unknown>;
 
 export const reviewJudgmentJsonSchema = jsonSchema(reviewJudgmentSchema);
 export const verifyJudgmentJsonSchema = jsonSchema(verifyJudgmentSchema);

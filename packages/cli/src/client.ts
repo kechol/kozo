@@ -1,5 +1,5 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
-import { apiPort, helloProof, type KozoHome, kozoHome } from "@kozo/core";
+import { randomBytes } from "node:crypto";
+import { apiPort, helloProof, type KozoHome, kozoHome, secretMatches } from "@kozo/core";
 
 /** kozod is not running, or has never run in this home. */
 export class KozodUnavailable extends Error {}
@@ -32,9 +32,7 @@ async function checkServer(base: string, token: string) {
   } catch {
     throw new KozodUnavailable("kozod is not running; start it with kozo up");
   }
-  const expected = Buffer.from(helloProof(token, nonce));
-  const given = Buffer.from(typeof proof === "string" ? proof : "");
-  if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
+  if (!secretMatches(typeof proof === "string" ? proof : "", helloProof(token, nonce))) {
     throw new KozodUnavailable(
       `the server at ${base} is not this home's kozod; the token was not sent`,
     );

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { kozoHome, runFiles } from "@kozo/core";
+import { kozoHome, runFiles, sha256 } from "@kozo/core";
 import {
   type FakeStep,
   fakeAgent,
@@ -226,7 +226,6 @@ describe("the minimal path", () => {
     expect(await Bun.file(runFiles(env.home, "r-0002").decisions).text()).toContain(
       "Kept the label",
     );
-    const sha256 = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");
     const data = (type: string, run: string) =>
       JSON.parse(
         env.store.db

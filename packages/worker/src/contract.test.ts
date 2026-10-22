@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { sha256 } from "@kozo/core";
 import { fakeAgent, gitRepository } from "@kozo/testing";
 import { claudeAgent } from "./claude-agent.ts";
 import type { AgentRecord, AgentRequest, CodingAgent, Instruction } from "./coding-agent.ts";
@@ -96,7 +97,7 @@ for (const implementation of implementations) {
       expect(records.some((record) => record.type === "tool.call")).toBe(true);
       expect(records[0]).toMatchObject({
         type: "session.started",
-        data: { brief_sha: new Bun.CryptoHasher("sha256").update(value.prompt).digest("hex") },
+        data: { brief_sha: sha256(value.prompt) },
       });
     }, 180_000);
 

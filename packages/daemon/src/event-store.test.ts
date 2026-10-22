@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { cp, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { kozoHome, lineHash, StateError } from "@kozo/core";
+import { kozoHome, StateError, sha256 } from "@kozo/core";
 import { recordedLogs, tempDirectory } from "@kozo/testing";
 import { EventLogError, EventStore } from "./event-store.ts";
 
@@ -167,7 +167,7 @@ describe("EventStore", () => {
       type: "log.sealed",
       run_id: null,
       item: "K-1",
-      data: { run: "r-0001", lines: 2, last: lineHash(runLog.trimEnd().split("\n")[1] ?? "") },
+      data: { run: "r-0001", lines: 2, last: sha256(runLog.trimEnd().split("\n")[1] ?? "") },
     });
     await expect(store.append({ ...run, type: "node.enter", data: { kind: "D" } })).rejects.toThrow(
       "run r-0001 is sealed",

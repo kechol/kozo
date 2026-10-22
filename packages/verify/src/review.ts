@@ -6,7 +6,13 @@ import { parseAgentDefinition } from "./agent-definition.ts";
 import { diffCommand, resolveRange } from "./changes.ts";
 import { guarded } from "./command.ts";
 import { GitError, git } from "./git.ts";
-import { defuseSections, type Judge, parseAnswer, SessionError } from "./judge.ts";
+import {
+  defuseSections,
+  type Judge,
+  ownerNotesSection,
+  parseAnswer,
+  SessionError,
+} from "./judge.ts";
 import { updateVerdictFile } from "./verdict-file.ts";
 
 export const reviewAgent = parseAgentDefinition(reviewDefinition);
@@ -81,12 +87,7 @@ export function reviewPrompt(
     `GOAL: ${defuse(goal)}`,
     "DONE_WHEN:",
     conditions,
-    ...(ownerNotes.length > 0
-      ? [
-          "The owner has since said, which takes precedence where it differs:",
-          ...ownerNotes.map((note) => `- ${defuse(note)}`),
-        ]
-      : []),
+    ...ownerNotesSection(ownerNotes, defuse),
     "</instructions>",
     "",
     '<diff trust="untrusted">',

@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { sha256 } from "@kozo/core";
 import type { AgentRequest, CodingAgent } from "@kozo/worker";
 import { testGitEnvironment } from "./git-repository.ts";
 
@@ -61,7 +61,6 @@ export function fakeAgent(script: FakeScript): FakeAgent {
     async run(request) {
       requests.push(request);
       const steps = typeof script === "function" ? script(request) : script;
-      const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
       request.record({
         type: "session.started",
         data: {

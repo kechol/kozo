@@ -65,12 +65,19 @@ const commandEnvironment = [
   "TERM",
 ];
 
-/** The environment kozod runs a diff's commands with: `source` without any credential. */
-export function commandEnvironmentFrom(source: Record<string, string | undefined>) {
+/** The variables of `source` named in `names`, leaving out the unset ones. */
+export function pickEnvironment(
+  source: Record<string, string | undefined>,
+  names: readonly string[],
+): Record<string, string> {
   return Object.fromEntries(
-    commandEnvironment.flatMap((name) => {
+    names.flatMap((name) => {
       const value = source[name];
       return value === undefined ? [] : [[name, value]];
     }),
-  ) as Record<string, string>;
+  );
 }
+
+/** The environment kozod runs a diff's commands with: `source` without any credential. */
+export const commandEnvironmentFrom = (source: Record<string, string | undefined>) =>
+  pickEnvironment(source, commandEnvironment);

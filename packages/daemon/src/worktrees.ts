@@ -1,7 +1,6 @@
-import { createHash } from "node:crypto";
 import { mkdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { type KozoHome, parseReference } from "@kozo/core";
+import { type KozoHome, parseReference, sha256 } from "@kozo/core";
 import { GitError, git } from "@kozo/verify";
 import { defaultBranch } from "./repository.ts";
 
@@ -23,7 +22,7 @@ export function taskBranch(factory: string, task: string): string {
  * that two repositories with one name and the same GitHub-mode numbers stay apart.
  */
 function repositoryPrefix(repository: string): string {
-  const hash = createHash("sha256").update(repository).digest("hex").slice(0, 8);
+  const hash = sha256(repository).slice(0, 8);
   return `${basename(repository)}-${hash}`;
 }
 

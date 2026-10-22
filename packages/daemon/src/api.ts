@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import {
   type AddItem,
   type ApiError,
@@ -8,6 +7,7 @@ import {
   listKindSchema,
   parseReference,
   type Reference,
+  secretMatches,
   type Verb,
   verbBodySchemas,
   verbSchema,
@@ -68,9 +68,7 @@ const error = (c: Context, status: number, message: string, issues?: string[]) =
 
 function tokenMatches(header: string | undefined, token: string): boolean {
   if (token === "" || !header?.startsWith("Bearer ")) return false;
-  const given = Buffer.from(header.slice("Bearer ".length));
-  const expected = Buffer.from(token);
-  return given.length === expected.length && timingSafeEqual(given, expected);
+  return secretMatches(header.slice("Bearer ".length), token);
 }
 
 async function jsonBody(c: Context): Promise<unknown> {
