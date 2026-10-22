@@ -143,7 +143,7 @@ export class Daemon {
       scheduler.startWork(ref, work),
     );
     await reconciler.recover();
-    const github = new GitHubSync(store, definition, control, ghGitHub(), report);
+    const github = new GitHubSync(home, store, definition, control, ghGitHub(), report);
     const pollGitHub = () =>
       definition.current.factory.mode === "github"
         ? github.poll().catch((error: unknown) => report(`kozod: polling GitHub failed: ${error}`))

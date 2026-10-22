@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import {
   autonomyLevel,
   type GitHub,
@@ -5,13 +6,17 @@ import {
   type GitHubPermission,
   type HoldKind,
   itemStage,
+  type KozoHome,
   parseReference,
   type Repository,
   stageSchema,
 } from "@kozo/core";
+import { defaultBranch } from "@kozo/verify";
 import type { ControlPlane } from "./control-plane.ts";
 import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
+import { pushConfirmed, upsertComment } from "./github.ts";
+import { quiet, statusBody } from "./github-report.ts";
 import { readCharter } from "./repository.ts";
 
 /** The label a human adds to an Issue to approve its start. */
@@ -48,8 +53,13 @@ const isBot = (login: string) => login.endsWith("[bot]");
 export class GitHubSync {
   /** The repositories whose labels exist, created once per start. */
   private readonly labelled = new Set<string>();
+  /** The status comment last written for each item, so that an unchanged one is not read again. */
+  private readonly statuses = new Map<string, string>();
+  /** The login gh acts as, which kozod's own comments carry. */
+  private self: string | null = null;
 
   constructor(
+    private readonly home: KozoHome,
     private readonly store: EventStore,
     private readonly definition: DefinitionInUse,
     private readonly control: ControlPlane,
@@ -103,7 +113,130 @@ export class GitHubSync {
       }
     }
     await this.createLabels(github);
-    for (const issue of issues) await this.mirror(github, `${name}#${issue.number}`, issue);
+    for (const issue of issues) {
+      const ref = `${name}#${issue.number}`;
+      await this.mirror(github, ref, issue);
+      await this.publish(path, github, ref, issue.number);
+    }
+  }
+
+  /**
+   * Brings what an item shows on GitHub up to date: its status comment, a comment for each
+   * question, and for each task handed off, its branch, its pull request and a handoff comment.
+   */
+  private async publish(path: string, github: string, ref: string, issue: number) {
+    const item = this.store.state.items[ref];
+    if (!item) return;
+    this.self ??= await this.github.login();
+    const self = this.self;
+    const status = statusBody(this.store.state, item, this.pulls(ref), this.costOf(ref));
+    if (this.statuses.get(ref) !== status) {
+      await upsertComment(this.github, self, github, issue, `kozo:status:${ref}`, status);
+      this.statuses.set(ref, status);
+    }
+    for (const subject of [item, ...item.tasks.map((task) => this.store.state.tasks[task])]) {
+      if (subject?.hold?.kind !== "question") continue;
+      const marker = `kozo:question:${subject.ref}:${subject.hold.since}`;
+      if (this.written(ref, null, "comment").includes(marker)) continue;
+      await upsertComment(
+        this.github,
+        self,
+        github,
+        issue,
+        marker,
+        `**Question about ${subject.ref}:** ${quiet(subject.hold.reason)}
+
+Answer here or with \`kozo say ${subject.ref} <answer>\`.`,
+      );
+      await this.wrote(ref, null, "comment", marker);
+    }
+    for (const task of item.tasks) await this.handOff(path, github, issue, ref, task);
+  }
+
+  /**
+   * Publishes a task's last verified head once: pushes its branch, opens its pull request or
+   * rewrites the open one's body with the handoff report, and says so on the Issue.
+   */
+  private async handOff(path: string, github: string, issue: number, item: string, task: string) {
+    if (this.store.state.tasks[task]?.stage !== "handoff") return;
+    const ready = this.store.db
+      .query<{ line: string }, [string]>(
+        "select line from events where task = ? and type = 'handoff.ready' order by id desc limit 1",
+      )
+      .get(task);
+    if (!ready) return;
+    const { branch, head, report } = (
+      JSON.parse(ready.line) as { data: { branch: string; head: string; report: string } }
+    ).data;
+    if (this.written(item, task, "handoff").includes(head)) return;
+    await pushConfirmed(this.github, path, branch, head);
+    await this.wrote(item, task, "push", `${branch} ${head}`);
+    const text = await Bun.file(join(this.home.root, report))
+      .text()
+      .catch(() => "");
+    const body = `${quiet(text)}
+
+Part of #${issue}`;
+    const open = (await this.github.pullsFor(github, branch)).find((pull) => pull.state === "open");
+    const goal = this.store.state.tasks[task]?.goal ?? task;
+    const pull =
+      open ??
+      (await this.github.createPull(github, {
+        head: branch,
+        base: await defaultBranch(path),
+        title: quiet(goal).slice(0, 200),
+        body,
+      }));
+    if (open) await this.github.updatePull(github, open.number, body);
+    await this.wrote(item, task, "pull", pull.url);
+    await upsertComment(
+      this.github,
+      this.self ?? (await this.github.login()),
+      github,
+      issue,
+      `kozo:handoff:${task}:${head.slice(0, 12)}`,
+      `${task} is ready for you to review and merge: ${pull.url}`,
+    );
+    await this.wrote(item, task, "handoff", head);
+  }
+
+  /** The subjects of kozod's GitHub writes of `action` for an item or one of its tasks. */
+  private written(item: string, task: string | null, action: string): string[] {
+    return this.store.db
+      .query<{ subject: string }, [string, string | null, string | null, string]>(
+        "select json_extract(line, '$.data.subject') as subject from events where type = 'external.write' and item = ? and (task = ? or ? is null) and json_extract(line, '$.data.action') = ?",
+      )
+      .all(item, task, task, action)
+      .map((row) => row.subject);
+  }
+
+  private async wrote(item: string, task: string | null, action: string, subject: string) {
+    await this.store.append({
+      type: "external.write",
+      item,
+      task,
+      data: { target: "github", action, subject },
+    });
+  }
+
+  /** Each task's pull request, as the last one kozod opened or updated for it. */
+  private pulls(item: string): Map<string, string> {
+    const rows = this.store.db
+      .query<{ task: string; subject: string }, [string]>(
+        "select task, json_extract(line, '$.data.subject') as subject from events where type = 'external.write' and item = ? and json_extract(line, '$.data.action') = 'pull' order by id",
+      )
+      .all(item);
+    return new Map(rows.map((row) => [row.task, row.subject]));
+  }
+
+  private costOf(item: string): number {
+    return (
+      this.store.db
+        .query<{ usd: number }, [string]>(
+          "select coalesce(sum(json_extract(line, '$.cost.usd')), 0) as usd from events where item = ?",
+        )
+        .get(item)?.usd ?? 0
+    );
   }
 
   /** Whether whoever added `kozo:accept` last may write: triage permission can add labels too. */
