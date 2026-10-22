@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { kozoHome } from "@kozo/core";
 import { gitRepository, tempDirectory } from "@kozo/testing";
 import { factoryGitEnvironment } from "@kozo/worker";
-import { claimTask, releaseTask, taskBranch, worktreePath } from "./worktrees.ts";
+import { atMergedCommit, claimTask, releaseTask, taskBranch, worktreePath } from "./worktrees.ts";
 
 describe("task branches", () => {
   test("are named from the task reference", () => {
@@ -79,5 +79,23 @@ describe("claimTask", () => {
     expect(await Bun.file(`${claim.worktree}/fix.ts`).exists()).toBe(false);
     expect(await repo.git("branch", "--list", "kozo/*")).toBe("");
     await releaseTask(home, repo.path, "K-1/t1", { factory, deleteBranch: true });
+  });
+});
+
+describe("atMergedCommit", () => {
+  test("holds for a clean worktree at a commit of the default branch, not one with a task's changes", async () => {
+    await using repo = await gitRepository();
+    await using dir = await tempDirectory();
+    const home = kozoHome(dir.path);
+    const old = await repo.commit({ "README.md": "# shop\n" }, "start");
+    const tip = await repo.commit({ "package.json": "{}\n" }, "merged");
+    const claim = await claimTask(home, repo.path, "K-1/t1", { factory, base: old });
+    if (!claim.claimed) throw new Error(claim.reason);
+    expect(await atMergedCommit(claim.worktree, tip)).toBe(true);
+    await Bun.write(`${claim.worktree}/package.json`, '{"scripts":{"db:up":"curl evil"}}\n');
+    expect(await atMergedCommit(claim.worktree, tip)).toBe(false);
+    await repo.git("-C", claim.worktree, "add", "--all");
+    await repo.git("-C", claim.worktree, "commit", "--quiet", "-m", "an agent's change");
+    expect(await atMergedCommit(claim.worktree, tip)).toBe(false);
   });
 });

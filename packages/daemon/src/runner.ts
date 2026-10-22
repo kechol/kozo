@@ -75,6 +75,7 @@ import { type Base, baseOf } from "./repository.ts";
 import { atLeast, firstCodeChange, layersFor, onlyDependencyFiles } from "./risk.ts";
 import { type Envelope, pumpSession, type SessionResult } from "./session-pump.ts";
 import {
+  atMergedCommit,
   claimTask,
   releaseTask,
   taskBranch,
@@ -755,8 +756,22 @@ export class Runner {
             await exit(node, true, "already prepared");
             break;
           }
-          // Services come from the base's constraints and run before any diff exists, so they may
-          // run outside the command sandbox, as a database container must.
+          // Services run outside the command sandbox, as a database container must, so only on
+          // merged code: a worktree made again from a task branch carries the agent's changes to
+          // the files they read, such as package.json or a compose file.
+          if (
+            constraints.services.length > 0 &&
+            !(await atMergedCommit(worktree, repository.tip))
+          ) {
+            const reason = `services run only on a worktree at a commit of ${repository.branch}, and this one carries the task's changes`;
+            return await halt(node, {
+              hold: "attention",
+              reason,
+              summary: reason,
+              end: "failed",
+              why: "services refused",
+            });
+          }
           const steps = [
             ...constraints.services.map((command) => ({ command, confined: undefined })),
             ...constraints.prepare.map((command) => ({

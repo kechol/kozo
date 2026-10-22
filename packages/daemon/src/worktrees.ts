@@ -80,6 +80,18 @@ export async function claimTask(
   return { claimed: true, branch, worktree, base: tip, created: existing === null };
 }
 
+/**
+ * Whether `worktree` is at a commit of the default branch, whose tip is `tip`, with nothing
+ * changed: then everything in it is merged code.
+ */
+export async function atMergedCommit(worktree: string, tip: string): Promise<boolean> {
+  const merged = await git(worktree, ["merge-base", "--is-ancestor", "HEAD", tip]).then(
+    () => true,
+    () => false,
+  );
+  return merged && (await git(worktree, ["status", "--porcelain"])).trim() === "";
+}
+
 /** Removes a task's worktree and, when cancelling, deletes its branch too. */
 export async function releaseTask(
   home: KozoHome,
