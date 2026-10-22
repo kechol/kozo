@@ -49,7 +49,6 @@ export function parseFactoryConfig(text: string, issues: string[]): Factory | nu
     return null;
   }
   const factory = result.data;
-  if (factory.mode !== "local") issues.push("factory.yml: only mode: local runs in this version");
   if (factory.runtime !== "sdk") issues.push("factory.yml: only runtime: sdk runs in this version");
   return {
     ...factory,

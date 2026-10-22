@@ -1,0 +1,5 @@
+---
+"@kozo/daemon": minor
+---
+
+`kozod` runs in GitHub mode with `mode: github` in `factory.yml` and a `github: <owner>/<name>` for each repository. Every five minutes it fetches origin and reads the open Issues: it takes a writer's Issue opened after the repository was registered as an item, holds any other for a start approval that a writer gives with `kozo approve` or the `kozo:accept` label, and mirrors each item's stage and the holds that wait on a human as `kozo:<stage>` and `kozo:needs-*` labels. It keeps one status comment per Issue, comments each question and handoff, pushes each verified task branch and opens its pull request with the handoff report and `Part of #<n>`, and works against origin's default branch without moving a local branch. It follows merges, pull requests closed unmerged, failing checks, a writer's change requests, a human's commits on the branch, and Issues edited or closed on GitHub, and closes an Issue once its item is complete. A writer's open Issue labelled `kozo:paused` pauses the factory. kozod reaches GitHub only through a listed set of gh commands, with no merge.

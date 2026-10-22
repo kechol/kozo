@@ -28,6 +28,8 @@ import { taskBranch, worktreePath } from "./worktrees.ts";
 
 /** The label a human adds to an Issue to approve its start. */
 export const acceptLabel = "kozo:accept";
+/** The label that pauses the whole factory when a writer puts it on an open Issue. */
+export const pausedLabel = "kozo:paused";
 
 const stageLabels = stageSchema.options.map((stage) => `kozo:${stage}`);
 const needsLabels: Partial<Record<HoldKind, string>> = {
@@ -46,6 +48,7 @@ const labelSpecs = [
     description: "kozo waits for a human",
   })),
   { name: acceptLabel, color: "0e8a16", description: "Approve kozo's start on this Issue" },
+  { name: pausedLabel, color: "b60205", description: "Pause the kozo factory" },
 ];
 
 const writers: readonly GitHubPermission[] = ["admin", "maintain", "write"];
@@ -64,6 +67,8 @@ export class GitHubSync {
   private readonly statuses = new Map<string, string>();
   /** The login gh acts as, which kozod's own comments carry. */
   private self: string | null = null;
+  /** The `kozo:paused` Issues that paused the factory since kozod started, by `<repo>#<n>`. */
+  private readonly pausedBy = new Set<string>();
 
   constructor(
     private readonly home: KozoHome,
@@ -108,6 +113,10 @@ export class GitHubSync {
     for (const issue of issues) {
       const ref = `${name}#${issue.number}`;
       const item = this.store.state.items[ref];
+      if (issue.labels.includes(pausedLabel)) {
+        await this.pauseFor(github, ref, issue.number);
+        continue;
+      }
       if (!item) {
         if (!isBot(issue.author)) await this.take(path, github, ref, issue);
       } else if (
@@ -479,6 +488,21 @@ Part of #${issue}`;
         )
         .get(item)?.usd ?? 0
     );
+  }
+
+  /**
+   * Pauses the factory for a writer's `kozo:paused` Issue, once per start, so that `kozo resume`
+   * holds while the label stays; such an Issue is never taken as an item.
+   */
+  private async pauseFor(github: string, ref: string, issue: number) {
+    if (this.pausedBy.has(ref) || this.store.state.paused) return;
+    const login = await this.github.labelledBy(github, issue, pausedLabel);
+    if (login === null || !writers.includes(await this.github.permission(github, login))) return;
+    this.pausedBy.add(ref);
+    await this.store.append({
+      type: "factory.changed",
+      data: { paused: true, reason: `${login} put kozo:paused on ${ref}` },
+    });
   }
 
   /** Whether whoever added `kozo:accept` last may write: triage permission can add labels too. */

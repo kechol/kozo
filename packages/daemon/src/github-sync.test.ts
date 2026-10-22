@@ -103,7 +103,7 @@ describe("GitHubSync", () => {
     const number = env.github.addIssue("me/shop", { title: "Sort", author: "reader" });
     await env.sync.poll();
     expect(env.labels(number)?.sort()).toEqual(["kozo:intake", "kozo:needs-approval"]);
-    expect(env.github.calls.filter((call) => call.startsWith("createLabel"))).toHaveLength(12);
+    expect(env.github.calls.filter((call) => call.startsWith("createLabel"))).toHaveLength(13);
 
     env.github.repositories.get("me/shop")?.issues[0]?.labels.push("kozo:accept");
     env.github.labellers.set(`me/shop #${number} kozo:accept`, "triager");
@@ -116,7 +116,7 @@ describe("GitHubSync", () => {
     expect(env.store.state.items[`shop#${number}`]).toMatchObject({ stage: "triage", hold: null });
     await env.sync.poll();
     expect(env.labels(number)?.sort()).toEqual(["kozo:accept", "kozo:triage"]);
-    expect(env.github.calls.filter((call) => call.startsWith("createLabel"))).toHaveLength(12);
+    expect(env.github.calls.filter((call) => call.startsWith("createLabel"))).toHaveLength(13);
   });
 
   test("keeps one status comment, posts each question once and hands off a task as a pull request", async () => {
@@ -221,6 +221,30 @@ describe("GitHubSync", () => {
       kind: "attention",
       reason: `${pull?.url} was closed without a merge`,
     });
+  });
+
+  test("a writer's kozo:paused Issue pauses the factory once per start and is no item", async () => {
+    await using env = await setup();
+    await env.sync.register();
+    env.github.permissions.set("me/shop owner", "admin");
+    const number = env.github.addIssue("me/shop", {
+      title: "Stop",
+      labels: ["kozo:paused"],
+      createdAt: afterRegistration(),
+    });
+    env.github.labellers.set(`me/shop #${number} kozo:paused`, "triager");
+    await env.sync.poll();
+    expect(env.store.state.paused).toBe(false);
+    env.github.labellers.set(`me/shop #${number} kozo:paused`, "owner");
+    await env.sync.poll();
+    expect(env.store.state).toMatchObject({
+      paused: true,
+      pausedReason: `owner put kozo:paused on shop#${number}`,
+    });
+    await env.control.resumeFactory();
+    await env.sync.poll();
+    expect(env.store.state.paused).toBe(false);
+    expect(env.store.state.items[`shop#${number}`]).toBeUndefined();
   });
 
   test("an edit while a start waits takes kozo:accept off, so the new text needs its own", async () => {
