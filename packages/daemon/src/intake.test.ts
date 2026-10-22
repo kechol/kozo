@@ -3,11 +3,11 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { kozoHome } from "@kozo/core";
 import { exampleCharter, gitRepository, tempDirectory } from "@kozo/testing";
+import { defaultBranch, readDefinition } from "@kozo/verify";
 import { ControlPlane } from "./control-plane.ts";
-import { readDefinition } from "./definition.ts";
 import { EventStore } from "./event-store.ts";
 import { formatItemFile, parseItemFile, readItemFile } from "./item-file.ts";
-import { defaultBranch, readCharter } from "./repository.ts";
+import { readCharter } from "./repository.ts";
 
 async function definitionWith(repository: string, home: string) {
   await mkdir(join(home, "factory"), { recursive: true });
@@ -15,7 +15,7 @@ async function definitionWith(repository: string, home: string) {
     join(home, "factory", "factory.yml"),
     `repositories:\n  - { path: ${repository} }\n`,
   );
-  const loaded = await readDefinition(kozoHome(home), null);
+  const loaded = await readDefinition(kozoHome(home).factory, null);
   if (!loaded.ok) throw new Error(loaded.issues.join("; "));
   return { current: loaded.definition };
 }

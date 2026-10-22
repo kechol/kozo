@@ -32,3 +32,35 @@ export async function listFiles(cwd: string, commit: string): Promise<string[]> 
     .split("\0")
     .filter(Boolean);
 }
+
+/** The commit a local branch points at, or null when there is no such branch. */
+export async function branchTip(repository: string, branch: string): Promise<string | null> {
+  try {
+    return (
+      await git(repository, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}^{commit}`])
+    ).trim();
+  } catch (error) {
+    if (error instanceof GitError) return null;
+    throw error;
+  }
+}
+
+/**
+ * The repository's default branch: the local branch that origin/HEAD names, else main or
+ * master, whichever exists.
+ */
+export async function defaultBranch(repository: string): Promise<string> {
+  let remoteHead = "";
+  try {
+    remoteHead = (
+      await git(repository, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"])
+    ).trim();
+  } catch (error) {
+    if (!(error instanceof GitError)) throw error;
+  }
+  const candidates = [remoteHead.replace(/^origin\//, ""), "main", "master"].filter(Boolean);
+  for (const branch of candidates) {
+    if ((await branchTip(repository, branch)) !== null) return branch;
+  }
+  throw new GitError(`${repository} has no main, master or origin/HEAD branch`);
+}

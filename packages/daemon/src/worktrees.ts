@@ -1,8 +1,7 @@
 import { mkdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { type KozoHome, parseReference, sha256 } from "@kozo/core";
-import { GitError, git } from "@kozo/verify";
-import { branchTip, defaultBranch } from "./repository.ts";
+import { branchTip, defaultBranch, GitError, git } from "@kozo/verify";
 
 function taskParts(task: string) {
   const reference = parseReference(task);

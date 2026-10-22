@@ -1,7 +1,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { apiPort, type KozoHome, kozoHome } from "@kozo/core";
-import { claudeJudge, claudeVerifier, shellQuote } from "@kozo/verify";
+import { claudeJudge, claudeVerifier, defaultBranch, shellQuote } from "@kozo/verify";
 import { type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
 import { ControlPlane } from "./control-plane.ts";
@@ -9,7 +9,6 @@ import { type DefinitionInUse, refreshDefinition, startingDefinition } from "./d
 import { EventStore } from "./event-store.ts";
 import { type Launcher, processLauncher } from "./launcher.ts";
 import { Reconciler } from "./reconcile.ts";
-import { defaultBranch } from "./repository.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
 import { taskBranch } from "./worktrees.ts";

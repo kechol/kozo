@@ -1,8 +1,7 @@
 import { isRunOver, type TaskState } from "@kozo/core";
-import { GitError, git } from "@kozo/verify";
+import { branchTip, defaultBranch, GitError, git } from "@kozo/verify";
 import { factoryGitEnvironment } from "@kozo/worker";
 import type { EventStore } from "./event-store.ts";
-import { branchTip, defaultBranch } from "./repository.ts";
 import type { Runner } from "./runner.ts";
 import { awaitingMerge } from "./scheduler.ts";
 import { taskBranch } from "./worktrees.ts";

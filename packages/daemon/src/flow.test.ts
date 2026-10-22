@@ -12,9 +12,9 @@ import {
   tempDirectory,
 } from "@kozo/testing";
 import type { Judge, Verifier } from "@kozo/verify";
+import { readDefinition } from "@kozo/verify";
 import type { AgentRequest } from "@kozo/worker";
 import { ControlPlane } from "./control-plane.ts";
-import { readDefinition } from "./definition.ts";
 import { EventStore } from "./event-store.ts";
 import { inProcessLauncher, type Launcher } from "./launcher.ts";
 import { Reconciler } from "./reconcile.ts";
@@ -89,7 +89,7 @@ async function factoryOf(
     join(home.factory, "factory.yml"),
     `repositories:\n  - { path: ${repo.path} }\n${options.factory ?? ""}`,
   );
-  const loaded = await readDefinition(home, null);
+  const loaded = await readDefinition(home.factory, null);
   if (!loaded.ok) throw new Error(loaded.issues.join("; "));
   const definition = { current: loaded.definition };
   const store = await EventStore.open(home);

@@ -3,6 +3,7 @@ export * from "./base-documents.ts";
 export { globMatcher, isNewTestCase, protectedPathMatcher } from "./changes.ts";
 export { commandEnvironmentFrom, runCommand, shellQuote } from "./command.ts";
 export * from "./diff-guard.ts";
+export * from "./factory-definition.ts";
 export * from "./gates.ts";
 export * from "./git.ts";
 export * from "./judge.ts";

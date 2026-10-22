@@ -32,12 +32,15 @@ import {
 } from "@kozo/core";
 import {
   commandEnvironmentFrom,
+  type Definition,
+  defaultBranch,
   diffGuardLine,
   GitError,
   git,
   globMatcher,
   type Judge,
   listFiles,
+  modelFor,
   proveLine,
   readBaseDocuments,
   runCommand,
@@ -56,13 +59,12 @@ import {
 import type { WorkerSpec } from "@kozo/worker";
 import { taskSandbox } from "@kozo/worker";
 import pkg from "../package.json" with { type: "json" };
-import { type Definition, type DefinitionInUse, modelFor } from "./definition.ts";
+import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
 import { checkNotes, ownerNotes } from "./instructions.ts";
 import { type ItemFile, itemDirectory, readItemFile, requestText } from "./item-file.ts";
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { checkPlan } from "./plan-checks.ts";
-import { defaultBranch } from "./repository.ts";
 import { firstCodeChange, layersFor } from "./risk.ts";
 import { type Envelope, pumpSession, type SessionResult } from "./session-pump.ts";
 import {
