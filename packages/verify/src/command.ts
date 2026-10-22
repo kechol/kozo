@@ -26,6 +26,11 @@ async function forward(stream: ReadableStream<Uint8Array>, log: (text: string) =
   if (rest) log(rest);
 }
 
+/** `text` as one word of a `sh` command line. */
+export function shellQuote(text: string) {
+  return `'${text.replaceAll("'", `'\\''`)}'`;
+}
+
 export function secondsSince(start: number) {
   return Math.round((performance.now() - start) / 1000);
 }

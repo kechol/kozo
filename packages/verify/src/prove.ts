@@ -2,7 +2,7 @@ import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { type BaseDocumentsProblem, readBaseDocuments } from "./base-documents.ts";
 import { changedFiles, diffCommand, globMatcher, literal, resolveRange } from "./changes.ts";
-import { guarded, runCommand, secondsSince } from "./command.ts";
+import { guarded, runCommand, secondsSince, shellQuote } from "./command.ts";
 import { GitError, git } from "./git.ts";
 
 export interface ProveRun {
@@ -144,10 +144,6 @@ async function revert(
 async function isDirty(cwd: string, untracked: "all" | "no" = "all") {
   const status = await git(cwd, ["status", "--porcelain", "-z", `--untracked-files=${untracked}`]);
   return status !== "";
-}
-
-function shellQuote(text: string) {
-  return `'${text.replaceAll("'", `'\\''`)}'`;
 }
 
 /** The single line by which kozod judges prove; it is always the last line printed. */

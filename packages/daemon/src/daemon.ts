@@ -1,7 +1,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { apiPort, type KozoHome, kozoHome } from "@kozo/core";
-import { claudeJudge, claudeVerifier } from "@kozo/verify";
+import { claudeJudge, claudeVerifier, shellQuote } from "@kozo/verify";
 import { type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
 import { ControlPlane } from "./control-plane.ts";
@@ -31,12 +31,14 @@ function kozodCommand(): string[] {
   return compiled ? [process.execPath] : [process.execPath, join(import.meta.dir, "main.ts")];
 }
 
-/** The kozo CLI as the agent runs it in its sandbox, for `kozo gates`. */
+/** The kozo CLI as the agent runs it in its sandbox, for `kozo gates`, quoted for `sh`. */
 function kozoCommand(): string {
   if (!compiled)
-    return `${process.execPath} ${join(import.meta.dir, "..", "..", "cli", "src", "main.ts")}`;
+    return [process.execPath, join(import.meta.dir, "..", "..", "cli", "src", "main.ts")]
+      .map(shellQuote)
+      .join(" ");
   const sibling = join(dirname(process.execPath), "kozo");
-  return Bun.file(sibling).size > 0 ? sibling : (Bun.which("kozo") ?? "kozo");
+  return shellQuote(Bun.file(sibling).size > 0 ? sibling : (Bun.which("kozo") ?? "kozo"));
 }
 
 function alive(pid: number): boolean {
