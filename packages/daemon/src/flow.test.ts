@@ -530,6 +530,39 @@ describe("the minimal path", () => {
     expect(await Bun.file(join(env.home.root, check?.data.output_path)).exists()).toBe(true);
   }, 180_000);
 
+  test("a merged task's check takes the next free slot before new work", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: plan }] : implement(),
+    );
+    const { ref, task } = await toHandoff(env);
+    await env.repo.git(
+      "merge",
+      "--no-ff",
+      "--quiet",
+      "-m",
+      "merge",
+      `kozo/${env.store.factoryId}/K-1-t1`,
+    );
+    // The reconciler found the merge while every slot was taken, so it could not start the check.
+    await env.store.append({
+      type: "branch.merged",
+      item: ref,
+      task,
+      data: {
+        branch: `kozo/${env.store.factoryId}/K-1-t1`,
+        head: (await env.repo.git("rev-parse", `kozo/${env.store.factoryId}/K-1-t1`)).trim(),
+        into: "main",
+        commit: (await env.repo.git("rev-parse", "HEAD")).trim(),
+        committer: null,
+      },
+    });
+    await env.control.addItem({ title: "Another change", class: "bugfix" });
+    env.scheduler.tick();
+    await env.scheduler.idle();
+    expect(env.store.state.tasks[task]?.stage).toBe("complete");
+    expect(env.store.state.items[ref]?.stage).toBe("complete");
+  }, 180_000);
+
   test("a squashed merge is found by its patch, and the commit that applied it is recorded", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage" ? [{ answer: plan }] : implement(),
