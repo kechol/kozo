@@ -12,6 +12,8 @@ import {
   ownerNotesSection,
   parseAnswer,
   SessionError,
+  type Spend,
+  spending,
 } from "./judge.ts";
 import { updateVerdictFile } from "./verdict-file.ts";
 
@@ -32,29 +34,34 @@ export interface ReviewOptions {
 
 export type ReviewResult =
   | { status: "reviewed"; record: ReviewRecord }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string; costUsd: number };
 
 /** Runs review on the diff from the merge base with `base` to HEAD; the verdict is advice. */
 export async function runReview(options: ReviewOptions): Promise<ReviewResult> {
-  return await guarded(options.log, [GitError, SessionError], async () => ({
+  const spend: Spend = { usd: 0 };
+  const result = await guarded(options.log, [GitError, SessionError], async () => ({
     status: "reviewed" as const,
-    record: await review(options),
+    record: await review(options, spend),
   }));
+  return result.status === "error" ? { ...result, costUsd: spend.usd } : result;
 }
 
-async function review(options: ReviewOptions): Promise<ReviewRecord> {
+async function review(options: ReviewOptions, spend: Spend): Promise<ReviewRecord> {
   const { cwd, judge, model } = options;
   const { head, mergeBase: base } = await resolveRange(cwd, options.base, "HEAD");
   const diff = await git(cwd, [...(await diffCommand(cwd)), "-U5", base, head, "--"]);
   if (diff.trim() === "") throw new SessionError("there is no diff to review");
 
-  const answer = await judge.judge({
-    instructions: reviewAgent.instructions,
-    prompt: reviewPrompt(options.goal, options.doneWhen, diff, options.ownerNotes),
-    schema: reviewJudgmentJsonSchema,
-    model,
-    maxCostUsd: options.maxCostUsd,
-  });
+  const answer = await spending(
+    spend,
+    judge.judge({
+      instructions: reviewAgent.instructions,
+      prompt: reviewPrompt(options.goal, options.doneWhen, diff, options.ownerNotes),
+      schema: reviewJudgmentJsonSchema,
+      model,
+      maxCostUsd: options.maxCostUsd,
+    }),
+  );
   const judgment = parseAnswer(reviewJudgmentSchema, "review", answer.output);
   const blocking = judgment.findings.some((finding) => finding.severity === "blocking");
   if (judgment.verdict === "accept" && blocking) {

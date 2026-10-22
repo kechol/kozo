@@ -30,7 +30,35 @@ export interface Verifier {
   verify(request: SessionRequest & { cwd: string }): Promise<SessionAnswer>;
 }
 
-export class SessionError extends Error {}
+export class SessionError extends Error {
+  constructor(
+    message: string,
+    /** What the session spent before it failed, when it ran at all. */
+    readonly costUsd = 0,
+  ) {
+    super(message);
+  }
+}
+
+/** What the sessions of one verification layer spent, failed and refused sessions included. */
+export interface Spend {
+  usd: number;
+}
+
+/**
+ * Waits for a session's answer and adds what it spent to `spend`; a check of the answer that
+ * throws afterwards leaves the spend counted.
+ */
+export async function spending(spend: Spend, session: Promise<SessionAnswer>) {
+  try {
+    const answer = await session;
+    spend.usd += answer.costUsd;
+    return answer;
+  } catch (error) {
+    if (error instanceof SessionError) spend.usd += error.costUsd;
+    throw error;
+  }
+}
 
 /**
  * Escapes the closing tags of a prompt's sections inside text that fills one of them, so that
@@ -208,7 +236,7 @@ async function runSession(
     })) {
       if (message.type !== "result") continue;
       if (message.subtype !== "success") {
-        throw new SessionError(`the session ended with ${message.subtype}`);
+        throw new SessionError(`the session ended with ${message.subtype}`, message.total_cost_usd);
       }
       answer = {
         output: message.structured_output,

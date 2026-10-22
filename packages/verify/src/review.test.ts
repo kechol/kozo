@@ -3,7 +3,7 @@ import { readdir } from "node:fs/promises";
 import { verdictFileSchema } from "@kozo/core";
 import { gitRepository, tempDirectory } from "@kozo/testing";
 import { parseAgentDefinition } from "./agent-definition.ts";
-import type { Judge, SessionRequest } from "./judge.ts";
+import { type Judge, SessionError, type SessionRequest } from "./judge.ts";
 import { reviewAgent, reviewLine, reviewPrompt, runReview, writeReviewVerdict } from "./review.ts";
 
 function fakeJudge(output: unknown) {
@@ -67,7 +67,19 @@ describe("runReview", () => {
     const { repo, base } = await repository();
     await using _ = repo;
     const { result } = await review(repo.path, base, fakeJudge({ verdict: "maybe" }).judge);
-    expect(result.status).toBe("error");
+    expect(result).toMatchObject({ status: "error", costUsd: 0.0123 });
+  });
+
+  test("a failed session's error carries what it spent", async () => {
+    const { repo, base } = await repository();
+    await using _ = repo;
+    const judge: Judge = {
+      async judge() {
+        throw new SessionError("the session ended with error_max_turns", 0.25);
+      },
+    };
+    const { result } = await review(repo.path, base, judge);
+    expect(result).toMatchObject({ status: "error", costUsd: 0.25 });
   });
 
   test("accepting with a blocking finding is an error", async () => {

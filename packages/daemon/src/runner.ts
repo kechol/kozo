@@ -222,10 +222,12 @@ export class Runner {
     return run;
   }
 
+  /** Ends a run; `costUsd` is what a judge session spent in it, the run's own cost event. */
   private async endRun(
     run: string,
     to: "succeeded" | "failed" | "stopped" | "lost",
     reason?: string,
+    costUsd = 0,
   ) {
     const current = this.store.state.runs[run];
     if (!current || current.state === to) return;
@@ -236,6 +238,7 @@ export class Runner {
       task: current.task,
       parent_run: current.parent,
       data: { from: current.state, to, ...(reason ? { reason } : {}) },
+      ...(costUsd > 0 ? { cost: { usd: costUsd, in: 0, out: 0, cache_read: 0 } } : {}),
     });
   }
 
@@ -892,7 +895,7 @@ export class Runner {
             log: (text) => void log(text),
           });
           if (review.status !== "reviewed") {
-            await this.endRun(child, "failed", review.message);
+            await this.endRun(child, "failed", review.message, review.costUsd);
             return await halt(node, {
               hold: "attention",
               reason: `review failed: ${review.message}`,
@@ -906,10 +909,9 @@ export class Runner {
             ...childEnvelope,
             type: "review.verdict",
             data: { verdict: review.record.verdict, summary: review.record.summary },
-            cost: { usd: review.record.costUsd, in: 0, out: 0, cache_read: 0 },
           });
           await writeReviewVerdict(files.dir, review.record);
-          await this.endRun(child, "succeeded");
+          await this.endRun(child, "succeeded", undefined, review.record.costUsd);
           const next = afterReview(
             review.record.verdict,
             current.revisions,
@@ -948,14 +950,11 @@ export class Runner {
           let verify: Awaited<ReturnType<typeof runVerify>> = {
             status: "error",
             message: "not run",
+            costUsd: 0,
           };
           for (let attempt = 0; attempt < 2; attempt += 1) {
-            if (child)
-              await this.endRun(
-                child,
-                "failed",
-                verify.status === "error" ? verify.message : undefined,
-              );
+            if (child && verify.status === "error")
+              await this.endRun(child, "failed", verify.message, verify.costUsd);
             child = await this.startRun(
               { item: item.ref, task: taskRef, parent_run: run },
               "verify",
@@ -980,7 +979,7 @@ export class Runner {
             break;
           }
           if (verify.status === "error") {
-            await this.endRun(child, "failed", verify.message);
+            await this.endRun(child, "failed", verify.message, verify.costUsd);
             return await halt(node, {
               hold: "attention",
               reason: `verify failed to run: ${verify.message}`,
@@ -990,7 +989,7 @@ export class Runner {
             });
           }
           await writeVerifyVerdict(files.dir, worktree, verify.record);
-          await this.endRun(child, "succeeded");
+          await this.endRun(child, "succeeded", undefined, verify.record.costUsd);
           if (verify.record.result === "blocked") {
             return await halt(node, {
               hold: "question",

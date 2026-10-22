@@ -127,7 +127,7 @@ describe("runVerify", () => {
         base,
         fakeVerifier(output, evidence).verifier,
       );
-      expect(result.status).toBe("error");
+      expect(result).toMatchObject({ status: "error", costUsd: 0.2 });
       expect(log).toContain(message);
     }
   });

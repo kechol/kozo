@@ -703,6 +703,26 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[task]?.stage).toBe("handoff");
   }, 180_000);
 
+  test("a review's cost is on the event that ends its run", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: plan }] : implement(),
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const review = Object.values(env.store.state.runs).find((run) => run.agent === "review");
+    const costs = env.store.db
+      .query<{ type: string; usd: number }, [string]>(
+        "select type, json_extract(line, '$.cost.usd') as usd from events where run_id = ? and type in ('review.verdict', 'run.changed')",
+      )
+      .all(review?.ref ?? "");
+    expect(costs).toEqual([
+      { type: "review.verdict", usd: 0 },
+      { type: "run.changed", usd: 0.01 },
+    ]);
+  }, 120_000);
+
   test("kozo say reaches a running run at its next turn", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage"

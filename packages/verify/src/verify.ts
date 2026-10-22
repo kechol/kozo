@@ -18,6 +18,8 @@ import {
   parseAnswer,
   type SessionAnswer,
   SessionError,
+  type Spend,
+  spending,
   type Verifier,
 } from "./judge.ts";
 import { ProcessError, runningProcesses, stopProcessesIn } from "./processes.ts";
@@ -43,17 +45,21 @@ export interface VerifyOptions {
 export type VerifyResult =
   | { status: "verified"; record: VerifyRecord }
   | { status: "MISCONFIGURED"; reason: "verify-app-missing" }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string; costUsd: number };
 
 /**
  * Runs the verify agent in the worktree at `cwd`. The procedure comes from `.kozo/verify-app.md`
  * at the tip of `base`, like the Charter, so the diff under check cannot rewrite it.
  */
 export async function runVerify(options: VerifyOptions): Promise<VerifyResult> {
-  return await guarded(options.log, [GitError, SessionError, ProcessError], () => verify(options));
+  const spend: Spend = { usd: 0 };
+  const result = await guarded(options.log, [GitError, SessionError, ProcessError], () =>
+    verify(options, spend),
+  );
+  return result.status === "error" ? { ...result, costUsd: spend.usd } : result;
 }
 
-async function verify(options: VerifyOptions): Promise<VerifyResult> {
+async function verify(options: VerifyOptions, spend: Spend): Promise<VerifyResult> {
   const { cwd, log } = options;
   const procedure = await showFile(cwd, await resolveRef(cwd, options.base), verifyAppPath);
   if (procedure === null) {
@@ -64,14 +70,17 @@ async function verify(options: VerifyOptions): Promise<VerifyResult> {
   const before = await runningProcesses();
   let answer: SessionAnswer;
   try {
-    answer = await options.verifier.verify({
-      cwd,
-      instructions: `${verifyAgent.instructions}\n\n# Skill: verify-app\n\n${verifyAppSkillDefinition.instructions}`,
-      prompt: verifyPrompt(options.goal, options.doneWhen, procedure, options.ownerNotes),
-      schema: verifyJudgmentJsonSchema,
-      model: options.model,
-      maxCostUsd: options.maxCostUsd,
-    });
+    answer = await spending(
+      spend,
+      options.verifier.verify({
+        cwd,
+        instructions: `${verifyAgent.instructions}\n\n# Skill: verify-app\n\n${verifyAppSkillDefinition.instructions}`,
+        prompt: verifyPrompt(options.goal, options.doneWhen, procedure, options.ownerNotes),
+        schema: verifyJudgmentJsonSchema,
+        model: options.model,
+        maxCostUsd: options.maxCostUsd,
+      }),
+    );
   } finally {
     const stopped = await stopProcessesIn(cwd, before);
     if (stopped.length > 0)
