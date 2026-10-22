@@ -737,6 +737,29 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[task]?.stage).toBe("handoff");
   }, 120_000);
 
+  test("a task paused during a node resumes at the next node", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage"
+        ? [{ answer: plan }]
+        : [{ awaitInstruction: true }, ...implement()],
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    env.scheduler.tick();
+    while (env.agent.requests.length < 2) await Bun.sleep(20);
+    const task = `${ref}/t1`;
+    const reference = { kind: "task", item: { repo: null, number: 1 }, task: 1 } as const;
+    await env.control.act(task, reference, "pause", {});
+    await env.control.act(task, reference, "say", { text: "Keep 0 as Sold out." });
+    await env.scheduler.idle();
+    expect(env.store.state.tasks[task]?.checkpoint?.node).toBe("verify-deterministic");
+    await env.control.act(task, reference, "resume", {});
+    await env.settle();
+    expect(env.store.state.tasks[task]?.stage).toBe("handoff");
+    expect(env.agent.requests).toHaveLength(2);
+  }, 120_000);
+
   test("three sessions in a row that fail on the API pause the factory", async () => {
     await using env = await factoryOf(() => [{ fail: "error_during_execution" }]);
     for (const title of ["First", "Second", "Third"]) {

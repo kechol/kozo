@@ -8,6 +8,7 @@ import {
   type Constraints,
   type GateLevel,
   highestTask,
+  isClosed,
   isRunOver,
   type KozoHome,
   numberAfter,
@@ -522,12 +523,15 @@ export class Runner {
       : [];
 
     const ownerWords = () => ownerNotes(this.store.state, item.ref, [item.ref, taskRef]);
-    const enter = async (node: Node, kind: "D" | "A") => {
+    const checkpoint = async (node: Node) => {
       const head = await git(worktree, ["rev-parse", "HEAD"]).then(
         (sha) => sha.trim(),
         () => null,
       );
       await this.store.append({ ...envelope, node, type: "checkpoint", data: { head } });
+    };
+    const enter = async (node: Node, kind: "D" | "A") => {
+      await checkpoint(node);
       await this.store.append({ ...envelope, node, type: "node.enter", data: { kind } });
     };
     const exit = async (node: Node, ok: boolean, summary?: string) => {
@@ -590,7 +594,13 @@ export class Runner {
     const nodes = bugfixNodes.slice(bugfixNodes.indexOf(start));
     for (const node of nodes) {
       const current = this.store.state.tasks[taskRef];
-      if (!current || current.hold) return await stopHere("stopped", "the task is held");
+      if (!current || isClosed(current.stage))
+        return await stopHere("stopped", "the task is closed");
+      if (current.hold) {
+        // The next attempt resumes at this node, not at the one that finished before the hold.
+        await checkpoint(node);
+        return await stopHere("stopped", "the task is held");
+      }
       switch (node) {
         case "claim": {
           await enter(node, "D");
