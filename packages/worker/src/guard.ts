@@ -323,8 +323,9 @@ const gitRefusedReasons: Record<string, string> = {
 
 // The options of each command that runs another, and whether each takes a value, as the next
 // word or attached (`-n1`, `--max-args=1`). An option missing here could take the command's
-// place as its value, so the guard refuses it. `env -S` is missing on purpose: env splits its
-// string by escapes and expansions of its own, which a shell parse does not reproduce.
+// place as its value, so the guard refuses it. Missing on purpose: `env -S`, since env splits
+// its string by escapes and expansions of its own, and `xargs -I`, since its replacement can
+// stand for any word, the command name included.
 const wrapperOptions: Record<string, Record<string, boolean>> = {
   command: { "-p": false, "-v": false, "-V": false },
   builtin: {},
@@ -383,7 +384,6 @@ const wrapperOptions: Record<string, Record<string, boolean>> = {
     "-d": true,
     "--delimiter": true,
     "-E": true,
-    "-I": true,
     "-a": true,
     "--arg-file": true,
   },
@@ -610,6 +610,8 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
     for (let index = 0; index < args.length; index += 1) {
       if (!/^-(exec|execdir|ok|okdir)$/.test(args[index]?.text ?? "")) continue;
       const end = args.findIndex((arg, at) => at > index && (arg.text === ";" || arg.text === "+"));
+      if (args[index + 1]?.text.includes("{}"))
+        return refuse("find with a found path as the command it runs");
       const decision = analyzeCommand(args.slice(index + 1, end === -1 ? undefined : end), context);
       if (!decision.allow) return decision;
     }
