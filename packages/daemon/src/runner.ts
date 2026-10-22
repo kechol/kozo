@@ -68,7 +68,7 @@ import { type ItemFile, itemDirectory, readItemFile, requestText } from "./item-
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { checkPlan } from "./plan-checks.ts";
 import { type Base, baseOf } from "./repository.ts";
-import { atLeast, firstCodeChange, layersFor, onlyDependencyFiles } from "./risk.ts";
+import { agentLevel, atLeast, firstCodeChange, layersFor, onlyDependencyFiles } from "./risk.ts";
 import { type Envelope, pumpSession, type SessionResult } from "./session-pump.ts";
 import {
   claimTask,
@@ -818,7 +818,7 @@ export class Runner {
               ],
             },
             request: requestText(file),
-            gates: level,
+            gates: agentLevel(level),
             limits: {
               max_changed_lines: charter.limits.max_changed_lines,
               max_files: charter.limits.max_files,
@@ -833,7 +833,7 @@ export class Runner {
             ],
           };
           prompt = renderBrief(brief, {
-            gatesCommand: this.gatesCommand(level, repository.base),
+            gatesCommand: this.gatesCommand(agentLevel(level), repository.base),
             reportSchema: runReportJsonSchema,
           });
           await exit(node, true);
@@ -870,7 +870,10 @@ export class Runner {
                 protectedPaths: charter.protected_paths,
                 existingTests,
               }),
-              gates: { level, command: this.gatesCommand(level, repository.base) },
+              gates: {
+                level: agentLevel(level),
+                command: this.gatesCommand(agentLevel(level), repository.base),
+              },
               requireNote: true,
             },
             envelope,

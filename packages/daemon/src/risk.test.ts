@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { gitRepository } from "@kozo/testing";
-import { firstCodeChange, onlyDependencyFiles } from "./risk.ts";
+import { agentLevel, firstCodeChange, onlyDependencyFiles } from "./risk.ts";
 
 describe("firstCodeChange", () => {
   test("finds code in the diff, a rename into documentation included", async () => {
@@ -27,4 +27,12 @@ describe("firstCodeChange", () => {
     await repo.commit({ "src/cart.ts": "export const total = 2;\n" });
     expect(await onlyDependencyFiles(repo.path, "main")).toBe(false);
   });
+});
+
+test("the agent runs at most the full gates in its sandbox", () => {
+  expect([agentLevel("fast"), agentLevel("full"), agentLevel("deep")]).toEqual([
+    "fast",
+    "full",
+    "full",
+  ]);
 });

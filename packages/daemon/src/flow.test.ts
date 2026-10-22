@@ -979,7 +979,7 @@ describe("the minimal path", () => {
     }
   }, 240_000);
 
-  test("a dependency update runs the deps blueprint: no reproduction and the deep gates", async () => {
+  test("a dependency update runs the deps blueprint: no reproduction and the deep gates, which kozod runs", async () => {
     const depsPlan = {
       ...plan,
       plan: {
@@ -1007,8 +1007,8 @@ describe("the minimal path", () => {
             { commit: "chore: pin left-pad" },
             {
               tool: "Bash",
-              input: { command: "kozo gates --level deep --base main" },
-              output: { stdout: "KOZO_GATES: level=deep status=pass gates=lint,test duration=1s" },
+              input: { command: "kozo gates --level full --base main" },
+              output: { stdout: "KOZO_GATES: level=full status=pass gates=lint,test duration=1s" },
             },
             { use: "kozo_note", input: { choice: "Pinned 1.3.0", reason: "The latest" } },
             { answer: { ...report, tests: [] } },
@@ -1028,6 +1028,7 @@ describe("the minimal path", () => {
     expect(env.agent.requests.at(-1)?.prompt).toContain(
       "This blueprint starts from no failing test",
     );
+    expect(env.agent.requests.at(-1)?.prompt).toContain("kozo gates --level full --base main");
   }, 120_000);
 
   test("kozo say reaches a running run at its next turn", async () => {
