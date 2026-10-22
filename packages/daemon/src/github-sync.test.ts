@@ -75,7 +75,7 @@ describe("GitHubSync", () => {
     });
   });
 
-  test("kozo:accept approves a start, and the labels follow the item", async () => {
+  test("kozo:accept from a writer approves a start, and the labels follow the item", async () => {
     await using env = await setup();
     await env.sync.register();
     const number = env.github.addIssue("me/shop", { title: "Sort", author: "reader" });
@@ -84,6 +84,12 @@ describe("GitHubSync", () => {
     expect(env.github.calls.filter((call) => call.startsWith("createLabel"))).toHaveLength(12);
 
     env.github.repositories.get("me/shop")?.issues[0]?.labels.push("kozo:accept");
+    env.github.labellers.set(`me/shop #${number} kozo:accept`, "triager");
+    env.github.permissions.set("me/shop triager", "triage");
+    await env.sync.poll();
+    expect(env.store.state.items[`shop#${number}`]?.hold?.reason).toBe("start approval");
+    env.github.labellers.set(`me/shop #${number} kozo:accept`, "owner");
+    env.github.permissions.set("me/shop owner", "maintain");
     await env.sync.poll();
     expect(env.store.state.items[`shop#${number}`]).toMatchObject({ stage: "triage", hold: null });
     await env.sync.poll();

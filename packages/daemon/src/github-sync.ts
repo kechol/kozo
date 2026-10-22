@@ -2,6 +2,7 @@ import {
   autonomyLevel,
   type GitHub,
   type GitHubIssue,
+  type GitHubPermission,
   type HoldKind,
   itemStage,
   parseReference,
@@ -34,6 +35,8 @@ const labelSpecs = [
   })),
   { name: acceptLabel, color: "0e8a16", description: "Approve kozo's start on this Issue" },
 ];
+
+const writers: readonly GitHubPermission[] = ["admin", "maintain", "write"];
 
 // GitHub ends the login of every app's bot with [bot]; a bot's Issue never starts work.
 const isBot = (login: string) => login.endsWith("[bot]");
@@ -92,7 +95,8 @@ export class GitHubSync {
       } else if (
         item.hold?.kind === "approval" &&
         item.hold.reason === "start approval" &&
-        issue.labels.includes(acceptLabel)
+        issue.labels.includes(acceptLabel) &&
+        (await this.byWriter(github, issue.number))
       ) {
         const reference = parseReference(ref);
         if (reference) await this.control.act(ref, reference, "approve", {});
@@ -100,6 +104,12 @@ export class GitHubSync {
     }
     await this.createLabels(github);
     for (const issue of issues) await this.mirror(github, `${name}#${issue.number}`, issue);
+  }
+
+  /** Whether whoever added `kozo:accept` last may write: triage permission can add labels too. */
+  private async byWriter(github: string, issue: number): Promise<boolean> {
+    const login = await this.github.labelledBy(github, issue, acceptLabel);
+    return login !== null && writers.includes(await this.github.permission(github, login));
   }
 
   /**
@@ -114,8 +124,7 @@ export class GitHubSync {
     }
     const registered = this.store.state.repositories[github]?.registeredAt ?? "";
     const permission = await this.github.permission(github, issue.author);
-    const trusted =
-      ["admin", "maintain", "write"].includes(permission) && issue.createdAt >= registered;
+    const trusted = writers.includes(permission) && issue.createdAt >= registered;
     await this.control.admit(
       ref,
       { repository: path, class: null, title: issue.title.trim(), body: issue.body },
