@@ -1,5 +1,5 @@
 import { type Factory, isRunOver, type TaskState } from "@kozo/core";
-import { branchTip, GitError, git } from "@kozo/verify";
+import { branchTip, git, isAncestor } from "@kozo/verify";
 import { factoryGitEnvironment } from "@kozo/worker";
 import type { EventStore } from "./event-store.ts";
 import { baseOf } from "./repository.ts";
@@ -9,12 +9,7 @@ import { taskBranch } from "./worktrees.ts";
 
 /** Whether `head` is in `commit`, merged as it is or rebased into patch-equivalent commits. */
 async function contains(repository: string, head: string, commit: string): Promise<boolean> {
-  try {
-    await git(repository, ["merge-base", "--is-ancestor", head, commit]);
-    return true;
-  } catch (error) {
-    if (!(error instanceof GitError)) throw error;
-  }
+  if (await isAncestor(repository, head, commit)) return true;
   const cherry = await git(repository, ["cherry", commit, head]);
   return cherry.trim() !== "" && !cherry.split("\n").some((line) => line.startsWith("+"));
 }

@@ -1,4 +1,3 @@
-import { mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   autonomyLevel,
@@ -17,7 +16,7 @@ import {
   stageSchema,
   wrapRequest,
 } from "@kozo/core";
-import { defaultBranch, git, installRepositoryTemplate } from "@kozo/verify";
+import { defaultBranch, git, installRepositoryTemplate, isAncestor } from "@kozo/verify";
 import { CommandError, type VerbResult } from "./api.ts";
 import type { ControlPlane } from "./control-plane.ts";
 import type { DefinitionInUse } from "./definition.ts";
@@ -27,7 +26,7 @@ import { installBody, quiet, statusBody } from "./github-report.ts";
 import { enqueue } from "./instructions.ts";
 import { readItemFile, requestText, writeItemFile } from "./item-file.ts";
 import { baseOf, readCharter } from "./repository.ts";
-import { taskBranch, worktreePath } from "./worktrees.ts";
+import { detachedCheckout, removeCheckout, taskBranch, worktreePath } from "./worktrees.ts";
 
 /** The label a human adds to an Issue to approve its start. */
 export const acceptLabel = "kozo:accept";
@@ -106,10 +105,7 @@ export class GitHubSync {
     const base = await baseOf(repository.path, "github");
     const tip = (await git(repository.path, ["rev-parse", base.ref])).trim();
     const worktree = join(this.home.worktrees, `install-${sha256(repository.path).slice(0, 8)}`);
-    await rm(worktree, { recursive: true, force: true });
-    await git(repository.path, ["worktree", "prune"]);
-    await mkdir(this.home.worktrees, { recursive: true });
-    await git(repository.path, ["worktree", "add", "--quiet", "--detach", worktree, tip]);
+    await detachedCheckout(this.home, repository.path, worktree, tip);
     try {
       const written = await installRepositoryTemplate(worktree, "github");
       if (written.length === 0) return { message: `${github} has every file kozo installs` };
@@ -139,7 +135,7 @@ export class GitHubSync {
       });
       return { message: `opened ${pull.url}; edit the files, set status: ready, then merge it` };
     } finally {
-      await git(repository.path, ["worktree", "remove", "--force", worktree]).catch(() => {});
+      await removeCheckout(repository.path, worktree);
     }
   }
 
@@ -368,11 +364,7 @@ export class GitHubSync {
     ])
       .then((sha) => sha.trim())
       .catch(() => null);
-    const ancestor = (older: string, newer: string) =>
-      git(path, ["merge-base", "--is-ancestor", older, newer]).then(
-        () => true,
-        () => false,
-      );
+    const ancestor = (older: string, newer: string) => isAncestor(path, older, newer);
     // A tracking ref behind `head` has not caught up with kozod's own push yet.
     if (remote && remote !== head && !(await ancestor(remote, head))) {
       const forward = await ancestor(head, remote);

@@ -45,6 +45,21 @@ export async function branchTip(repository: string, branch: string): Promise<str
   }
 }
 
+/** Whether `older` is `newer` or one of its ancestors. */
+export async function isAncestor(
+  repository: string,
+  older: string,
+  newer: string,
+): Promise<boolean> {
+  try {
+    await git(repository, ["merge-base", "--is-ancestor", older, newer]);
+    return true;
+  } catch (error) {
+    if (error instanceof GitError) return false;
+    throw error;
+  }
+}
+
 /**
  * The repository's default branch: the local branch that origin/HEAD names, else main or
  * master, whichever exists.

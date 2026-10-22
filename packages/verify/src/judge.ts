@@ -1,10 +1,10 @@
 import { mkdtemp, rm } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
 import type { z } from "zod";
 import { pickEnvironment } from "./command.ts";
-import { credentialPaths } from "./sandbox.ts";
+import { deniedCredentials } from "./sandbox.ts";
 
 export interface SessionRequest {
   instructions: string;
@@ -177,7 +177,7 @@ export function claudeVerifier(executable: string): Verifier {
         permissionMode: "dontAsk",
         // The app under test, built from the diff, could otherwise read the sign-in variables.
         env: scrubbedShell,
-        sandbox: localSandbox({ denyRead: credentialPaths.map((path) => join(homedir(), path)) }),
+        sandbox: localSandbox({ denyRead: deniedCredentials(process.env) }),
       });
     },
   };

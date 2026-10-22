@@ -1,4 +1,4 @@
-import { appendFile, mkdir, rm } from "node:fs/promises";
+import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import {
   afterReview,
@@ -77,7 +77,9 @@ import { type Envelope, pumpSession, type SessionResult } from "./session-pump.t
 import {
   atMergedCommit,
   claimTask,
+  detachedCheckout,
   releaseTask,
+  removeCheckout,
   taskBranch,
   triageCheckoutPath,
   worktreePath,
@@ -335,17 +337,7 @@ export class Runner {
     const repository = await this.repository(item.repository);
     const file = await readItemFile(this.home, itemRef);
     const checkout = triageCheckoutPath(this.home, repository.path, itemRef);
-    await rm(checkout, { recursive: true, force: true });
-    await git(repository.path, ["worktree", "prune"]);
-    await mkdir(this.home.worktrees, { recursive: true });
-    await git(repository.path, [
-      "worktree",
-      "add",
-      "--quiet",
-      "--detach",
-      checkout,
-      repository.tip,
-    ]);
+    await detachedCheckout(this.home, repository.path, checkout, repository.tip);
     try {
       // A draft that fails its checks gets one more session, told why, before a human looks.
       let refused: string[] = [];
@@ -372,7 +364,7 @@ export class Runner {
       await this.failOpenRuns(itemRef, error);
       throw error;
     } finally {
-      await git(repository.path, ["worktree", "remove", "--force", checkout]).catch(() => {});
+      await removeCheckout(repository.path, checkout);
     }
   }
 

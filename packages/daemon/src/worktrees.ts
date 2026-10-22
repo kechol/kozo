@@ -1,7 +1,7 @@
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { type KozoHome, parseReference, sha256 } from "@kozo/core";
-import { branchTip, GitError, git } from "@kozo/verify";
+import { branchTip, GitError, git, isAncestor } from "@kozo/verify";
 
 function taskParts(task: string) {
   const reference = parseReference(task);
@@ -80,16 +80,33 @@ export async function claimTask(
   return { claimed: true, branch, worktree, base: tip, created: existing === null };
 }
 
+/** Makes `dir` a fresh worktree of `repository` detached at `commit`, for kozod's own reading. */
+export async function detachedCheckout(
+  home: KozoHome,
+  repository: string,
+  dir: string,
+  commit: string,
+) {
+  await rm(dir, { recursive: true, force: true });
+  await git(repository, ["worktree", "prune"]);
+  await mkdir(home.worktrees, { recursive: true });
+  await git(repository, ["worktree", "add", "--quiet", "--detach", dir, commit]);
+}
+
+/** Removes a worktree that detachedCheckout made, ignoring one that is already gone. */
+export async function removeCheckout(repository: string, dir: string) {
+  await git(repository, ["worktree", "remove", "--force", dir]).catch(() => {});
+}
+
 /**
  * Whether `worktree` is at a commit of the default branch, whose tip is `tip`, with nothing
  * changed: then everything in it is merged code.
  */
 export async function atMergedCommit(worktree: string, tip: string): Promise<boolean> {
-  const merged = await git(worktree, ["merge-base", "--is-ancestor", "HEAD", tip]).then(
-    () => true,
-    () => false,
+  return (
+    (await isAncestor(worktree, "HEAD", tip)) &&
+    (await git(worktree, ["status", "--porcelain"])).trim() === ""
   );
-  return merged && (await git(worktree, ["status", "--porcelain"])).trim() === "";
 }
 
 /** Removes a task's worktree and, when cancelling, deletes its branch too. */
