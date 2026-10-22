@@ -50,6 +50,15 @@ describe("parseFactory", () => {
     ]);
   });
 
+  test("a repository's intake label may not be one of kozo's own", () => {
+    const labelled = (label: string) =>
+      example.replace("github: me/site }", `github: me/site, label: "${label}" }`);
+    expect(parseFactory(labelled("kozo")).ok).toBe(true);
+    expect(issuesOf(labelled("kozo:accept"))).toEqual([
+      "repositories.1.label: kozo: labels are kozo's own",
+    ]);
+  });
+
   test("local mode needs no GitHub names", () => {
     const local = example.replace("mode: github", "mode: local").replaceAll(/, github: [^ ]+/g, "");
     expect(parseFactory(local).ok).toBe(true);

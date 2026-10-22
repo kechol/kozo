@@ -19,7 +19,7 @@ import { worktreePath } from "./worktrees.ts";
 // the clock; an Issue meant to come after it says so outright.
 const afterRegistration = () => new Date(Date.now() + 60_000).toISOString();
 
-async function setup() {
+async function setup(label?: string) {
   const repo = await gitRepository();
   await repo.commit(
     { ".kozo/charter.yml": exampleCharter.replace("default: L1", "default: L2") },
@@ -37,7 +37,7 @@ async function setup() {
       factory: {
         ...loaded.definition.factory,
         mode: "github" as const,
-        repositories: [{ path: repo.path, github: "me/shop" }],
+        repositories: [{ path: repo.path, github: "me/shop", ...(label ? { label } : {}) }],
       },
     },
   };
@@ -265,6 +265,40 @@ describe("GitHubSync", () => {
     await env.sync.poll();
     expect(env.store.state.paused).toBe(false);
     expect(env.store.state.items[`shop#${number}`]).toBeUndefined();
+  });
+
+  test("with a label, takes only Issues that carry it and follows an item that loses it", async () => {
+    await using env = await setup("kozo");
+    await env.sync.register();
+    env.github.permissions.set("me/shop owner", "admin");
+    const labelled = env.github.addIssue("me/shop", {
+      title: "Sort",
+      labels: ["kozo"],
+      createdAt: afterRegistration(),
+    });
+    const plain = env.github.addIssue("me/shop", { title: "Idea", createdAt: afterRegistration() });
+    const pausing = env.github.addIssue("me/shop", {
+      title: "Stop",
+      labels: ["kozo:paused"],
+      createdAt: afterRegistration(),
+    });
+    env.github.labellers.set(`me/shop #${pausing} kozo:paused`, "owner");
+    await env.sync.poll();
+    expect(Object.keys(env.store.state.items)).toEqual([`shop#${labelled}`]);
+    expect(env.store.state.paused).toBe(true);
+    expect(env.labels(plain)).toEqual([]);
+
+    const issue = env.github.repositories.get("me/shop")?.issues[0];
+    if (issue) Object.assign(issue, { labels: [], body: "Sort by price too." });
+    await env.sync.poll();
+    expect(env.github.calls).toContain(`issue me/shop #${labelled}`);
+    expect((await readItemFile(env.home, `shop#${labelled}`)).body).toBe("Sort by price too.");
+    expect(env.labels(labelled)?.some((label) => label.startsWith("kozo:"))).toBe(true);
+
+    if (issue) Object.assign(issue, { state: "closed", stateReason: "not_planned" });
+    env.github.labellers.set(`me/shop #${labelled} closed`, "owner");
+    await env.sync.poll();
+    expect(env.store.state.items[`shop#${labelled}`]?.stage).toBe("cancelled");
   });
 
   test("an edit while a start waits takes kozo:accept off, so the new text needs its own", async () => {

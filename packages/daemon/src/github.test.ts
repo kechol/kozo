@@ -63,7 +63,21 @@ describe("ghAllowed", () => {
   test("every method runs a listed command line and passes bodies on stdin", async () => {
     const { calls, exec } = recording((args) =>
       args[0] === "issue" && args[1] === "view"
-        ? JSON.stringify({ comments: [] })
+        ? JSON.stringify(
+            args.includes("--json=comments")
+              ? { comments: [] }
+              : {
+                  number: 12,
+                  title: "t",
+                  body: "b",
+                  author: { login: "someone" },
+                  state: "CLOSED",
+                  stateReason: "NOT_PLANNED",
+                  labels: [{ name: "kozo" }],
+                  createdAt: "2026-10-22T00:00:00Z",
+                  updatedAt: "2026-10-22T00:00:00Z",
+                },
+          )
         : args[1] === "list" && args[0] === "pr"
           ? JSON.stringify([
               {
@@ -90,6 +104,11 @@ describe("ghAllowed", () => {
     const github = ghGitHub(exec);
     await github.issues("me/app", ["kozo:accept"]);
     await github.comments("me/app", 12);
+    expect(await github.issue("me/app", 12)).toMatchObject({
+      state: "closed",
+      reason: "not_planned",
+      labels: ["kozo"],
+    });
     await github.comment("me/app", 12, "--body text; rm -rf /");
     await github.editComment("me/app", 99, "edited");
     await github.label("me/app", 12, { add: ["kozo:triage"], remove: ["kozo:intake"] });

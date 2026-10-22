@@ -3,7 +3,9 @@
 version: 1
 mode: local
 runtime: sdk
-# The repositories kozo works in, each a local clone; add one before `kozo add`.
+# The repositories kozo works in, each a local clone; add one before `kozo add`. In GitHub mode
+# each also names its GitHub repository, and an optional label takes only the Issues that carry it:
+#   - { path: ~/src/shop, github: me/shop, label: kozo }
 repositories: []
 agent_defaults:
   model: claude-sonnet-5-5

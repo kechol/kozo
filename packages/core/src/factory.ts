@@ -9,6 +9,12 @@ const agentSettings = z.strictObject({ model: z.string().min(1) });
 export const repositorySchema = z.strictObject({
   path: z.string().min(1),
   github: githubRepository.optional(),
+  /** In GitHub mode, only open Issues with this label become items. */
+  label: z
+    .string()
+    .min(1)
+    .refine((label) => !label.startsWith("kozo:"), "kozo: labels are kozo's own")
+    .optional(),
 });
 export type Repository = z.infer<typeof repositorySchema>;
 

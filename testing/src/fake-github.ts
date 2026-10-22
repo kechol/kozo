@@ -11,10 +11,16 @@ import type {
 /** How the next call of a kind fails: its response is lost after the change lands, or before. */
 export type Loss = "after" | "before";
 
-interface FakeIssue extends GitHubIssue {
+interface FakeIssue extends Omit<GitHubIssue, "reason"> {
   comments: GitHubComment[];
-  stateReason?: "completed" | "not_planned" | "duplicate" | null;
+  stateReason?: GitHubIssue["reason"];
 }
+
+const copyOf = ({ comments: _comments, stateReason, ...issue }: FakeIssue): GitHubIssue => ({
+  ...issue,
+  reason: issue.state === "open" ? null : (stateReason ?? null),
+  labels: [...issue.labels],
+});
 
 export interface FakeGitHub extends GitHub {
   /** Every call, as `<method> <repository or clone> <subject>`, in order. */
@@ -94,20 +100,15 @@ export function fakeGitHub(): FakeGitHub {
       return repositoryOf(repository)
         .issues.filter((issue) => issue.state === "open")
         .filter((issue) => labels.every((label) => issue.labels.includes(label)))
-        .map(({ comments: _comments, ...issue }) => ({ ...issue, labels: [...issue.labels] }));
+        .map(copyOf);
     },
     async comments(repository, issue) {
       calls.push(`comments ${repository} #${issue}`);
       return issueOf(repository, issue).comments.map((comment) => ({ ...comment }));
     },
-    async issueState(repository, issue) {
-      calls.push(`issueState ${repository} #${issue}`);
-      const found = issueOf(repository, issue);
-      return {
-        state: found.state,
-        reason: found.state === "open" ? null : (found.stateReason ?? null),
-        author: found.author,
-      };
+    async issue(repository, issue) {
+      calls.push(`issue ${repository} #${issue}`);
+      return copyOf(issueOf(repository, issue));
     },
     async closeIssue(repository, issue) {
       calls.push(`closeIssue ${repository} #${issue}`);

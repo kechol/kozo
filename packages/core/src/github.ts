@@ -14,6 +14,8 @@ export interface GitHubIssue {
   body: string;
   author: string;
   state: "open" | "closed";
+  /** Why a closed Issue was closed; null while it is open. */
+  reason: "completed" | "not_planned" | "duplicate" | null;
   labels: string[];
   createdAt: string;
   updatedAt: string;
@@ -54,15 +56,8 @@ export interface GitHub {
   /** Open Issues, optionally only those with every one of `labels`. */
   issues(repository: GitHubRepository, labels?: readonly string[]): Promise<GitHubIssue[]>;
   comments(repository: GitHubRepository, issue: number): Promise<GitHubComment[]>;
-  /** Whether an Issue is open, and why it was closed. */
-  issueState(
-    repository: GitHubRepository,
-    issue: number,
-  ): Promise<{
-    state: "open" | "closed";
-    reason: "completed" | "not_planned" | "duplicate" | null;
-    author: string;
-  }>;
+  /** One Issue by its number, open or closed. */
+  issue(repository: GitHubRepository, issue: number): Promise<GitHubIssue>;
   /** Closes an Issue as completed, which kozod does only once its item is complete. */
   closeIssue(repository: GitHubRepository, issue: number): Promise<void>;
   comment(repository: GitHubRepository, issue: number, body: string): Promise<void>;

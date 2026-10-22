@@ -163,10 +163,15 @@ export class GitHubSync {
     }
   }
 
-  private async pollRepository({ path, github }: Repository & { github: string }) {
+  private async pollRepository({ path, github, label }: Repository & { github: string }) {
     await this.github.fetch(path);
     const name = github.slice(github.indexOf("/") + 1);
-    const issues = await this.github.issues(github);
+    const listed = await this.github.issues(github, label ? [label] : []);
+    // A pausing Issue need not carry the intake label.
+    if (label) listed.push(...(await this.github.issues(github, [pausedLabel])));
+    const open = new Map(listed.map((issue) => [issue.number, issue]));
+    const closed = await this.readUnlisted(github, name, open);
+    const issues = [...open.values()];
     for (const issue of issues) {
       const ref = `${name}#${issue.number}`;
       const item = this.store.state.items[ref];
@@ -188,7 +193,7 @@ export class GitHubSync {
         if (reference) await this.control.act(ref, reference, "approve", {});
       }
     }
-    await this.followClosedIssues(github, name, new Set(issues.map((issue) => issue.number)));
+    await this.followClosedIssues(github, name, closed);
     await this.createLabels(github);
     for (const issue of issues) {
       const ref = `${name}#${issue.number}`;
@@ -200,21 +205,39 @@ export class GitHubSync {
   }
 
   /**
+   * Reads by its number the Issue of each open item that the listing missed, because the Issue
+   * lost the intake label, is past the listing's limit or was closed: an open one joins `open`,
+   * so the item stays followed, and the closed ones are returned.
+   */
+  private async readUnlisted(
+    github: string,
+    name: string,
+    open: Map<number, GitHubIssue>,
+  ): Promise<GitHubIssue[]> {
+    const closed: GitHubIssue[] = [];
+    for (const item of Object.values(this.store.state.items)) {
+      if (item.source !== "github" || isClosed(item.stage)) continue;
+      const reference = parseReference(item.ref);
+      if (reference?.kind !== "item" || reference.item.repo !== name) continue;
+      if (open.has(reference.item.number)) continue;
+      const issue = await this.github.issue(github, reference.item.number);
+      if (issue.state === "open") open.set(issue.number, issue);
+      else closed.push(issue);
+    }
+    return closed;
+  }
+
+  /**
    * Follows Issues closed on GitHub: one closed as completed completes its item, one closed as
    * not planned or a duplicate cancels it with its open tasks. GitHub closes as completed unless
    * told otherwise, so a close without a reason counts as completed. Only a writer may complete
    * an item, and a writer or the Issue's author cancel it; any other close holds the item for
    * attention, since the author of an Issue can close it but has no say over the work.
    */
-  private async followClosedIssues(github: string, name: string, open: ReadonlySet<number>) {
-    for (const item of Object.values(this.store.state.items)) {
-      if (item.source !== "github" || isClosed(item.stage)) continue;
-      const reference = parseReference(item.ref);
-      if (reference?.kind !== "item" || reference.item.repo !== name) continue;
-      if (open.has(reference.item.number)) continue;
-      const number = reference.item.number;
-      const { state, reason, author } = await this.github.issueState(github, number);
-      if (state === "open") continue;
+  private async followClosedIssues(github: string, name: string, issues: readonly GitHubIssue[]) {
+    for (const { number, reason, author } of issues) {
+      const item = this.store.state.items[`${name}#${number}`];
+      if (!item || isClosed(item.stage)) continue;
       const cancelled = reason === "not_planned" || reason === "duplicate";
       const closer = await this.github.closedBy(github, number);
       const writer =

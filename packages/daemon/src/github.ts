@@ -146,7 +146,7 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
         `--repo=${repository}`,
         "--state=open",
         "--limit=200",
-        "--json=number,title,body,author,state,labels,createdAt,updatedAt",
+        `--json=${issueFields}`,
         ...labels.map((label) => `--label=${label}`),
       ]);
       return raw.map(issueOf);
@@ -161,27 +161,16 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
       ]);
       return raw.comments.flatMap(commentOf);
     },
-    async issueState(repository, issue) {
-      const raw = await json<{
-        state: string;
-        stateReason: string | null;
-        author: { login: string };
-      }>([
-        "issue",
-        "view",
-        String(issue),
-        `--repo=${repository}`,
-        "--json=state,stateReason,author",
-      ]);
-      const reason = (raw.stateReason ?? "").toLowerCase();
-      return {
-        state: raw.state.toLowerCase() === "open" ? "open" : "closed",
-        reason:
-          reason === "completed" || reason === "not_planned" || reason === "duplicate"
-            ? reason
-            : null,
-        author: raw.author.login,
-      };
+    async issue(repository, issue) {
+      return issueOf(
+        await json<RawIssue>([
+          "issue",
+          "view",
+          String(issue),
+          `--repo=${repository}`,
+          `--json=${issueFields}`,
+        ]),
+      );
     },
     async closeIssue(repository, issue) {
       await gh(["issue", "close", String(issue), `--repo=${repository}`, "--reason=completed"]);
@@ -338,10 +327,13 @@ interface RawIssue {
   body: string;
   author: { login: string };
   state: string;
+  stateReason: string | null;
   labels: { name: string }[];
   createdAt: string;
   updatedAt: string;
 }
+
+const issueFields = "number,title,body,author,state,stateReason,labels,createdAt,updatedAt";
 
 interface RawComment {
   author: { login: string };
@@ -365,16 +357,25 @@ interface RawPull {
   }[];
 }
 
-const issueOf = (raw: RawIssue): GitHubIssue => ({
-  number: raw.number,
-  title: raw.title,
-  body: raw.body,
-  author: raw.author.login,
-  state: raw.state.toLowerCase() === "open" ? "open" : "closed",
-  labels: raw.labels.map((label) => label.name),
-  createdAt: raw.createdAt,
-  updatedAt: raw.updatedAt,
-});
+const issueOf = (raw: RawIssue): GitHubIssue => {
+  const state = raw.state.toLowerCase() === "open" ? "open" : "closed";
+  const reason = (raw.stateReason ?? "").toLowerCase();
+  return {
+    number: raw.number,
+    title: raw.title,
+    body: raw.body,
+    author: raw.author.login,
+    state,
+    reason:
+      state === "closed" &&
+      (reason === "completed" || reason === "not_planned" || reason === "duplicate")
+        ? reason
+        : null,
+    labels: raw.labels.map((label) => label.name),
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  };
+};
 
 // gh gives a comment's node ID; editing takes the REST ID at the end of its URL.
 const commentOf = (raw: RawComment): GitHubComment[] => {
