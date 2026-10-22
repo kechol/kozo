@@ -66,4 +66,26 @@ describe("pumpSession", () => {
     ]);
     store.close();
   });
+
+  test("stops the worker when a record cannot be taken", async () => {
+    await using dir = await tempDirectory();
+    const store = await EventStore.open(kozoHome(dir.path));
+    let stopped = false;
+    const pumped = pumpSession(
+      store,
+      {
+        messages: (async function* () {
+          yield { record: { type: "agent.message", data: { agent: "triage" } } } as WorkerMessage;
+        })(),
+        stop() {
+          stopped = true;
+        },
+      },
+      { item: "K-1", task: null, run_id: "r-0001" },
+      1,
+    );
+    await expect(pumped).rejects.toThrow();
+    expect(stopped).toBe(true);
+    store.close();
+  });
 });

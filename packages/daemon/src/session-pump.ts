@@ -92,6 +92,10 @@ export async function pumpSession(
         } as Ended[AgentOutcome["status"]];
       }
     }
+  } catch (error) {
+    // A worker whose records kozod cannot take would otherwise go on changing the worktree.
+    session.stop();
+    throw error;
   } finally {
     clearTimeout(timer);
   }
