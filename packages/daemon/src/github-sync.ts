@@ -535,7 +535,7 @@ export class GitHubSync {
         marker,
         `**Question about ${subject.ref}:** ${quiet(subject.hold.reason)}
 
-Answer here or with \`kozo say ${subject.ref} <answer>\`.`,
+kozo does not read replies here; answer with \`kozo say ${subject.ref} <answer>\`.`,
       );
       await this.wrote(ref, null, "comment", marker);
     }
