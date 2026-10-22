@@ -15,13 +15,12 @@ function parseText<S extends z.ZodType>(
   }
   const result = schema.safeParse(data);
   if (result.success) return { ok: true, value: result.data };
-  return {
-    ok: false,
-    issues: result.error.issues.map(
-      (issue) => `${issue.path.join(".") || "<document>"}: ${issue.message}`,
-    ),
-  };
+  return { ok: false, issues: result.error.issues.map(issueText) };
 }
+
+/** One schema issue as `path: message`, the way every document problem is reported. */
+export const issueText = (issue: z.ZodError["issues"][number]) =>
+  `${issue.path.join(".") || "<document>"}: ${issue.message}`;
 
 export function parseYamlDocument<S extends z.ZodType>(schema: S, text: string) {
   return parseText(schema, text, Bun.YAML.parse);

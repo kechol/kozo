@@ -723,7 +723,7 @@ describe("the minimal path", () => {
     ]);
   }, 120_000);
 
-  test("kozod raises the risk of a plan that reaches a protected path and holds one over the limits", async () => {
+  test("kozod raises the risk of a plan that reaches a protected path and refuses one over the limits", async () => {
     const withTask = (task: object) => ({
       ...plan,
       plan: { ...plan.plan, risk: "low", tasks: [{ ...plan.plan.tasks[0], ...task }] },
@@ -731,6 +731,7 @@ describe("the minimal path", () => {
     const answers = [
       withTask({ scope: ["src/**", "db/migrations/**"] }),
       withTask({ scope: ["**"] }),
+      withTask({ estimate: { lines: 500, files: 2 } }),
       withTask({ estimate: { lines: 500, files: 2 } }),
     ];
     let triaged = 0;
@@ -752,9 +753,92 @@ describe("the minimal path", () => {
     await env.settle();
     expect(env.store.state.items[ref]?.hold).toMatchObject({
       kind: "attention",
-      reason: "t1 is estimated at 500 lines in 2 files, over the Charter's 60 lines in 4 files",
+      reason:
+        "kozod refused the plan draft twice: t1 is estimated at 500 lines in 2 files, over the Charter's 60 lines in 4 files",
     });
+    expect(env.agent.requests.at(-1)?.prompt).toContain(
+      "REFUSED     kozod refused your previous draft; draft again without these issues:",
+    );
   }, 120_000);
+
+  test("a draft that fails the plan checks is drafted once more with the issues", async () => {
+    const cyclic = {
+      ...plan,
+      plan: {
+        ...plan.plan,
+        tasks: [
+          { ...plan.plan.tasks[0], depends_on: ["t2"] },
+          { ...plan.plan.tasks[0], id: "t2", scope: ["docs/**"], depends_on: ["t1"] },
+        ],
+      },
+    };
+    const answers = [cyclic, plan];
+    let triaged = 0;
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: answers[triaged++] }] : [{ hang: true }],
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    expect(env.agent.requests.map((request) => request.agent)).toEqual(["triage", "triage"]);
+    expect(env.agent.requests[1]?.prompt).toContain(
+      "- the dependencies form a cycle: t1 -> t2 -> t1",
+    );
+    expect(Object.values(env.store.state.runs).map((run) => run.state)).toEqual([
+      "failed",
+      "succeeded",
+    ]);
+    expect(env.store.state.items[ref]?.stage).not.toBe("triage");
+  }, 120_000);
+
+  test("a split plan waits for approval, and a dependent task starts once its dependency is complete", async () => {
+    const split = {
+      ...plan,
+      plan: {
+        ...plan.plan,
+        tasks: [
+          plan.plan.tasks[0],
+          {
+            ...plan.plan.tasks[0],
+            id: "t2",
+            goal: "Mention the low-stock notice in the docs",
+            done_when: ["The docs mention the low-stock notice"],
+            scope: ["docs/**"],
+            depends_on: ["t1"],
+          },
+        ],
+      },
+    };
+    let implemented = 0;
+    await using env = await factoryOf((request) => {
+      if (request.agent === "triage") return [{ answer: split }];
+      implemented += 1;
+      return implemented === 1 ? implement() : [{ fail: "the second task stops here" }];
+    });
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    expect(env.store.state.items[ref]).toMatchObject({
+      stage: "planning",
+      hold: { kind: "approval", reason: "plan approval" },
+    });
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    expect(env.store.state.tasks[`${ref}/t1`]?.stage).toBe("handoff");
+    expect(env.store.state.tasks[`${ref}/t2`]).toMatchObject({ stage: "building", runs: [] });
+    await env.repo.git(
+      "merge",
+      "--no-ff",
+      "--quiet",
+      "-m",
+      "merge the low stock notice",
+      `kozo/${env.store.factoryId}/K-1-t1`,
+    );
+    await env.reconciler.reconcile();
+    await env.scheduler.idle();
+    expect(env.store.state.tasks[`${ref}/t1`]?.stage).toBe("complete");
+    expect(env.store.state.items[ref]?.stage).not.toBe("complete");
+    expect(env.store.state.tasks[`${ref}/t2`]?.runs.length).toBeGreaterThan(0);
+    expect(implemented).toBe(2);
+  }, 180_000);
 
   test("kozo say reaches a running run at its next turn", async () => {
     await using env = await factoryOf((request) =>

@@ -27,6 +27,18 @@ ignore that part and mention it in the plan's approach.
   changed, so the task's tests go in new test files, which may sit wherever the repository
   keeps tests; prefer a directory glob such as `src/lib/cart/**` to a list of single files.
 
+## The rules a split must follow
+
+kozod checks every draft against these rules and the limits in the brief, and refuses one that
+breaks them, telling you why.
+
+- A task that builds on another lists it in depends_on, and dependencies never form a cycle. A
+  dependent task starts only once the task it depends on is merged and complete.
+- Tasks that do not depend on one another, directly or through other tasks, may run at the same
+  time, so their scopes must not share a file or a pattern.
+- Every condition of the item's done_when appears, word for word, in the done_when of at least
+  one task.
+
 ## When to ask instead
 
 Answer with a question rather than a plan when the request can be read in more than one way and
