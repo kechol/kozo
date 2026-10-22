@@ -6,6 +6,7 @@ import {
   startBlocker,
   type TaskState,
 } from "@kozo/core";
+import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
 import { costSince } from "./queries.ts";
 import { type CharterResult, readCharter } from "./repository.ts";
@@ -59,10 +60,14 @@ export class Scheduler {
   constructor(
     private readonly store: EventStore,
     private readonly runner: Runner,
-    private readonly factory: Factory,
+    private readonly definition: DefinitionInUse,
     private readonly report: (message: string) => void = () => {},
     private readonly now: () => Date = () => new Date(),
   ) {}
+
+  private factory(): Factory {
+    return this.definition.current.factory;
+  }
 
   /** The reason the last attempt of a task stopped short, to start the next one with. */
   private lastFailure(task: string): string | null {
@@ -113,8 +118,8 @@ export class Scheduler {
     const midnight = this.now();
     midnight.setHours(0, 0, 0, 0);
     const spent = costSince(this.store.db, midnight);
-    if (spent >= this.factory.budget.daily_usd) {
-      return `the daily budget of ${this.factory.budget.daily_usd} USD is spent`;
+    if (spent >= this.factory().budget.daily_usd) {
+      return `the daily budget of ${this.factory().budget.daily_usd} USD is spent`;
     }
     const state = this.store.state;
     const tasks = Object.values(state.tasks).filter(
@@ -218,7 +223,7 @@ export class Scheduler {
     await this.holdForDependencies();
 
     for (const item of Object.values(this.store.state.items)) {
-      if (this.active.size >= this.factory.concurrency) return;
+      if (this.active.size >= this.factory().concurrency) return;
       if (item.hold || this.active.has(item.ref)) continue;
       // An item in Planning without a hold had its plan rejected or its question answered.
       const draft =
@@ -231,7 +236,7 @@ export class Scheduler {
       this.start(item.ref, "item", draft);
     }
     for (const task of Object.values(this.store.state.tasks)) {
-      if (this.active.size >= this.factory.concurrency) return;
+      if (this.active.size >= this.factory().concurrency) return;
       if (!this.needsRun(task)) continue;
       const repository = this.store.state.items[task.item]?.repository ?? "";
       const stop = await stopOf(repository);
@@ -256,7 +261,7 @@ export class Scheduler {
    * runs, since it runs the repository's tests too. Returns false when it cannot start now.
    */
   startWork(ref: string, work: () => Promise<void>): boolean {
-    if (this.stopped || this.active.has(ref) || this.active.size >= this.factory.concurrency)
+    if (this.stopped || this.active.has(ref) || this.active.size >= this.factory().concurrency)
       return false;
     this.start(ref, "task", work);
     return true;

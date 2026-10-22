@@ -5,8 +5,8 @@ import { claudeJudge, claudeVerifier, shellQuote } from "@kozo/verify";
 import { type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
 import { ControlPlane } from "./control-plane.ts";
+import { type DefinitionInUse, refreshDefinition, startingDefinition } from "./definition.ts";
 import { EventStore } from "./event-store.ts";
-import { loadFactory } from "./factory-config.ts";
 import { type Launcher, processLauncher } from "./launcher.ts";
 import { Reconciler } from "./reconcile.ts";
 import { defaultBranch } from "./repository.ts";
@@ -82,20 +82,27 @@ export class Daemon {
     tickMs = 2000,
   }: DaemonOptions = {}): Promise<Daemon> {
     await mkdir(home.root, { recursive: true, mode: 0o700 });
-    const factory = await loadFactory(home);
     await claimHome(home);
     const store = await EventStore.open(home);
+    const report = (line: string) => console.error(line);
+    let definition: DefinitionInUse;
+    try {
+      definition = { current: await startingDefinition(home, store) };
+    } catch (error) {
+      store.close();
+      await rm(home.pidFile, { force: true });
+      throw error;
+    }
     const claude = process.env.KOZO_CLAUDE ?? Bun.which("claude") ?? "claude";
     const runner = new Runner(home, store, {
       launcher,
       judge: claudeJudge(claude),
       verifier: claudeVerifier(claude),
       kozoCommand: kozoCommand(),
-      model: factory.agent_defaults.model,
-      runtime: factory.runtime,
+      definition,
     });
-    const control = new ControlPlane(home, store, factory, runner);
-    const scheduler = new Scheduler(store, runner, factory, (line) => console.error(line));
+    const control = new ControlPlane(home, store, definition, runner);
+    const scheduler = new Scheduler(store, runner, definition, report);
     // Each write is one API call; the work the scheduler starts after it is kozod's own.
     const apiCall =
       <A extends unknown[], R>(command: (...args: A) => Promise<R>, tick = true) =>
@@ -118,7 +125,7 @@ export class Daemon {
       store,
       token: await apiToken(home),
       port,
-      mode: factory.mode,
+      mode: definition.current.factory.mode,
       commands,
       async locateTask(ref) {
         const repository = store.state.items[store.state.tasks[ref]?.item ?? ""]?.repository;
@@ -131,20 +138,24 @@ export class Daemon {
       },
     });
     const server = serveApi(app, port);
-    const reconciler = new Reconciler(
-      store,
-      runner,
-      (line) => console.error(line),
-      (ref, work) => scheduler.startWork(ref, work),
+    const reconciler = new Reconciler(store, runner, report, (ref, work) =>
+      scheduler.startWork(ref, work),
     );
     await reconciler.recover();
     let reconciling = Promise.resolve();
     let ticks = 0;
     const timer = setInterval(() => {
       ticks += 1;
-      // Reconciliation runs once a minute; looking for work to start, every tick.
+      // The factory definition is read and reconciliation runs once a minute; looking for work
+      // to start, every tick.
       if (ticks % Math.max(1, Math.round(60_000 / tickMs)) === 0) {
-        reconciling = reconciling.then(() => reconciler.reconcile()).then(() => scheduler.tick());
+        reconciling = reconciling
+          .then(() => refreshDefinition(home, store, definition, report))
+          .catch((error: unknown) =>
+            report(`kozod: reading the factory definition failed: ${error}`),
+          )
+          .then(() => reconciler.reconcile())
+          .then(() => scheduler.tick());
       }
       scheduler.tick();
     }, tickMs);

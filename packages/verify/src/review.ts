@@ -28,6 +28,8 @@ export interface ReviewOptions {
   ownerNotes?: readonly string[];
   judge: Judge;
   model: string;
+  /** The review agent's instructions; kozod passes its factory definition's. */
+  instructions?: string;
   maxCostUsd: number;
   log(text: string): void;
 }
@@ -55,7 +57,7 @@ async function review(options: ReviewOptions, spend: Spend): Promise<ReviewRecor
   const answer = await spending(
     spend,
     judge.judge({
-      instructions: reviewAgent.instructions,
+      instructions: options.instructions ?? reviewAgent.instructions,
       prompt: reviewPrompt(options.goal, options.doneWhen, diff, options.ownerNotes),
       schema: reviewJudgmentJsonSchema,
       model,

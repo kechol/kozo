@@ -1,12 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { factoryTemplate } from "@kozo/core";
 import {
   exampleCharter,
   type GitRepository,
   gitRepository,
   type TempDirectory,
   tempDirectory,
+  testGitEnvironment,
 } from "@kozo/testing";
 import { printable } from "./factory-commands.ts";
 import { run } from "./index.ts";
@@ -114,5 +116,41 @@ describe("printable", () => {
     expect(printable("ok\u001b]0;pwned\u0007\u001b[2Jdone\tnext\r\n\u009b")).toBe(
       "ok]0;pwned[2Jdone\tnext",
     );
+  });
+});
+
+describe("kozo admin init", () => {
+  // Bun.spawn does not see changes to process.env, so the CLI runs in a process of its own with
+  // the test git environment, which keeps the developer's signing and hooks out.
+  const init = (home: string) => {
+    const child = Bun.spawnSync(["bun", join(import.meta.dir, "main.ts"), "admin", "init"], {
+      env: { ...testGitEnvironment, KOZO_HOME: home },
+    });
+    return {
+      code: child.exitCode,
+      stdout: child.stdout.toString(),
+      stderr: child.stderr.toString(),
+    };
+  };
+
+  test("creates the factory definition from the template, committed on main, and only once", async () => {
+    await using other = await tempDirectory();
+    expect(init(other.path)).toMatchObject({
+      code: 0,
+      stdout: expect.stringContaining("factory.yml"),
+    });
+    const factory = join(other.path, "factory");
+    expect(await Bun.file(join(factory, "agents", "plan", "agent.md")).text()).toBe(
+      factoryTemplate["agents/plan/agent.md"],
+    );
+    const log = Bun.spawnSync(["git", "log", "--format=%s %an", "main"], {
+      cwd: factory,
+      env: testGitEnvironment,
+    });
+    expect(log.stdout.toString().trim()).toBe("Start the factory definition kozo test");
+    expect(init(other.path)).toMatchObject({
+      code: 1,
+      stderr: expect.stringContaining("is not empty"),
+    });
   });
 });

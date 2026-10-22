@@ -1,3 +1,4 @@
+export * from "./agent-definition.ts";
 export * from "./base-documents.ts";
 export { globMatcher, isNewTestCase, protectedPathMatcher } from "./changes.ts";
 export { commandEnvironmentFrom, runCommand, shellQuote } from "./command.ts";

@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
-import { mkdir, open } from "node:fs/promises";
+import { mkdir, open, readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import {
+  factoryTemplate,
   type KozoHome,
   kozoHome,
   listKindSchema,
@@ -494,6 +495,36 @@ export async function admin(args: readonly string[], out: Lines): Promise<number
     options: { json: { type: "boolean" } },
     allowPositionals: true,
   });
-  if (positionals[0] !== "db-rebuild") throw new UsageError("admin takes db-rebuild");
+  if (positionals[0] === "init") return await initFactory(values.json, out);
+  if (positionals[0] !== "db-rebuild") throw new UsageError("admin takes init or db-rebuild");
   return postAndPrint(out, values.json, "/api/admin/db-rebuild");
+}
+
+/**
+ * `kozo admin init`: creates the factory definition as a git repository from kozo's template.
+ * The definition is the human's own configuration, not kozod's state, so the CLI writes it.
+ */
+async function initFactory(json: boolean | undefined, out: Lines): Promise<number> {
+  const directory = kozoHome().factory;
+  const present = await readdir(directory).catch(() => []);
+  if (present.length > 0) {
+    out.stderr(`kozo: ${directory} is not empty; the factory definition is already there`);
+    return ExitCode.failure;
+  }
+  for (const [path, text] of Object.entries(factoryTemplate)) {
+    await mkdir(dirname(join(directory, path)), { recursive: true });
+    await Bun.write(join(directory, path), text);
+  }
+  try {
+    await git(directory, ["init", "--quiet", "--initial-branch=main"]);
+    await git(directory, ["add", "--all"]);
+    await git(directory, ["commit", "--quiet", "--message", "Start the factory definition"]);
+  } catch (error) {
+    if (!(error instanceof GitError)) throw error;
+    out.stderr(`kozo: wrote ${directory}, but could not commit it: ${error.message}`);
+    return ExitCode.failure;
+  }
+  const message = `created the factory definition in ${directory}; add a repository to factory.yml and commit it`;
+  out.stdout(json ? JSON.stringify({ message, path: directory }) : message);
+  return ExitCode.success;
 }

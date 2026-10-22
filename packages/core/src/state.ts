@@ -95,6 +95,11 @@ export interface FactoryState {
   factoryId: string | null;
   paused: boolean;
   pausedReason: string | null;
+  /**
+   * The commit of the factory definition last applied, and of the last one refused since; both
+   * null while the definition is not a git repository.
+   */
+  definition: { applied: string | null; refused: string | null };
   items: Record<string, ItemState>;
   tasks: Record<string, TaskState>;
   runs: Record<string, RunInfo>;
@@ -130,6 +135,7 @@ export function emptyState(): FactoryState {
     factoryId: null,
     paused: false,
     pausedReason: null,
+    definition: { applied: null, refused: null },
     items: {},
     tasks: {},
     runs: {},
@@ -225,6 +231,12 @@ export function applyEvent(state: FactoryState, event: Event): void {
     case "factory.changed":
       state.paused = event.data.paused;
       state.pausedReason = event.data.paused ? event.data.reason : null;
+      return;
+    case "factory.applied":
+      state.definition = { applied: event.data.commit, refused: null };
+      return;
+    case "factory.refused":
+      state.definition = { ...state.definition, refused: event.data.commit };
       return;
     case "item.created": {
       const ref = event.item ?? "";

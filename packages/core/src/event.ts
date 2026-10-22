@@ -110,6 +110,10 @@ export const eventSchema = z
     /** The factory's ID, drawn once at its first start and written into branch names. */
     event("factory.created", z.strictObject({ factory_id: factoryIdSchema })),
     event("factory.changed", z.strictObject({ paused: z.boolean(), reason: text })),
+    /** The factory definition at `commit` validated and is in use for runs that start after. */
+    event("factory.applied", z.strictObject({ commit: text })),
+    /** The factory definition at `commit` did not validate; the one in use stays. */
+    event("factory.refused", z.strictObject({ commit: text, issues: z.array(text).nonempty() })),
     /** The run's log as it ended; nothing is appended to it afterwards. */
     event(
       "log.sealed",
@@ -213,7 +217,7 @@ export const eventSchema = z
         message: "A seal goes to kozod's own log",
       });
     }
-    const factoryWide = line.type === "factory.changed" || line.type === "factory.created";
+    const factoryWide = line.type.startsWith("factory.");
     if (factoryWide !== (line.item === null)) {
       context.addIssue({
         code: "custom",

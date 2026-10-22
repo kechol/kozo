@@ -14,8 +14,8 @@ import {
 import type { Judge, Verifier } from "@kozo/verify";
 import type { AgentRequest } from "@kozo/worker";
 import { ControlPlane } from "./control-plane.ts";
+import { readDefinition } from "./definition.ts";
 import { EventStore } from "./event-store.ts";
-import { loadFactory } from "./factory-config.ts";
 import { inProcessLauncher, type Launcher } from "./launcher.ts";
 import { Reconciler } from "./reconcile.ts";
 import { Runner } from "./runner.ts";
@@ -89,7 +89,9 @@ async function factoryOf(
     join(home.factory, "factory.yml"),
     `repositories:\n  - { path: ${repo.path} }\n${options.factory ?? ""}`,
   );
-  const factory = await loadFactory(home);
+  const loaded = await readDefinition(home, null);
+  if (!loaded.ok) throw new Error(loaded.issues.join("; "));
+  const definition = { current: loaded.definition };
   const store = await EventStore.open(home);
   const agent = fakeAgent(script);
   const inProcess = inProcessLauncher(agent);
@@ -98,14 +100,13 @@ async function factoryOf(
     judge,
     verifier: noVerifier,
     kozoCommand: "kozo",
-    model: "fake",
-    runtime: "sdk",
+    definition,
   });
-  const control = new ControlPlane(home, store, factory, runner);
+  const control = new ControlPlane(home, store, definition, runner);
   const scheduler = new Scheduler(
     store,
     runner,
-    factory,
+    definition,
     (line) => console.error(line),
     options.now,
   );

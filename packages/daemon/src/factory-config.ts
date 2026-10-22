@@ -1,8 +1,8 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { type Factory, factorySchema, type KozoHome } from "@kozo/core";
+import { type Factory, factorySchema, issueText } from "@kozo/core";
 
-/** The factory kozod runs when `factory.yml` is absent: local mode and no repositories yet. */
+/** The factory settings kozod runs without a `factory.yml`: local mode and no repositories yet. */
 export const builtInFactory: Factory = {
   version: 1,
   mode: "local",
@@ -13,41 +13,36 @@ export const builtInFactory: Factory = {
   budget: { daily_usd: 15 },
 };
 
-/** A factory.yml that does not parse or that asks for something P2a cannot run. */
-export class FactoryConfigError extends Error {}
-
 function expandHome(path: string): string {
   return resolve(
     path === "~" ? homedir() : path.startsWith("~/") ? join(homedir(), path.slice(2)) : path,
   );
 }
 
-/** Reads `factory/factory.yml` over the built-in defaults, key by key, and checks the result. */
-export async function loadFactory(home: KozoHome): Promise<Factory> {
-  const file = Bun.file(join(home.factory, "factory.yml"));
-  let overrides: unknown = {};
-  if (await file.exists()) {
-    try {
-      overrides = Bun.YAML.parse(await file.text()) ?? {};
-    } catch (error) {
-      throw new FactoryConfigError(`factory.yml: ${(error as Error).message}`);
-    }
+/**
+ * The text of a `factory.yml` merged over the built-in settings key by key and checked, with `~`
+ * expanded in repository paths, or null with the problems added to `issues`.
+ */
+export function parseFactoryConfig(text: string, issues: string[]): Factory | null {
+  let overrides: unknown;
+  try {
+    overrides = Bun.YAML.parse(text) ?? {};
+  } catch (error) {
+    issues.push(`factory.yml: ${(error as Error).message}`);
+    return null;
   }
   if (typeof overrides !== "object" || overrides === null || Array.isArray(overrides)) {
-    throw new FactoryConfigError("factory.yml: expected a mapping");
+    issues.push("factory.yml: expected a mapping");
+    return null;
   }
   const result = factorySchema.safeParse({ ...builtInFactory, ...overrides });
   if (!result.success) {
-    const issues = result.error.issues.map(
-      (issue) => `${issue.path.join(".") || "<document>"}: ${issue.message}`,
-    );
-    throw new FactoryConfigError(`factory.yml: ${issues.join("; ")}`);
+    issues.push(...result.error.issues.map((issue) => `factory.yml: ${issueText(issue)}`));
+    return null;
   }
   const factory = result.data;
-  if (factory.mode !== "local")
-    throw new FactoryConfigError("factory.yml: only mode: local runs in this version");
-  if (factory.runtime !== "sdk")
-    throw new FactoryConfigError("factory.yml: only runtime: sdk runs in this version");
+  if (factory.mode !== "local") issues.push("factory.yml: only mode: local runs in this version");
+  if (factory.runtime !== "sdk") issues.push("factory.yml: only runtime: sdk runs in this version");
   return {
     ...factory,
     repositories: factory.repositories.map((repository) => ({

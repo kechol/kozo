@@ -68,6 +68,8 @@ const examples: Record<EventType, unknown> = {
   "note.added": { kind: "answer", text: "Show Sold out for zero." },
   "plan.proposed": { plan },
   "plan.accepted": { plan, by: "kozod" },
+  "factory.applied": { commit: "a1b2c3d" },
+  "factory.refused": { commit: "a1b2c3d", issues: ["factory.yml: concurrency: expected a number"] },
   "risk.raised": { from: "low", to: "normal", reason: "the diff changes src/stock.ts" },
   "node.enter": { kind: "D" },
   "node.exit": { ok: false, summary: "unit failed" },
@@ -113,12 +115,11 @@ function issuesOf(text: string) {
 describe("parseEvent", () => {
   test("parses an example of every event type", () => {
     for (const [type, data] of Object.entries(examples)) {
-      const overrides =
-        type === "factory.changed" || type === "factory.created"
-          ? { item: null, task: null }
-          : type === "log.sealed"
-            ? { run_id: null }
-            : {};
+      const overrides = type.startsWith("factory.")
+        ? { item: null, task: null }
+        : type === "log.sealed"
+          ? { run_id: null }
+          : {};
       const result = parseEvent(line(type, data, overrides));
       expect({ type, ok: result.ok }).toEqual({ type, ok: true });
     }

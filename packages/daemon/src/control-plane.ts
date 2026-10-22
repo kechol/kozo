@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 import {
   type AddItem,
   autonomyLevel,
-  type Factory,
   isClosed,
   type KozoHome,
   type NoteKind,
@@ -15,6 +14,7 @@ import {
 } from "@kozo/core";
 import type { z } from "zod";
 import { CommandError, type VerbResult } from "./api.ts";
+import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
 import { enqueue } from "./instructions.ts";
 import { itemPath, writeItemFile } from "./item-file.ts";
@@ -33,12 +33,14 @@ export class ControlPlane {
   constructor(
     readonly home: KozoHome,
     readonly store: EventStore,
-    readonly factory: Factory,
+    readonly definition: DefinitionInUse,
     readonly runner: Runner | null = null,
   ) {}
 
   private repositoryFor(requested: string | undefined): string {
-    const registered = this.factory.repositories.map((repository) => repository.path);
+    const registered = this.definition.current.factory.repositories.map(
+      (repository) => repository.path,
+    );
     if (registered.length === 0) {
       throw new CommandError(422, "no repository is registered; add one to factory/factory.yml");
     }

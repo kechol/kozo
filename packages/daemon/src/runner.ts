@@ -49,19 +49,14 @@ import {
   runVerify,
   stopProcessesIn,
   type Verifier,
+  verifyInstructions,
   writeReviewVerdict,
   writeVerifyVerdict,
 } from "@kozo/verify";
 import type { WorkerSpec } from "@kozo/worker";
 import { taskSandbox } from "@kozo/worker";
-import implementDefinition from "../../../templates/factory/agents/implement/agent.md" with {
-  type: "text",
-};
-import planDefinition from "../../../templates/factory/agents/plan/agent.md" with { type: "text" };
-import triageDefinition from "../../../templates/factory/agents/triage/agent.md" with {
-  type: "text",
-};
 import pkg from "../package.json" with { type: "json" };
+import { type Definition, type DefinitionInUse, modelFor } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
 import { checkNotes, ownerNotes } from "./instructions.ts";
 import { type ItemFile, itemDirectory, readItemFile, requestText } from "./item-file.ts";
@@ -84,8 +79,8 @@ export interface RunnerDeps {
   verifier: Verifier;
   /** The shell words that run the kozo CLI inside the agent's sandbox, such as `kozo`. */
   kozoCommand: string;
-  model: string;
-  runtime: "sdk" | "cli";
+  /** The factory definition; a run reads it once, when it starts. */
+  definition: DefinitionInUse;
 }
 
 /** The nodes of the bugfix blueprint from Building to Handoff, in order. */
@@ -107,9 +102,6 @@ type Attempt = { kind: "done" } | { kind: "retry"; failure: string; rounds: numb
 
 /** A plan as the triage and plan agents write it, without the fields kozod adds. */
 const draftOf = ({ version: _version, item: _item, ...draft }: Plan) => draft;
-
-const instructionsOf = (definition: string) =>
-  definition.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
 
 interface Repository {
   path: string;
@@ -204,6 +196,7 @@ export class Runner {
     envelope: Omit<Envelope, "run_id">,
     agent: "triage" | "plan" | "implement" | "review" | "verify",
     charterCommit: string,
+    definition: Definition,
   ) {
     const run = this.store.nextRun();
     const request = requestText(await readItemFile(this.home, envelope.item));
@@ -215,12 +208,12 @@ export class Runner {
       parent_run: envelope.parent_run ?? null,
       data: {
         agent,
-        model: this.deps.model,
-        mode: "local",
+        model: modelFor(definition, agent),
+        mode: definition.factory.mode,
         charter_commit: charterCommit,
-        factory_commit: null,
+        factory_commit: definition.commit,
         kozo_version: pkg.version,
-        runtime: this.deps.runtime,
+        runtime: definition.factory.runtime,
         request_sha: sha256(request),
       },
     });
@@ -373,7 +366,13 @@ export class Runner {
     refused: readonly string[],
     round: number,
   ): Promise<{ plan: Plan | null } | { refused: string[] }> {
-    const run = await this.startRun({ item: itemRef, task: null }, agent, repository.tip);
+    const definition = this.deps.definition.current;
+    const run = await this.startRun(
+      { item: itemRef, task: null },
+      agent,
+      repository.tip,
+      definition,
+    );
     const envelope: Envelope = { run_id: run, item: itemRef, task: null };
     const { limits } = repository.charter;
     const current = this.store.state.items[itemRef]?.draft;
@@ -405,9 +404,9 @@ export class Runner {
         version: 1,
         run,
         agent,
-        model: this.deps.model,
+        model: modelFor(definition, agent),
         cwd: checkout,
-        instructions: instructionsOf(agent === "triage" ? triageDefinition : planDefinition),
+        instructions: definition.agents[agent].instructions,
         prompt,
         outputSchema: triageAnswerJsonSchema,
         maxTurns: limits.max_turns,
@@ -597,7 +596,13 @@ export class Runner {
     const branch = taskBranch(this.store.factoryId, taskRef);
     let layers = layersFor[task.risk];
     let level = layers.gates;
-    const run = await this.startRun({ item: item.ref, task: taskRef }, "implement", repository.tip);
+    const definition = this.deps.definition.current;
+    const run = await this.startRun(
+      { item: item.ref, task: taskRef },
+      "implement",
+      repository.tip,
+      definition,
+    );
     const envelope: Envelope = { run_id: run, item: item.ref, task: taskRef };
     const files = runFiles(this.home, run);
     const log = async (text: string) => {
@@ -829,9 +834,9 @@ export class Runner {
               version: 1,
               run,
               agent: "implement",
-              model: this.deps.model,
+              model: modelFor(definition, "implement"),
               cwd: worktree,
-              instructions: instructionsOf(implementDefinition),
+              instructions: definition.agents.implement.instructions,
               prompt,
               outputSchema: runReportJsonSchema,
               maxTurns: charter.limits.max_turns,
@@ -987,6 +992,7 @@ export class Runner {
             { item: item.ref, task: taskRef, parent_run: run },
             "review",
             repository.tip,
+            definition,
           );
           const review = await runReview({
             cwd: worktree,
@@ -995,7 +1001,8 @@ export class Runner {
             doneWhen: current.done_when,
             ownerNotes: ownerWords().map((note) => note.text),
             judge: this.deps.judge,
-            model: this.deps.model,
+            model: modelFor(definition, "review"),
+            instructions: definition.agents.review.instructions,
             maxCostUsd: charter.limits.max_cost_usd,
             log: (text) => void log(text),
           });
@@ -1064,6 +1071,7 @@ export class Runner {
               { item: item.ref, task: taskRef, parent_run: run },
               "verify",
               repository.tip,
+              definition,
             );
             verify = await runVerify({
               cwd: worktree,
@@ -1072,7 +1080,8 @@ export class Runner {
               doneWhen: current.done_when,
               ownerNotes: ownerWords().map((note) => note.text),
               verifier: this.deps.verifier,
-              model: this.deps.model,
+              model: modelFor(definition, "verify"),
+              instructions: verifyInstructions(definition.agents.verify, definition.verifyApp),
               maxCostUsd: charter.limits.max_cost_usd,
               log: (text) => void log(text),
             });

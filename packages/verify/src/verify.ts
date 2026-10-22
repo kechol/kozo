@@ -8,7 +8,12 @@ import verifyDefinition from "../../../templates/factory/agents/verify/agent.md"
 import verifyAppSkill from "../../../templates/factory/skills/verify-app/SKILL.md" with {
   type: "text",
 };
-import { parseAgentDefinition, parseSkill } from "./agent-definition.ts";
+import {
+  type AgentDefinition,
+  parseAgentDefinition,
+  parseSkill,
+  type Skill,
+} from "./agent-definition.ts";
 import { resolveRef } from "./changes.ts";
 import { guarded } from "./command.ts";
 import { GitError, showFile } from "./git.ts";
@@ -27,6 +32,10 @@ import { updateVerdictFile } from "./verdict-file.ts";
 
 export const verifyAgent = parseAgentDefinition(verifyDefinition);
 export const verifyAppSkillDefinition = parseSkill(verifyAppSkill);
+
+/** What a verify session is told: the agent's instructions, then the verify-app skill. */
+export const verifyInstructions = (agent: AgentDefinition, skill: Skill) =>
+  `${agent.instructions}\n\n# Skill: verify-app\n\n${skill.instructions}`;
 export const verifyAppPath = ".kozo/verify-app.md";
 
 export interface VerifyOptions {
@@ -38,6 +47,8 @@ export interface VerifyOptions {
   ownerNotes?: readonly string[];
   verifier: Verifier;
   model: string;
+  /** The verify agent's instructions with the verify-app skill; kozod passes its definition's. */
+  instructions?: string;
   maxCostUsd: number;
   log(text: string): void;
 }
@@ -74,7 +85,8 @@ async function verify(options: VerifyOptions, spend: Spend): Promise<VerifyResul
       spend,
       options.verifier.verify({
         cwd,
-        instructions: `${verifyAgent.instructions}\n\n# Skill: verify-app\n\n${verifyAppSkillDefinition.instructions}`,
+        instructions:
+          options.instructions ?? verifyInstructions(verifyAgent, verifyAppSkillDefinition),
         prompt: verifyPrompt(options.goal, options.doneWhen, procedure, options.ownerNotes),
         schema: verifyJudgmentJsonSchema,
         model: options.model,

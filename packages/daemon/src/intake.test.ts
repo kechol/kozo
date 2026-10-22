@@ -4,50 +4,21 @@ import { join } from "node:path";
 import { kozoHome } from "@kozo/core";
 import { exampleCharter, gitRepository, tempDirectory } from "@kozo/testing";
 import { ControlPlane } from "./control-plane.ts";
+import { readDefinition } from "./definition.ts";
 import { EventStore } from "./event-store.ts";
-import { builtInFactory, loadFactory } from "./factory-config.ts";
 import { formatItemFile, parseItemFile, readItemFile } from "./item-file.ts";
 import { defaultBranch, readCharter } from "./repository.ts";
 
-async function factoryWith(repository: string, home: string) {
+async function definitionWith(repository: string, home: string) {
   await mkdir(join(home, "factory"), { recursive: true });
   await Bun.write(
     join(home, "factory", "factory.yml"),
     `repositories:\n  - { path: ${repository} }\n`,
   );
-  return await loadFactory(kozoHome(home));
+  const loaded = await readDefinition(kozoHome(home), null);
+  if (!loaded.ok) throw new Error(loaded.issues.join("; "));
+  return { current: loaded.definition };
 }
-
-describe("loadFactory", () => {
-  test("runs on the built-in defaults without factory.yml", async () => {
-    await using dir = await tempDirectory();
-    expect(await loadFactory(kozoHome(dir.path))).toEqual(builtInFactory);
-  });
-
-  test("merges factory.yml over the defaults and expands ~", async () => {
-    await using dir = await tempDirectory();
-    await mkdir(join(dir.path, "factory"));
-    await Bun.write(
-      join(dir.path, "factory", "factory.yml"),
-      "concurrency: 2\nrepositories:\n  - { path: ~/src/shop }\n",
-    );
-    const factory = await loadFactory(kozoHome(dir.path));
-    expect(factory.concurrency).toBe(2);
-    expect(factory.agent_defaults).toEqual(builtInFactory.agent_defaults);
-    expect(factory.repositories[0]?.path).toEndWith("/src/shop");
-    expect(factory.repositories[0]?.path).not.toStartWith("~");
-  });
-
-  test("an invalid factory.yml or an unsupported mode keeps kozod from starting", async () => {
-    await using dir = await tempDirectory();
-    await mkdir(join(dir.path, "factory"));
-    const path = join(dir.path, "factory", "factory.yml");
-    await Bun.write(path, "concurrency: none\n");
-    await expect(loadFactory(kozoHome(dir.path))).rejects.toThrow("concurrency:");
-    await Bun.write(path, "mode: github\nrepositories: [{ path: /x, github: me/x }]\n");
-    await expect(loadFactory(kozoHome(dir.path))).rejects.toThrow("only mode: local");
-  });
-});
 
 describe("item files", () => {
   test("format and parse back, keeping a human's edits to the body", () => {
@@ -108,7 +79,7 @@ describe("ControlPlane.addItem", () => {
     const dir = await tempDirectory();
     const home = kozoHome(dir.path);
     const store = await EventStore.open(home);
-    const control = new ControlPlane(home, store, await factoryWith(repo.path, dir.path));
+    const control = new ControlPlane(home, store, await definitionWith(repo.path, dir.path));
     return {
       repo,
       home,

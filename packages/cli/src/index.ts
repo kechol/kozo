@@ -67,6 +67,7 @@ Commands:
   retry <ref> [text]        Retry a task from its checkpoint or an item
   close <ref> --done | --cancel <reason>
       Complete an item or task that needed no change, or cancel it
+  admin init [--json]       Create the factory definition from kozo's template
   admin db-rebuild          Rebuild kozo.db from the event logs
 
   gates [--level fast|full|deep] [--base <ref>] [--json]

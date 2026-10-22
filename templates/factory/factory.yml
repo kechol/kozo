@@ -1,0 +1,12 @@
+# The factory's settings. kozod reads this file from the tip of the default branch of this
+# repository, together with agents/ and skills/; commit a change for it to take effect.
+version: 1
+mode: local
+runtime: sdk
+# The repositories kozo works in, each a local clone; add one before `kozo add`.
+repositories: []
+agent_defaults:
+  model: claude-sonnet-5-5
+concurrency: 1
+budget:
+  daily_usd: 15
