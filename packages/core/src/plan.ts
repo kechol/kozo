@@ -19,13 +19,11 @@ export const planTaskSchema = z.strictObject({
   characterize: z.boolean().optional(),
   /**
    * A command that kozod runs in the worktree before the implement session, never the agent. It
-   * is one line without control characters, so the plan a human approves shows all of it.
+   * is printable ASCII on one line, so the plan a human approves shows all of it as it runs:
+   * no control, bidirectional or invisible character can hide part of it.
    */
   codemod: text
-    .regex(
-      /^[^\u0000-\u001f\u007f-\u009f]+$/,
-      "Write the codemod as one line without control characters",
-    )
+    .regex(/^[\x20-\x7e]+$/, "Write the codemod as one line of printable ASCII characters")
     .optional(),
 });
 export type PlanTask = z.infer<typeof planTaskSchema>;

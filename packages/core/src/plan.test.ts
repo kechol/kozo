@@ -73,16 +73,23 @@ describe("parsePlan", () => {
     expect(issuesOf(example.replace("id: t2", "id: task2"))[0]).toStartWith("tasks.1.id:");
   });
 
-  test("a codemod is one line without control characters", () => {
+  test("a codemod is one line of printable ASCII", () => {
     const withCodemod = (codemod: string) =>
       example.replace(
         "    depends_on: [t1]\n",
         `    depends_on: [t1]\n    codemod: ${JSON.stringify(codemod)}\n`,
       );
     expect(parsePlan(withCodemod("npx codemod src/ui")).ok).toBe(true);
-    for (const hidden of ["npx codemod\nrm -rf src", "npx codemod\rrm", "npx\u001b[2Kcodemod"]) {
+    for (const hidden of [
+      "npx codemod\nrm -rf src",
+      "npx codemod\rrm",
+      "npx\u001b[2Kcodemod",
+      "npx codemod \u202erm -rf\u202c",
+      "npx\u200bcodemod",
+      "npx codemod\u2028rm",
+    ]) {
       expect(issuesOf(withCodemod(hidden))).toEqual([
-        "tasks.1.codemod: Write the codemod as one line without control characters",
+        "tasks.1.codemod: Write the codemod as one line of printable ASCII characters",
       ]);
     }
   });
