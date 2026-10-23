@@ -20,6 +20,7 @@ import { ControlPlane } from "./control-plane.ts";
 import { EventStore } from "./event-store.ts";
 import { inProcessLauncher, type Launcher } from "./launcher.ts";
 import { Reconciler } from "./reconcile.ts";
+import { buildReport } from "./report.ts";
 import { readCharter } from "./repository.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
@@ -130,6 +131,7 @@ async function factoryOf(
     repo,
     home,
     store,
+    definition,
     control,
     scheduler,
     reconciler,
@@ -757,6 +759,21 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[task]?.stage).toBe("complete");
     expect(env.store.state.items[ref]?.stage).toBe("complete");
     expect(await env.repo.git("worktree", "list")).not.toContain("K-1-t1");
+    const factory = env.definition.current.factory;
+    expect(await buildReport(env.store.db, env.store.state, factory, "review")).toMatchObject({
+      days: 30,
+      merged: 1,
+      autonomy_rate: 1,
+      defect_rate: 0,
+      reviews: 1,
+      revise_rate: 0,
+      held: 0,
+      promotions: [],
+      levels: expect.arrayContaining([{ repository: env.repo.path, class: "docs", level: "L2" }]),
+    });
+    const reported = await buildReport(env.store.db, env.store.state, factory, "summary");
+    expect((reported as { hours_to_merge: number }).hours_to_merge).toBeGreaterThanOrEqual(0);
+    expect((reported as { cost_per_diff_usd: number }).cost_per_diff_usd).toBeGreaterThanOrEqual(0);
     const events = (type: string) =>
       env.store.db
         .query<{ line: string }, [string]>("select line from events where type = ? order by id")
@@ -1647,7 +1664,7 @@ test("one unit is still counted", () => {
     await git(worktree, ["merge", "--quiet", "--ff-only", "mine"]);
     const sessions = env.agent.requests.length;
     await env.control.act(task, reference, "return", { text: "Wrote the low-stock branch" });
-    expect(env.store.state.tasks[task]?.intervened).toBe(true);
+    expect(env.store.state.tasks[task]?.humanCommits).toBe(true);
     await env.settle();
     expect(env.store.state.tasks[task]).toMatchObject({
       stage: "handoff",

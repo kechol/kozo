@@ -75,8 +75,12 @@ export interface TaskState {
   returned: boolean;
   /** The work class of the plan that made the task. */
   class: WorkClass;
-  /** Whether a human took the task, committed to its branch at Handoff or sent it back from there. */
-  intervened: boolean;
+  /** Whether a human added commits to the task, by taking it or on its branch at Handoff. */
+  humanCommits: boolean;
+  /** Whether a human sent the task back from Handoff with a change request. */
+  sentBack: boolean;
+  /** When the task last reached Handoff, or null before it did. */
+  handedOffAt: string | null;
   /** When a check after the task's merge failed, a post-merge defect, or null. */
   defectAt: string | null;
   /** The plan's tier, or the higher one kozod rated the task's diff at. */
@@ -361,12 +365,10 @@ export function applyEvent(state: FactoryState, event: Event): void {
         if (task.stage === "handoff" && event.data.to === "building" && event.data.by === "kozod")
           task.handoffFixes += 1;
         // Only a human's commit moves a task from Handoff to Reviewing.
-        if (
-          task.stage === "handoff" &&
-          (event.data.to === "reviewing" ||
-            (event.data.to === "building" && event.data.by === "human"))
-        )
-          task.intervened = true;
+        if (task.stage === "handoff" && event.data.to === "reviewing") task.humanCommits = true;
+        if (task.stage === "handoff" && event.data.to === "building" && event.data.by === "human")
+          task.sentBack = true;
+        if (event.data.to === "handoff") task.handedOffAt = event.ts;
       }
       if (event.data.target === "item" && item && event.data.to === "triage") item.rejections = 0;
       subject.stage = event.data.to;
@@ -449,7 +451,9 @@ export function applyEvent(state: FactoryState, event: Event): void {
           codemod: planned.codemod ?? null,
           returned: false,
           class: plan.class,
-          intervened: false,
+          humanCommits: false,
+          sentBack: false,
+          handedOffAt: null,
           defectAt: null,
           risk: plan.risk,
           stage: "building",
@@ -532,7 +536,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
     case "task.returned": {
       const subject = required(task, `task ${event.task}`);
       subject.returned = true;
-      subject.intervened = true;
+      subject.humanCommits = true;
       subject.updatedAt = event.ts;
       return;
     }

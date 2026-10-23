@@ -133,7 +133,7 @@
 | daily budget | The machine-wide daily spending cap after which kozod starts nothing new. | `budget.daily_usd` | - | - |
 | demotion | kozod's lowering of a class's autonomy level in one repository by one step on a post-merge defect or over 30 percent intervention in the last ten merged diffs, which lasts until the Charter changes. | `factory.demoted` | downgrade | - |
 | factory definition | The git repository of agents, skills, blueprints, automations, eval cases and `factory.yml` that kozod applies only after `kozo check` passes. | `~/.kozo/factory/`, `factory.yml` | factory config | - |
-| intervention | A human's work on a task: taking it with `kozo take`, committing to its branch at Handoff or sending it back from there. | `intervened` | - | - |
+| intervention | A human's work on a task: taking it with `kozo take`, committing to its branch at Handoff or sending it back from there. | `humanCommits`, `sentBack` | - | - |
 | limits | The Charter caps per task and per run, such as changed lines, files, retries, turns, minutes and cost. | `limits` | - | - |
 | mode | The way kozo connects to the outside: `local` with local branches, or `github` with Issues and pull requests. | `mode` | - | - |
 | promotion proposal | kozod's suggestion to raise a class from L2 to L3 once its last 20 merged diffs were all autonomous and free of defects, which only a human applies in the Charter. | `promotionProposals` | upgrade | - |
@@ -158,6 +158,7 @@
 |---|---|---|---|---|
 | autonomous diff | A merged diff to which no human added commits. | - | - | - |
 | autonomy rate | The share of merged diffs that are autonomous diffs. | - | - | - |
+| cost per diff | The median cost of the diffs merged in a window: each diff's runs, children included, and an equal share of its item's triage and planning. | `cost_per_diff_usd` | - | - |
 | eval case | A case built from a past request with a repository, a start commit, the request body and the expected outcome, which may be a stop. | `evals/<case>.yml` | benchmark, fixture | - |
 | event log | The append-only file of events, one per run and one for kozod's own, whose every line carries the hash of the line before, from which context, views and metrics are all derived. | `events.jsonl`, `prev` | audit log, history | - |
 | failure type | A named pattern for a kind of failure that occurred twice, which then gets a structural fix. | - | - | - |
@@ -167,6 +168,7 @@
 | prune | Removing, at a human's request, all but the event log, report, verdicts and decision log of each run whose item closed at least a given number of days ago. | `kozo admin prune`, `factory.pruned` | purge, clean up | - |
 | retrospective | The weekly human reading of unresolved failures that turns each failure type into a structural fix. | `kozo report --week` | - | - |
 | revise rate | The share of reviews that returned revise. | - | - | - |
+| time to merge | The median time from a diff's last handoff to its merge. | `hours_to_merge` | - | - |
 
 ## Development process
 

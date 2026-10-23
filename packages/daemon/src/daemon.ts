@@ -16,6 +16,7 @@ import { type Launcher, processLauncher } from "./launcher.ts";
 import { Notifier, type Notify, osNotify } from "./notifier.ts";
 import { pruneRecords } from "./prune.ts";
 import { Reconciler } from "./reconcile.ts";
+import { buildReport } from "./report.ts";
 import { readCharter } from "./repository.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
@@ -168,6 +169,7 @@ export class Daemon {
       mode: definition.current.factory.mode,
       commands,
       repositories: () => definition.current.factory.repositories.map(({ path }) => path),
+      report: (view) => buildReport(store.db, store.state, definition.current.factory, view),
       records: {
         task: (ref) => taskRecords(home, store, ref),
         evidence: (run, path) => evidenceFile(home, run, path),

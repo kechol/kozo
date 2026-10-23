@@ -37,6 +37,9 @@ import {
   inboxCount,
   list,
 } from "./queries.ts";
+import type { ReportView } from "./report.ts";
+
+const reportViews: readonly ReportView[] = ["summary", "week", "review", "cost"];
 
 /** A refusal from a command, with the HTTP status that the API answers with. */
 export class CommandError extends Error {
@@ -89,6 +92,8 @@ export interface ApiOptions {
   };
   /** The work class and autonomy level an open item runs at, or nulls when they are unknown. */
   autonomy?(ref: string): Promise<{ class: WorkClass | null; level: AutonomyLevel | null }>;
+  /** What `kozo report` shows for one view. */
+  report?(view: ReportView): Promise<unknown>;
 }
 
 const error = (c: Context, status: number, message: string, issues?: string[]) =>
@@ -121,6 +126,7 @@ export function createApi({
   repositories = () => [],
   autonomy,
   records,
+  report,
 }: ApiOptions) {
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
   const origins = new Set([...hosts].map((host) => `http://${host}`));
@@ -172,6 +178,13 @@ export function createApi({
       costTodayUsd: costToday(store.db, now()),
       repositories: repositories(),
     });
+  });
+
+  app.get("/api/report", async (c) => {
+    const view = c.req.query("view") ?? "summary";
+    if (!reportViews.includes(view as ReportView) || !report)
+      return error(c, 400, `no report view ${view}`);
+    return c.json(await report(view as ReportView));
   });
 
   app.get("/api/ls/:kind", async (c) => {

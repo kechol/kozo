@@ -548,6 +548,95 @@ function missing(message: string): never {
   throw new UsageError(message);
 }
 
+const percent = (value: number | null) => (value === null ? "-" : `${Math.round(value * 100)}%`);
+const dollars = (value: number | null) => (value === null ? "-" : `$${value.toFixed(2)}`);
+
+interface Metrics {
+  days: number;
+  merged: number;
+  autonomy_rate: number | null;
+  defect_rate: number | null;
+  cost_per_diff_usd: number | null;
+  hours_to_merge: number | null;
+  reviews: number;
+  revise_rate: number | null;
+  held: number;
+  promotions: { repository: string; class: string }[];
+  levels?: { repository: string; class: string; level: string }[];
+  demotions?: { repository: string; class: string; from: string; to: string; reason: string }[];
+  cost_usd?: number;
+}
+
+interface CostReport {
+  budget_usd: number;
+  today_usd: number;
+  days: { day: string; usd: number }[];
+}
+
+/** The lines of a metrics report, the targets beside each. */
+function metricLines(r: Metrics): string[] {
+  return [
+    `over the last ${r.days} days, ${r.merged} merged diffs`,
+    `autonomy rate     ${percent(r.autonomy_rate)}  (70% or more)`,
+    `defect rate       ${percent(r.defect_rate)}  (5% or less)`,
+    `cost per diff     ${dollars(r.cost_per_diff_usd)}  (median)`,
+    `time to merge     ${r.hours_to_merge === null ? "-" : `${r.hours_to_merge.toFixed(1)} h`}  (median, within 24 h)`,
+    `revise rate       ${percent(r.revise_rate)} of ${r.reviews} reviews  (10% to 30%)`,
+    `held              ${r.held} questions and attention  (10 or fewer)`,
+    ...(r.promotions.length === 0
+      ? []
+      : [
+          "",
+          "promotion proposals: raise to L3 in the Charter",
+          ...r.promotions.map((p) => `  ${p.class} in ${p.repository}`),
+        ]),
+    ...(r.levels
+      ? [
+          "",
+          "levels as kozod applies them",
+          ...r.levels.map((l) => `  ${l.level}  ${l.class} in ${l.repository}`),
+        ]
+      : []),
+    ...(r.demotions && r.demotions.length > 0
+      ? [
+          "",
+          "demotions, until the Charter changes",
+          ...r.demotions.map(
+            (d) => `  ${d.class} in ${d.repository}: ${d.from} to ${d.to}, ${d.reason}`,
+          ),
+        ]
+      : []),
+    ...(r.cost_usd === undefined
+      ? []
+      : ["", `cost              ${dollars(r.cost_usd)} in the window`]),
+  ];
+}
+
+/** `kozo report`: the metrics, or with a flag the week's, the monthly review or the cost. */
+export async function metricsReport(args: readonly string[], out: Lines): Promise<number> {
+  const { values } = parseArgs({
+    args: [...args],
+    options: {
+      week: { type: "boolean" },
+      review: { type: "boolean" },
+      cost: { type: "boolean" },
+      json: { type: "boolean" },
+    },
+  });
+  const views = (["week", "review", "cost"] as const).filter((view) => values[view]);
+  if (views.length > 1) throw new UsageError("report takes one of --week, --review and --cost");
+  const view = views[0] ?? "summary";
+  const answer = await (await connect()).get(`/api/report?view=${view}`);
+  return printAnswer(out, values.json, answer, () => {
+    if (view !== "cost") return metricLines(answer.body as unknown as Metrics);
+    const c = answer.body as unknown as CostReport;
+    return [
+      `today             ${dollars(c.today_usd)} of ${dollars(c.budget_usd)}`,
+      ...c.days.map((d) => `  ${d.day.slice(0, 10)}  ${dollars(d.usd)}`),
+    ];
+  });
+}
+
 /** `kozo admin`: creates the definition, installs a repository, rebuilds kozo.db or prunes runs. */
 export async function admin(args: readonly string[], out: Lines): Promise<number> {
   const { values, positionals } = parseArgs({

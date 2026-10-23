@@ -58,7 +58,7 @@ export function demotionDue(
   if (defect) return `a post-merge defect in ${defect.ref}`;
   const recent = diffs.filter((task) => (task.merged?.at ?? "") > since).slice(-interventionWindow);
   if (recent.length < interventionWindow) return null;
-  const intervened = recent.filter((task) => task.intervened).length;
+  const intervened = recent.filter((task) => task.humanCommits || task.sentBack).length;
   return intervened / recent.length > interventionLimit
     ? `a human intervened in ${intervened} of the last ${recent.length} merged diffs`
     : null;
@@ -78,7 +78,7 @@ export function promotionProposals(
     const last = mergedDiffs(state, repository, workClass).slice(-promotionWindow);
     return (
       last.length === promotionWindow &&
-      last.every((task) => !task.intervened && task.defectAt === null)
+      last.every((task) => !task.humanCommits && task.defectAt === null)
     );
   });
 }

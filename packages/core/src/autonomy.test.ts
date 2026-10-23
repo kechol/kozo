@@ -30,7 +30,7 @@ function merged(count: number, shape: (index: number) => Partial<TaskState> = ()
       ref: `${item}/t1`,
       item,
       class: "bugfix",
-      intervened: false,
+      humanCommits: false,
       defectAt: null,
       merged: { commit: null, at },
       ...shape(index),
@@ -47,16 +47,20 @@ describe("demotionDue", () => {
     );
     expect(demotionDue(defect, repository, "bugfix")).toBe("a post-merge defect in K-2/t1");
     expect(demotionDue(defect, repository, "docs")).toBeNull();
-    const three = merged(10, (index) => ({ intervened: index <= 3 }));
+    const three = merged(10, (index) => ({ humanCommits: index <= 3 }));
     expect(demotionDue(three, repository, "bugfix")).toBeNull();
-    const four = merged(10, (index) => ({ intervened: index <= 4 }));
+    const four = merged(10, (index) => ({ humanCommits: index <= 4 }));
     expect(demotionDue(four, repository, "bugfix")).toBe(
+      "a human intervened in 4 of the last 10 merged diffs",
+    );
+    const sentBack = merged(10, (index) => ({ sentBack: index <= 4 }));
+    expect(demotionDue(sentBack, repository, "bugfix")).toBe(
       "a human intervened in 4 of the last 10 merged diffs",
     );
     // Fewer than ten diffs are not enough to judge the share.
     expect(
       demotionDue(
-        merged(9, () => ({ intervened: true })),
+        merged(9, () => ({ humanCommits: true })),
         repository,
         "bugfix",
       ),
@@ -113,11 +117,19 @@ describe("promotionProposals", () => {
     expect(promotionProposals(merged(19), repository, charter)).toEqual([]);
     expect(
       promotionProposals(
-        merged(20, (index) => ({ intervened: index === 20 })),
+        merged(20, (index) => ({ humanCommits: index === 20 })),
         repository,
         charter,
       ),
     ).toEqual([]);
     expect(promotionProposals(merged(20), repository, charterOf("  default: L3\n"))).toEqual([]);
+    // Sending a diff back is not a commit, so it does not stand in the way of a promotion.
+    expect(
+      promotionProposals(
+        merged(20, () => ({ sentBack: true })),
+        repository,
+        charter,
+      ),
+    ).toEqual(["bugfix"]);
   });
 });

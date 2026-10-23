@@ -106,6 +106,10 @@ describe("the daily commands", () => {
       "no run of an item closed before",
     );
     expect((await kozo("admin", "prune")).code).toBe(2);
+    expect((await kozo("report")).stdout).toStartWith("over the last 30 days, 0 merged diffs");
+    expect((await kozo("report", "--week")).stdout).toStartWith("over the last 7 days");
+    expect((await kozo("report", "--cost")).stdout).toStartWith("today             $0.00 of $");
+    expect((await kozo("report", "--week", "--cost")).code).toBe(2);
     expect((await kozo("ls", "items")).stdout).toContain("K-1");
     expect((await kozo("say", "K-1")).code).toBe(2);
     const url = (await kozo("dashboard", "--url")).stdout;
