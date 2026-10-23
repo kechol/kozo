@@ -19,8 +19,12 @@ export type Route = { page: "inbox" } | { page: "board" } | { page: "detail"; re
 export function routeOf(hash: string): Route {
   if (hash === "#/board") return { page: "board" };
   const detail = /^#\/ref\/(.+)$/.exec(hash);
-  if (detail?.[1]) return { page: "detail", ref: decodeURIComponent(detail[1]) };
-  return { page: "inbox" };
+  if (!detail?.[1]) return { page: "inbox" };
+  try {
+    return { page: "detail", ref: decodeURIComponent(detail[1]) };
+  } catch {
+    return { page: "inbox" };
+  }
 }
 
 export const detailHash = (ref: string) => `#/ref/${encodeURIComponent(ref)}`;

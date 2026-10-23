@@ -53,8 +53,9 @@ export function parseSchedule(expression: string): Schedule | string {
     Set<number>,
   ];
   if (weekdays.has(7)) weekdays.add(0);
-  const anyDay = parts[2] === "*";
-  const anyWeekday = parts[4] === "*";
+  // As in cron, a day field that starts with * counts as unrestricted, a step such as */2 too.
+  const anyDay = parts[2]?.startsWith("*") ?? false;
+  const anyWeekday = parts[4]?.startsWith("*") ?? false;
   return {
     matches(time) {
       const day = days.has(time.getDate());

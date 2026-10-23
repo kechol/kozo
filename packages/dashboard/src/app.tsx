@@ -26,7 +26,7 @@ export function App({ api }: { api: Api }) {
       ) : null}
       <main>
         {route.value.page === "detail" ? (
-          <DetailView api={api} refName={route.value.ref} />
+          <DetailView key={route.value.ref} api={api} refName={route.value.ref} />
         ) : page === "board" ? (
           <>
             <h2>Board</h2>

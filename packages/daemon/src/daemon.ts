@@ -1,6 +1,6 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { apiPort, itemLevel, type KozoHome, kozoHome, type WorkClass } from "@kozo/core";
+import { apiPort, itemLevel, type KozoHome, kozoHome } from "@kozo/core";
 import dashboard from "@kozo/dashboard/index.html";
 import { baseOf, type Confine, claudeJudge, claudeVerifier, platformConfine } from "@kozo/verify";
 import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
@@ -15,7 +15,7 @@ import { readItemFile } from "./item-file.ts";
 import { type Launcher, processLauncher } from "./launcher.ts";
 import { Notifier, type Notify, osNotify } from "./notifier.ts";
 import { Reconciler } from "./reconcile.ts";
-import { type CharterResult, readCharter } from "./repository.ts";
+import { readCharter } from "./repository.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
 import { evidenceFile, taskRecords } from "./task-records.ts";
@@ -61,6 +61,23 @@ async function claimHome(home: KozoHome) {
     }
   }
   await Bun.write(home.pidFile, `${process.pid}\n`);
+}
+
+/**
+ * `load` read again at most once a minute for each key; a key unasked for longer is dropped,
+ * so that closed items and removed repositories do not stay.
+ */
+function minuteCache<T>(load: (key: string) => Promise<T>): (key: string) => Promise<T> {
+  const entries = new Map<string, { at: number; value: Promise<T> }>();
+  return (key) => {
+    const now = Date.now();
+    for (const [known, entry] of entries) if (now - entry.at >= 60_000) entries.delete(known);
+    const cached = entries.get(key);
+    if (cached) return cached.value;
+    const value = load(key);
+    entries.set(key, { at: now, value });
+    return value;
+  };
 }
 
 /** A running kozod: the record plane, the commands and the local API around them. */
@@ -133,24 +150,11 @@ export class Daemon {
         return await github.install(repository);
       }, false),
     };
-    // The Charter of each repository, read again at most once a minute, for the dashboard's levels.
-    const charters = new Map<string, { at: number; result: Promise<CharterResult> }>();
-    const charterOf = (repository: string) => {
-      const cached = charters.get(repository);
-      if (cached && Date.now() - cached.at < 60_000) return cached.result;
-      const result = readCharter(repository, definition.current.factory.mode);
-      charters.set(repository, { at: Date.now(), result });
-      return result;
-    };
-    // Each item's requested class, read again at most once a minute like the Charters.
-    const requested = new Map<string, { at: number; result: Promise<WorkClass | null> }>();
-    const requestedClass = (ref: string) => {
-      const cached = requested.get(ref);
-      if (cached && Date.now() - cached.at < 60_000) return cached.result;
-      const result = readItemFile(home, ref).then((file) => file.class);
-      requested.set(ref, { at: Date.now(), result });
-      return result;
-    };
+    // For the dashboard's levels: each repository's Charter and each item's requested class.
+    const charterOf = minuteCache((repository) =>
+      readCharter(repository, definition.current.factory.mode),
+    );
+    const requestedClass = minuteCache((ref) => readItemFile(home, ref).then((file) => file.class));
     const app = createApi({
       store,
       token: await apiToken(home),

@@ -95,6 +95,7 @@ describe("format", () => {
     expect(routeOf("")).toEqual({ page: "inbox" });
     expect(routeOf("#/board")).toEqual({ page: "board" });
     expect(routeOf("#/ref/shop%2312%2Ft1")).toEqual({ page: "detail", ref: "shop#12/t1" });
+    expect(routeOf("#/ref/%E0%A4%A")).toEqual({ page: "inbox" });
   });
 
   test("tells items, tasks and runs apart by their references", () => {

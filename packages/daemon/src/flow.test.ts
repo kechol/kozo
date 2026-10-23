@@ -1332,6 +1332,11 @@ test("one unit is still counted", () => {
         },
         "the task characterizes, so its diff changes only test files, but it changes src/stock.ts",
       ],
+      // A test, but none that a prove entry runs, so nothing pins the behaviour.
+      [
+        { "docs/stock-count.test.ts": pinned.replace("./stock.ts", "../src/stock.ts") },
+        "the task characterizes, but its diff adds no test that a prove entry of the constraints runs",
+      ],
     ] as const) {
       let runs = 0;
       await using env = await factoryOf((request): FakeStep[] =>
@@ -1400,6 +1405,9 @@ test("one unit is still counted", () => {
     const worktree = worktreePath(env.home, env.repo.path, task);
     expect(taken.message).toStartWith(`${task} is yours: commit in ${worktree} on kozo/`);
     expect(env.store.state.tasks[task]?.hold).toMatchObject({ kind: "paused" });
+    await expect(env.control.act(task, reference, "resume", {})).rejects.toThrow(
+      "kozo return gives it back",
+    );
     for (const [path, text] of Object.entries(goodChange))
       if (text !== null) await Bun.write(join(worktree, path), text);
     await expect(env.control.act(task, reference, "return", { text: "Done" })).rejects.toThrow(
@@ -1418,6 +1426,12 @@ test("one unit is still counted", () => {
     ];
     await git(worktree, ["add", "--all"]);
     await git(worktree, [...human, "commit", "--quiet", "--message", "feat: only N left"]);
+    await git(worktree, ["switch", "--quiet", "-c", "mine"]);
+    await expect(env.control.act(task, reference, "return", { text: "Done" })).rejects.toThrow(
+      "switch back to it first",
+    );
+    await git(worktree, ["switch", "--quiet", "-"]);
+    await git(worktree, ["merge", "--quiet", "--ff-only", "mine"]);
     const sessions = env.agent.requests.length;
     await env.control.act(task, reference, "return", { text: "Wrote the low-stock branch" });
     await env.settle();

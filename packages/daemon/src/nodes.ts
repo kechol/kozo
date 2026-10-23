@@ -46,7 +46,9 @@ const claim: NodeStep = async (run, current) => {
   const claimed = await claimTask(runner.home, run.repository.path, run.task.ref, {
     base: run.repository.tip,
     factory: runner.store.factoryId,
-    resume: current.runs.length > 1,
+    // An explorer's run of the task is no attempt at it.
+    resume:
+      current.runs.filter((ref) => runner.store.state.runs[ref]?.agent === "implement").length > 1,
   });
   if (!claimed.claimed) {
     return await run.halt("claim", {
@@ -395,7 +397,8 @@ const verifyDeterministic: NodeStep = async (run, current) => {
   if (gates.status === "fail")
     return await run.retry(node, `the ${gates.failed} gate failed:\n${tail(output)}`);
   output = "";
-  if (run.layers.prove) {
+  // A task that characterizes is its tests, so prove checks it whatever the risk tier.
+  if (run.layers.prove || current.characterize) {
     // A blueprint that starts from no failing test keeps the behaviour its tests pin, but the
     // class comes from a session that read the request: only a class a human chose, or a diff
     // of dependency files alone, lets prove check that instead of a failing test.
@@ -414,6 +417,11 @@ const verifyDeterministic: NodeStep = async (run, current) => {
     });
     if (prove.status !== "pass")
       return await run.retry(node, `${proveLine(prove)}\n${tail(output)}`);
+    if (current.characterize && prove.runs.length === 0)
+      return await run.retry(
+        node,
+        "the task characterizes, but its diff adds no test that a prove entry of the constraints runs",
+      );
   }
   const guard = await runDiffGuard({
     cwd: worktree,

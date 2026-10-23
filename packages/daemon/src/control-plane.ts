@@ -356,6 +356,9 @@ export class ControlPlane {
   private async resume(ref: string, kind: "item" | "task"): Promise<VerbResult> {
     const { subject } = this.subject(ref, kind);
     if (subject.hold?.kind !== "paused") return { message: `${ref} is not paused` };
+    // The human works in the worktree of a task they took, so only kozo return hands it back.
+    if (subject.hold.reason === takenReason)
+      throw new CommandError(409, `${ref} is yours; kozo return gives it back`);
     await this.clearHold(kind, ref);
     return { message: `resumed ${ref}` };
   }
@@ -423,6 +426,11 @@ export class ControlPlane {
     const dirty = (await git(worktree, ["status", "--porcelain"])).trim();
     if (dirty !== "")
       throw new CommandError(409, `${worktree} has uncommitted changes; commit them first`);
+    // The checks and the push take the task branch, so the human's commits must be on it.
+    const branch = taskBranch(this.store.factoryId, ref);
+    const head = (await git(worktree, ["symbolic-ref", "--quiet", "HEAD"]).catch(() => "")).trim();
+    if (head !== `refs/heads/${branch}`)
+      throw new CommandError(409, `${worktree} is not on ${branch}; switch back to it first`);
     await this.note(item, ref, "instruction", body.text);
     await this.store.append({ type: "task.returned", item, task: ref, data: {} });
     await this.clearHold("task", ref, body.text);

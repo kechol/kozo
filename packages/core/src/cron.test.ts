@@ -29,6 +29,11 @@ describe("parseSchedule", () => {
     expect(either.matches(at("2026-11-01T00:00:00"))).toBe(true);
     expect(either.matches(at("2026-10-23T00:00:00"))).toBe(true);
     expect(either.matches(at("2026-10-22T00:00:00"))).toBe(false);
+    // A step counts as unrestricted, so both day fields must match.
+    const everyOther = schedule("0 3 */2 * 1");
+    expect(everyOther.matches(at("2026-10-19T03:00:00"))).toBe(true);
+    expect(everyOther.matches(at("2026-10-23T03:00:00"))).toBe(false);
+    expect(everyOther.matches(at("2026-10-26T03:00:00"))).toBe(false);
   });
 
   test("says why an expression is not a schedule", () => {
