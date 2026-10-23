@@ -8,6 +8,7 @@ import { apiToken } from "./api-token.ts";
 import { Automations } from "./automations.ts";
 import { ControlPlane } from "./control-plane.ts";
 import { type DefinitionInUse, refreshDefinition, startingDefinition } from "./definition.ts";
+import { evalCaseOf } from "./eval.ts";
 import { EventStore } from "./event-store.ts";
 import { ghGitHub } from "./github.ts";
 import { GitHubSync } from "./github-sync.ts";
@@ -40,7 +41,7 @@ export interface DaemonOptions {
 const compiled = !process.execPath.endsWith("/bun");
 
 /** The worker command: kozod's own executable in worker mode. */
-function kozodCommand(): string[] {
+export function kozodCommand(): string[] {
   return compiled ? [process.execPath] : [process.execPath, join(import.meta.dir, "main.ts")];
 }
 
@@ -151,6 +152,11 @@ export class Daemon {
           throw new CommandError(409, "in local mode, kozo admin install writes the files itself");
         return await github.install(repository);
       }, false),
+      evalCase: async ({ run }) => {
+        const { id, evalCase } = await evalCaseOf(home, store, run);
+        const text = `# Eval case, format version 1 (D-046), drafted from ${run}: add the hidden tests and\n# checks the outcome needs, then commit it to the factory definition.\n${Bun.YAML.stringify(evalCase, null, 2)}\n`;
+        return { message: `drafted evals/${id}.yml from ${run}`, id, text };
+      },
       prune: apiCall(
         ({ older_than_days, dry_run }) =>
           pruneRecords(home, store, older_than_days, dry_run ?? false),

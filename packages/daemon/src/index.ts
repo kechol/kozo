@@ -1,6 +1,18 @@
+import { readdir } from "node:fs/promises";
+import { basename, join } from "node:path";
+import { kozoHome } from "@kozo/core";
+import {
+  claudeJudge,
+  claudeVerifier,
+  definitionTip,
+  platformConfine,
+  readDefinition,
+} from "@kozo/verify";
 import { workerMain } from "@kozo/worker";
 import pkg from "../package.json" with { type: "json" };
-import { Daemon } from "./daemon.ts";
+import { Daemon, kozodCommand } from "./daemon.ts";
+import { type EvalResult, runEvalCase } from "./eval.ts";
+import { processLauncher } from "./launcher.ts";
 
 export const ExitCode = { success: 0, failure: 1, usage: 2 } as const;
 
@@ -15,7 +27,10 @@ Runs kozod in the foreground until it receives SIGINT or SIGTERM.
 
 Options:
   --version        Print the version
-  --worker <spec>  Run one agent session for kozod (internal)`;
+  --worker <spec>  Run one agent session for kozod (internal)
+  --eval [<case>...]
+                   Run the factory definition's eval cases, or the named ones, each in
+                   a throwaway factory home, and print the results as JSON`;
 
 /** Starts kozod and resolves once it has stopped again. */
 async function serve(out: Output): Promise<number> {
@@ -35,9 +50,76 @@ async function serve(out: Output): Promise<number> {
   return ExitCode.success;
 }
 
+/** The body of an upstream GitHub issue, read with gh. */
+async function issueBody(url: string): Promise<string> {
+  const match = url.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/);
+  if (!match) throw new Error(`${url} is not a GitHub issue`);
+  const child = Bun.spawn(["gh", "api", `repos/${match[1]}/issues/${match[2]}`, "--jq", ".body"], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [body, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+  if (code !== 0) throw new Error(`gh could not read ${url}`);
+  return body.replace(/\n$/, "");
+}
+
+/**
+ * Runs the factory definition's eval cases, or the named ones, and prints each result and the
+ * share that reached the expected outcome as one JSON document; progress goes to stderr.
+ */
+async function evaluate(names: readonly string[], out: Output): Promise<number> {
+  const home = kozoHome();
+  const loaded = await readDefinition(
+    home.factory,
+    await definitionTip(home.factory).catch(() => null),
+  );
+  if (!loaded.ok) {
+    out.stderr(`kozod: the factory definition does not load: ${loaded.issues.join("; ")}`);
+    return ExitCode.failure;
+  }
+  const dir = join(home.factory, "evals");
+  const files =
+    names.length > 0
+      ? names.map((name) => join(dir, name.endsWith(".yml") ? name : `${name}.yml`))
+      : (await readdir(dir).catch(() => []))
+          .filter((name) => name.endsWith(".yml"))
+          .sort()
+          .map((name) => join(dir, name));
+  const claude = process.env.KOZO_CLAUDE ?? Bun.which("claude") ?? "claude";
+  const deps = {
+    launcher: processLauncher(kozodCommand()),
+    judge: claudeJudge(claude),
+    verifier: claudeVerifier(claude),
+    confine: await platformConfine(),
+    issueBody,
+  };
+  const cases: EvalResult[] = [];
+  for (const file of files) {
+    out.stderr(`kozod: eval ${basename(file, ".yml")}`);
+    const result = await runEvalCase(file, loaded.definition, deps, (line) => out.stderr(line));
+    out.stderr(
+      `kozod: eval ${result.id}: ${result.outcome}, ${result.passed ? "as expected" : `expected ${result.expected}`}`,
+    );
+    cases.push(result);
+  }
+  const passed = cases.filter((result) => result.passed).length;
+  out.stdout(
+    JSON.stringify({
+      cases,
+      passed,
+      total: cases.length,
+      share: cases.length === 0 ? null : passed / cases.length,
+      costUsd: cases.reduce((sum, result) => sum + result.costUsd, 0),
+    }),
+  );
+  return passed === cases.length ? ExitCode.success : ExitCode.failure;
+}
+
 export async function run(args: readonly string[], out: Output): Promise<number> {
   const [option] = args;
   if (option === undefined) return await serve(out);
+  if (option === "--eval") return await evaluate(args.slice(1), out);
   if (option === "--worker" && args[1]) return await workerMain(args[1], out.stdout);
   if (option === "--version") {
     out.stdout(`kozod ${pkg.version}`);

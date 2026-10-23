@@ -27,6 +27,10 @@ const commands: Commands = {
   pauseFactory: async () => ({ message: "paused" }),
   resumeFactory: async () => ({ message: "resumed" }),
   rebuildIndex: async () => ({ message: "rebuilt" }),
+  evalCase: async (body) => {
+    calls.push(["evalCase", body]);
+    return { message: "drafted", id: "shop-k-1", text: "version: 1\n" };
+  },
   prune: async (body) => {
     calls.push(["prune", body]);
     return { message: "pruned", before: "2026-07-01T00:00:00.000Z", runs: [] };

@@ -650,6 +650,79 @@ export async function metricsReport(args: readonly string[], out: Lines): Promis
   });
 }
 
+interface EvalSummary {
+  cases: {
+    id: string;
+    expected: string | null;
+    outcome: string;
+    passed: boolean;
+    checks: { command: string; code: number }[];
+    costUsd: number;
+    forbidden: string[];
+    error?: string;
+  }[];
+  passed: number;
+  total: number;
+  costUsd: number;
+}
+
+/**
+ * `kozo admin eval add <run>` writes the eval case kozod drafts from a run's item into the
+ * factory definition, the human's own files; `kozo admin eval run [<case>...]` runs the cases
+ * with `kozod --eval`, which needs no running kozod.
+ */
+async function evalCommand(args: string[], json: boolean | undefined, out: Lines) {
+  const [action, ...rest] = args;
+  if (action === "add") {
+    const [run] = rest;
+    if (!run || rest.length > 1) throw new UsageError("admin eval add takes one run, r-<nnnn>");
+    const client = await connect();
+    const answer = await client.post("/api/admin/eval-case", { run });
+    if (answer.status >= 300) return printAnswer(out, json, answer, () => []);
+    const { id, text } = answer.body as { id: string; text: string };
+    const path = join(client.home.factory, "evals", `${id}.yml`);
+    if (await Bun.file(path).exists()) {
+      out.stderr(`kozo: ${path} exists already; remove it to draft it again`);
+      return ExitCode.failure;
+    }
+    await Bun.write(path, text);
+    return printAnswer(out, json, { ...answer, body: { ...answer.body, path } }, () => [
+      `wrote ${path}; add the hidden tests and checks it needs, then commit it`,
+    ]);
+  }
+  if (action !== "run") throw new UsageError("admin eval takes add or run");
+  const child = Bun.spawn([...kozodCommand(), "--eval", ...rest], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  const [text, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+  if (json) {
+    out.stdout(text.trim());
+    return code;
+  }
+  let summary: EvalSummary;
+  try {
+    summary = JSON.parse(text) as EvalSummary;
+  } catch {
+    out.stderr("kozo: kozod --eval printed no results");
+    return ExitCode.failure;
+  }
+  for (const result of summary.cases) {
+    const failed = result.checks.find((check) => check.code !== 0);
+    out.stdout(
+      printable(
+        `${result.passed ? "pass" : "FAIL"}  ${result.id}  ${result.outcome}${result.passed ? "" : `, expected ${result.expected}`}${failed ? `; ${failed.command} exited with ${failed.code}` : ""}${result.error ? `; ${result.error}` : ""}  ${dollars(result.costUsd)}`,
+      ),
+    );
+    for (const rule of result.forbidden) out.stdout(printable(`      check by hand: ${rule}`));
+  }
+  out.stdout(
+    `${summary.passed} of ${summary.total} reached the expected outcome; ${dollars(summary.costUsd)} in all`,
+  );
+  return code;
+}
+
 /** `kozo admin`: creates the definition, installs a repository, rebuilds kozo.db or prunes runs. */
 export async function admin(args: readonly string[], out: Lines): Promise<number> {
   const { values, positionals } = parseArgs({
@@ -667,6 +740,7 @@ export async function admin(args: readonly string[], out: Lines): Promise<number
     if (!path) throw new UsageError("admin install takes the repository's path");
     return await installRepository(resolve(path), values.json, out);
   }
+  if (positionals[0] === "eval") return await evalCommand(positionals.slice(1), values.json, out);
   if (positionals[0] === "prune") {
     const days = Number(values["older-than"]);
     if (!Number.isInteger(days) || days < 1)
@@ -677,7 +751,7 @@ export async function admin(args: readonly string[], out: Lines): Promise<number
     });
   }
   if (positionals[0] !== "db-rebuild")
-    throw new UsageError("admin takes init, install, db-rebuild or prune");
+    throw new UsageError("admin takes init, install, db-rebuild, prune or eval");
   return postAndPrint(out, values.json, "/api/admin/db-rebuild");
 }
 

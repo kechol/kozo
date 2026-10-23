@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
-import { autonomyLevel, kozoHome, parseAutomation, runFiles, sha256 } from "@kozo/core";
+import {
+  autonomyLevel,
+  kozoHome,
+  parseAutomation,
+  parseEvalCase,
+  runFiles,
+  sha256,
+} from "@kozo/core";
 import {
   type FakeStep,
   fakeAgent,
@@ -17,6 +24,7 @@ import { git, readDefinition } from "@kozo/verify";
 import type { AgentRequest } from "@kozo/worker";
 import { Automations } from "./automations.ts";
 import { ControlPlane } from "./control-plane.ts";
+import { evalCaseOf } from "./eval.ts";
 import { EventStore } from "./event-store.ts";
 import { inProcessLauncher, type Launcher } from "./launcher.ts";
 import { Reconciler } from "./reconcile.ts";
@@ -812,6 +820,14 @@ describe("the minimal path", () => {
       promotions: [],
       levels: expect.arrayContaining([{ repository: env.repo.path, class: "docs", level: "L2" }]),
     });
+    const first = Object.keys(env.store.state.runs)[0] ?? "";
+    const drafted = await evalCaseOf(env.home, env.store, first);
+    expect(drafted.evalCase).toMatchObject({
+      repository: env.repo.path,
+      request: { title: "Low stock" },
+      expected: { outcome: "complete", reference: mergeCommit },
+    });
+    expect(parseEvalCase(Bun.YAML.stringify(drafted.evalCase)).ok).toBe(true);
     const reported = await buildReport(env.store.db, env.store.state, factory, "summary");
     expect((reported as { hours_to_merge: number }).hours_to_merge).toBeGreaterThanOrEqual(0);
     expect((reported as { cost_per_diff_usd: number }).cost_per_diff_usd).toBeGreaterThanOrEqual(0);

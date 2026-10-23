@@ -70,6 +70,10 @@ export const pruneSchema = z.strictObject({
 });
 export type Prune = z.infer<typeof pruneSchema>;
 
+/** Asks kozod to draft the eval case of a run's item. */
+export const evalCaseRequestSchema = z.strictObject({ run: z.string().regex(/^r-\d{4,}$/) });
+export type EvalCaseRequest = z.infer<typeof evalCaseRequestSchema>;
+
 /** The JSON body of every error response. */
 export interface ApiError {
   error: string;

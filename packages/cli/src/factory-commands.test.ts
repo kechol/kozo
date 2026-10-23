@@ -112,6 +112,8 @@ describe("the daily commands", () => {
     expect(week).toContain("no failures in the window");
     expect((await kozo("report", "--cost")).stdout).toStartWith("today             $0.00 of $");
     expect((await kozo("report", "--week", "--cost")).code).toBe(2);
+    expect((await kozo("admin", "eval", "add", "r-0099")).code).toBe(4);
+    expect((await kozo("admin", "eval", "add")).code).toBe(2);
     expect((await kozo("ls", "items")).stdout).toContain("K-1");
     expect((await kozo("say", "K-1")).code).toBe(2);
     const url = (await kozo("dashboard", "--url")).stdout;

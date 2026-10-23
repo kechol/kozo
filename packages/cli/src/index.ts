@@ -93,6 +93,11 @@ Commands:
       Add kozo's files to a repository; in GitHub mode kozod opens them as a
       pull request
   admin db-rebuild          Rebuild kozo.db from the event logs
+  admin eval add <run> [--json]
+      Draft the eval case of a run's item into the factory definition's evals/
+  admin eval run [<case>...] [--json]
+      Run the eval cases, or the named ones, each in a throwaway factory home,
+      and print the share that reached the expected outcome and the cost
   admin prune --older-than <days> [--dry-run] [--json]
       Remove all but the event log, report, verdicts and decision log of
       every run whose item closed at least <days> days ago

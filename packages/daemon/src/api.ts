@@ -3,7 +3,9 @@ import {
   type ApiError,
   type AutonomyLevel,
   addItemSchema,
+  type EvalCaseRequest,
   type Event,
+  evalCaseRequestSchema,
   helloProof,
   type Install,
   installSchema,
@@ -66,6 +68,7 @@ export interface Commands {
   rebuildIndex(): Promise<VerbResult>;
   install(body: Install): Promise<VerbResult>;
   prune(body: Prune): Promise<VerbResult & { before: string; runs: string[] }>;
+  evalCase(body: EvalCaseRequest): Promise<VerbResult & { id: string; text: string }>;
 }
 
 export interface ApiOptions {
@@ -373,6 +376,11 @@ export function createApi({
     const body = installSchema.safeParse(await jsonBody(c));
     if (!body.success) return error(c, 400, "invalid install", body.error.issues.map(issueText));
     return c.json(await commands.install(body.data));
+  });
+  app.post("/api/admin/eval-case", async (c) => {
+    const body = evalCaseRequestSchema.safeParse(await jsonBody(c));
+    if (!body.success) return error(c, 400, "invalid eval case", body.error.issues.map(issueText));
+    return c.json(await commands.evalCase(body.data));
   });
   app.post("/api/admin/prune", async (c) => {
     const body = pruneSchema.safeParse(await jsonBody(c));
