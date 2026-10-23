@@ -52,7 +52,10 @@ lands verbatim in the changelog. All `@kozo/*` packages share one version.
 Releases are cut by maintainers. Merging the "chore: version packages" pull
 request bumps the version, and pushing a matching `v<version>` tag makes GitHub
 Actions build `kozo` and `kozod` for macOS and Linux and publish them as a
-GitHub Release. Nobody publishes from a laptop.
+GitHub Release. For a stable version, the workflow then writes
+`Formula/kozo.rb` from the release's checksums and pushes it to the
+kechol/homebrew-tap repository with the `HOMEBREW_TAP_TOKEN` secret, a token
+that may write only that repository's contents. Nobody publishes from a laptop.
 
 ## What to keep out of the repository
 

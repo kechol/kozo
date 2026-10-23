@@ -2,7 +2,8 @@ name: Release
 
 # A push to main opens or updates the changesets version pull request. After it
 # merges, the maintainer pushes a `v<version>` tag, which cross-compiles both
-# executables and publishes them as a GitHub Release.
+# executables and publishes them as a GitHub Release; a stable version also
+# updates the formula in the Homebrew tap.
 
 on:
   push:
@@ -94,3 +95,47 @@ jobs:
           flags=(--generate-notes)
           [[ "$TAG" == *-* ]] && flags+=(--prerelease)
           gh release create "$TAG" "${flags[@]}" release/kozo-*.tar.gz release/SHA256SUMS.txt
+
+  tap:
+    name: Update the Homebrew tap
+    needs: release
+    # Prereleases stay off the tap; only a stable version reaches `brew install`.
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.2"
+      # The formula is built from the published release, so it names the archives users get.
+      - name: Write the formula from the release's checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release download "$TAG" --pattern SHA256SUMS.txt --dir release
+          bun run scripts/formula.ts --version "${TAG#v}" --sums release/SHA256SUMS.txt > kozo.rb
+      # HOMEBREW_TAP_TOKEN may write only kechol/homebrew-tap's contents.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: kechol/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - name: Commit and push the formula
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p tap/Formula
+          cp kozo.rb tap/Formula/kozo.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/kozo.rb
+          if git diff --cached --quiet; then
+            echo "The formula is already at $TAG"
+            exit 0
+          fi
+          git commit --message "kozo ${TAG#v}"
+          git push
