@@ -27,7 +27,8 @@ export function NoToken() {
     <main class="no-token">
       <h1>kozo</h1>
       <p>
-        Open the dashboard with <code>kozo dashboard</code>, which hands this tab the API token.
+        Open the dashboard with <code>kozo dashboard</code>, which opens a session for this tab.
+        Each link it opens works once, within a minute.
       </p>
     </main>
   );

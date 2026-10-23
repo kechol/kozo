@@ -76,8 +76,8 @@ Commands:
   return <task> <text>      Give a taken task back once your work is committed;
       its checks run on your commits from the deterministic ones on
   dashboard [--url] [--json]
-      Open the dashboard in the browser, or print its URL, which carries the
-      API token, with --url
+      Open the dashboard in the browser, or print its URL with --url; the URL
+      opens a session once, within a minute
   check [path] [--json]
       Check the factory definition, each repository's Charter, claude and the
       sandbox; with a path, only the definition or .kozo/ in that directory

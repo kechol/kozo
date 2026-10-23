@@ -203,9 +203,9 @@ export async function down(args: readonly string[], out: Lines): Promise<number>
 // --- kozo dashboard ---------------------------------------------------------------------------
 
 /**
- * Opens the dashboard in the browser with the API token in the URL fragment, which the browser
- * never sends to a server; with --url, prints that URL instead. The token goes only to the kozod
- * that proved it holds it.
+ * Opens the dashboard in the browser with a code that the page trades for a session; with
+ * --url, prints that URL instead. The code is good once, for a minute, and lives in the URL's
+ * fragment, which the browser never sends to a server.
  */
 export async function dashboard(args: readonly string[], out: Lines): Promise<number> {
   const { values } = parseArgs({
@@ -213,8 +213,9 @@ export async function dashboard(args: readonly string[], out: Lines): Promise<nu
     options: { url: { type: "boolean" }, json: { type: "boolean" } },
   });
   return withClient(out, async (client) => {
-    const token = (await Bun.file(client.home.apiToken).text()).trim();
-    const url = `${client.base}/#token=${token}`;
+    const answer = await client.post("/api/dashboard/code");
+    if (answer.status !== 200) return printAnswer(out, values.json, answer, () => []);
+    const url = `${client.base}/#code=${String(answer.body.code)}`;
     if (values.url) {
       out.stdout(values.json ? JSON.stringify({ url }) : url);
       return ExitCode.success;

@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { inboxActions } from "./actions.tsx";
-import { takeToken } from "./api.ts";
+import { takeSession } from "./api.ts";
 import { ago } from "./format.ts";
 
-const token = "ab".repeat(32);
+const code = "ab".repeat(32);
 
 function storage() {
   const values = new Map<string, string>();
@@ -13,21 +13,43 @@ function storage() {
   };
 }
 
-describe("takeToken", () => {
-  test("moves a token from the fragment into the session and out of the address", () => {
+describe("takeSession", () => {
+  test("takes the code out of the address before trading it, and keeps the session", async () => {
     const session = storage();
-    const replaced: string[] = [];
-    const location = { hash: `#token=${token}`, pathname: "/", search: "" };
-    expect(takeToken(location, session, (url) => replaced.push(url))).toBe(token);
-    expect(replaced).toEqual(["/#/"]);
-    expect(takeToken({ ...location, hash: "#/board" }, session, () => {})).toBe(token);
+    const events: string[] = [];
+    const location = { hash: `#code=${code}`, pathname: "/", search: "" };
+    const token = await takeSession(
+      location,
+      session,
+      (url) => events.push(`replace ${url}`),
+      async (traded) => {
+        events.push(`trade ${traded === code}`);
+        return "session-token";
+      },
+    );
+    expect(token).toBe("session-token");
+    expect(events).toEqual(["replace /#/", "trade true"]);
+    const again = await takeSession(
+      { ...location, hash: "#/" },
+      session,
+      () => {},
+      async () => null,
+    );
+    expect(again).toBe("session-token");
   });
 
-  test("takes nothing that is not a whole token", () => {
-    const session = storage();
-    const location = { hash: "#token=abc", pathname: "/", search: "" };
-    expect(takeToken(location, session, () => {})).toBeNull();
-    expect(takeToken({ ...location, hash: `#token=${token}x` }, session, () => {})).toBeNull();
+  test("trades nothing that is not a whole code, and keeps no session for a refused one", async () => {
+    const trades: string[] = [];
+    const trade = async (traded: string) => {
+      trades.push(traded);
+      return null;
+    };
+    const location = { hash: "#code=abc", pathname: "/", search: "" };
+    expect(await takeSession(location, storage(), () => {}, trade)).toBeNull();
+    expect(
+      await takeSession({ ...location, hash: `#code=${code}` }, storage(), () => {}, trade),
+    ).toBeNull();
+    expect(trades).toEqual([code]);
   });
 });
 

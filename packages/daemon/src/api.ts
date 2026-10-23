@@ -19,6 +19,7 @@ import {
 import type { HTMLBundle } from "bun";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { DashboardSessions } from "./dashboard-session.ts";
 import type { EventStore } from "./event-store.ts";
 import {
   activeRuns,
@@ -66,6 +67,8 @@ export interface ApiOptions {
   now?: () => Date;
   /** Where a task's diff lives, for `kozo show --diff`. */
   locateTask?(ref: string): Promise<{ repository: string; branch: string; base: string } | null>;
+  /** The dashboard's sessions, whose tokens the API accepts beside its own. */
+  sessions?: DashboardSessions;
 }
 
 const error = (c: Context, status: number, message: string, issues?: string[]) =>
@@ -94,6 +97,7 @@ export function createApi({
   commands,
   now = () => new Date(),
   locateTask,
+  sessions = new DashboardSessions(),
 }: ApiOptions) {
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
   const origins = new Set([...hosts].map((host) => `http://${host}`));
@@ -106,9 +110,23 @@ export function createApi({
       if (!/^[0-9a-f]{32,128}$/.test(nonce)) return error(c, 400, "hello needs a hex nonce");
       return c.json({ proof: helloProof(token, nonce) });
     }
-    if (!tokenMatches(c.req.header("authorization"), token))
-      return error(c, 401, "missing or wrong API token");
     const origin = c.req.header("origin");
+    // The page trades the code it was opened with for a session; only its own origin may.
+    if (c.req.method === "POST" && c.req.path === "/api/dashboard/session") {
+      if (origin === undefined || !origins.has(origin))
+        return error(c, 403, "a session is given only to the dashboard's own origin");
+      const body = (await jsonBody(c).catch(() => ({}))) as { code?: unknown };
+      const session = typeof body.code === "string" ? sessions.redeem(body.code) : null;
+      if (session === null) return error(c, 403, "the code is unknown, used or expired");
+      return c.json({ token: session });
+    }
+    const header = c.req.header("authorization");
+    const api = tokenMatches(header, token);
+    const session = !api && header?.startsWith("Bearer ") && sessions.accepts(header.slice(7));
+    if (!api && !session) return error(c, 401, "missing or wrong API token");
+    // A code opens a new session, so only the API token, never a session, may ask for one.
+    if (c.req.path === "/api/dashboard/code" && !api)
+      return error(c, 403, "only the API token asks for a dashboard code");
     if (c.req.method !== "GET" && origin !== undefined && !origins.has(origin)) {
       return error(c, 403, "writes are accepted only from this machine's own origin");
     }
@@ -243,6 +261,7 @@ export function createApi({
     return c.json(await commands.act(ref, parsedReference, verb.data, body.data));
   });
 
+  app.post("/api/dashboard/code", (c) => c.json({ code: sessions.code() }));
   app.post("/api/factory/pause", async (c) => c.json(await commands.pauseFactory()));
   app.post("/api/factory/resume", async (c) => c.json(await commands.resumeFactory()));
   app.post("/api/admin/db-rebuild", async (c) => c.json(await commands.rebuildIndex()));

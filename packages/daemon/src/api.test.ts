@@ -4,6 +4,7 @@ import { kozoHome } from "@kozo/core";
 import { recordedLogs, type TempDirectory, tempDirectory } from "@kozo/testing";
 import { CommandError, type Commands, createApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
+import { DashboardSessions } from "./dashboard-session.ts";
 import { EventStore } from "./event-store.ts";
 
 const port = 7420;
@@ -204,5 +205,60 @@ describe("apiToken", () => {
     await Bun.write(paths.apiToken, `${"b".repeat(64)}\n`);
     await chmod(paths.apiToken, 0o644);
     await expect(apiToken(paths)).rejects.toThrow("readable by others");
+  });
+});
+
+describe("dashboard sessions", () => {
+  test("a code from the API token opens one session for the page's own origin, once", async () => {
+    let now = 0;
+    const api = createApi({
+      store,
+      token,
+      port,
+      mode: "local",
+      commands,
+      sessions: new DashboardSessions(() => now),
+    });
+    const host = { host: `127.0.0.1:${port}` };
+    const origin = { ...host, origin: `http://127.0.0.1:${port}` };
+    const send = (path: string, init: RequestInit & { headers?: Record<string, string> }) =>
+      api.request(`http://127.0.0.1:${port}${path}`, init);
+    const code = async () => {
+      const answer = await send("/api/dashboard/code", {
+        method: "POST",
+        headers: { ...host, authorization: `Bearer ${token}` },
+      });
+      return ((await answer.json()) as { code: string }).code;
+    };
+    const trade = (body: unknown, headers: Record<string, string> = origin) =>
+      send("/api/dashboard/session", { method: "POST", headers, body: JSON.stringify(body) });
+
+    const first = await code();
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    expect((await trade({ code: first }, host)).status).toBe(403);
+    expect((await trade({ code: first }, { ...host, origin: "https://example.com" })).status).toBe(
+      403,
+    );
+    const traded = await trade({ code: first });
+    expect(traded.status).toBe(200);
+    const { token: session } = (await traded.json()) as { token: string };
+    expect(session).toMatch(/^[0-9a-f]{64}$/);
+    expect((await trade({ code: first })).status).toBe(403);
+
+    const asSession = { ...origin, authorization: `Bearer ${session}` };
+    expect((await send("/api/status", { headers: asSession })).status).toBe(200);
+    expect((await send("/api/factory/pause", { method: "POST", headers: asSession })).status).toBe(
+      200,
+    );
+    expect((await send("/api/dashboard/code", { method: "POST", headers: asSession })).status).toBe(
+      403,
+    );
+    expect(
+      (await send("/api/status", { headers: { ...host, authorization: "Bearer nope" } })).status,
+    ).toBe(401);
+
+    const late = await code();
+    now += 61_000;
+    expect((await trade({ code: late })).status).toBe(403);
   });
 });

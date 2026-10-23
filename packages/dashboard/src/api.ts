@@ -1,23 +1,37 @@
 import type { ApiError as ApiErrorBody, Event, Verb } from "@kozo/core";
 
-/** Where the page keeps the API token: this tab's session, never the URL or other tabs. */
-const tokenKey = "kozo.token";
+/** Where the page keeps its session token: this tab's session, never the URL or other tabs. */
+const tokenKey = "kozo.session";
 
 /**
- * Moves a token that `kozo dashboard` put in the URL fragment into the tab's session storage and
- * out of the address, and returns the token the tab holds.
+ * The tab's session token. A page that `kozo dashboard` opened with a code in the URL fragment
+ * takes the code out of the address at once and trades it for a session token, which it keeps
+ * in the tab's session storage; a code that fails leaves the tab without a session.
  */
-export function takeToken(
+export async function takeSession(
   location: { hash: string; pathname: string; search: string },
   storage: Pick<Storage, "getItem" | "setItem">,
   replace: (url: string) => void,
-): string | null {
-  const match = /^#token=([0-9a-f]{64})$/.exec(location.hash);
+  trade: (code: string) => Promise<string | null>,
+): Promise<string | null> {
+  const match = /^#code=([0-9a-f]{64})$/.exec(location.hash);
   if (match?.[1]) {
-    storage.setItem(tokenKey, match[1]);
     replace(`${location.pathname}${location.search}#/`);
+    const token = await trade(match[1]);
+    if (token) storage.setItem(tokenKey, token);
   }
   return storage.getItem(tokenKey);
+}
+
+/** Trades a code for a session token with kozod, or null when kozod refuses it. */
+export async function tradeCode(code: string): Promise<string | null> {
+  const response = await fetch("/api/dashboard/session", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  if (!response.ok) return null;
+  return ((await response.json()) as { token?: string }).token ?? null;
 }
 
 export class ApiError extends Error {

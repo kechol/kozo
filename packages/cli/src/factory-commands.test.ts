@@ -105,8 +105,15 @@ describe("the daily commands", () => {
     expect((await kozo("ls", "items")).stdout).toContain("K-1");
     expect((await kozo("say", "K-1")).code).toBe(2);
     const url = (await kozo("dashboard", "--url")).stdout;
-    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/#token=[0-9a-f]{64}$/);
-    expect((await fetch(url.split("#")[0] ?? "")).status).toBe(200);
+    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/#code=[0-9a-f]{64}$/);
+    const [page, code] = url.split("/#code=");
+    expect((await fetch(`${page}/`)).status).toBe(200);
+    const traded = await fetch(`${page}/api/dashboard/session`, {
+      method: "POST",
+      headers: { origin: page ?? "" },
+      body: JSON.stringify({ code }),
+    });
+    expect(traded.status).toBe(200);
 
     const stopped = await kozo("down");
     expect(stopped).toMatchObject({ stdout: "kozod is down" });
