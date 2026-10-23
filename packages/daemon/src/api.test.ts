@@ -27,6 +27,10 @@ const commands: Commands = {
   pauseFactory: async () => ({ message: "paused" }),
   resumeFactory: async () => ({ message: "resumed" }),
   rebuildIndex: async () => ({ message: "rebuilt" }),
+  prune: async (body) => {
+    calls.push(["prune", body]);
+    return { message: "pruned", before: "2026-07-01T00:00:00.000Z", runs: [] };
+  },
   install: async (body) => {
     calls.push(["install", body]);
     return { message: "opened" };
@@ -206,6 +210,11 @@ describe("the local API", () => {
     expect((await call("/api/refs/K-9/say", { method: "POST", body: '{"text":"x"}' })).status).toBe(
       404,
     );
+    const prune = (body: unknown) =>
+      call("/api/admin/prune", { method: "POST", body: JSON.stringify(body) });
+    expect((await prune({ older_than_days: 0 })).status).toBe(400);
+    expect((await prune({ older_than_days: 30, dry_run: true })).status).toBe(200);
+    expect(calls.at(-1)).toEqual(["prune", { older_than_days: 30, dry_run: true }]);
   });
 });
 

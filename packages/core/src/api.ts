@@ -62,6 +62,14 @@ export const installSchema = z.strictObject({
 });
 export type Install = z.infer<typeof installSchema>;
 
+export const pruneSchema = z.strictObject({
+  /** Prunes the runs of items that closed at least this many days ago. */
+  older_than_days: z.int().positive(),
+  /** Lists what would go without removing it. */
+  dry_run: z.boolean().optional(),
+});
+export type Prune = z.infer<typeof pruneSchema>;
+
 /** The JSON body of every error response. */
 export interface ApiError {
   error: string;

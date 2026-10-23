@@ -548,11 +548,15 @@ function missing(message: string): never {
   throw new UsageError(message);
 }
 
-/** `kozo admin db-rebuild`: rebuilds kozo.db from the event logs. */
+/** `kozo admin`: creates the definition, installs a repository, rebuilds kozo.db or prunes runs. */
 export async function admin(args: readonly string[], out: Lines): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...args],
-    options: { json: { type: "boolean" } },
+    options: {
+      json: { type: "boolean" },
+      "older-than": { type: "string" },
+      "dry-run": { type: "boolean" },
+    },
     allowPositionals: true,
   });
   if (positionals[0] === "init") return await initFactory(values.json, out);
@@ -561,8 +565,17 @@ export async function admin(args: readonly string[], out: Lines): Promise<number
     if (!path) throw new UsageError("admin install takes the repository's path");
     return await installRepository(resolve(path), values.json, out);
   }
+  if (positionals[0] === "prune") {
+    const days = Number(values["older-than"]);
+    if (!Number.isInteger(days) || days < 1)
+      throw new UsageError("admin prune takes --older-than <days>, a whole number of days");
+    return postAndPrint(out, values.json, "/api/admin/prune", {
+      older_than_days: days,
+      ...(values["dry-run"] ? { dry_run: true } : {}),
+    });
+  }
   if (positionals[0] !== "db-rebuild")
-    throw new UsageError("admin takes init, install or db-rebuild");
+    throw new UsageError("admin takes init, install, db-rebuild or prune");
   return postAndPrint(out, values.json, "/api/admin/db-rebuild");
 }
 

@@ -10,7 +10,9 @@ import {
   isClosed,
   issueText,
   listKindSchema,
+  type Prune,
   parseReference,
+  pruneSchema,
   type Reference,
   type Stage,
   secretMatches,
@@ -60,6 +62,7 @@ export interface Commands {
   resumeFactory(): Promise<VerbResult>;
   rebuildIndex(): Promise<VerbResult>;
   install(body: Install): Promise<VerbResult>;
+  prune(body: Prune): Promise<VerbResult & { before: string; runs: string[] }>;
 }
 
 export interface ApiOptions {
@@ -357,6 +360,11 @@ export function createApi({
     const body = installSchema.safeParse(await jsonBody(c));
     if (!body.success) return error(c, 400, "invalid install", body.error.issues.map(issueText));
     return c.json(await commands.install(body.data));
+  });
+  app.post("/api/admin/prune", async (c) => {
+    const body = pruneSchema.safeParse(await jsonBody(c));
+    if (!body.success) return error(c, 400, "invalid prune", body.error.issues.map(issueText));
+    return c.json(await commands.prune(body.data));
   });
 
   app.notFound((c) => error(c, 404, "no such endpoint"));

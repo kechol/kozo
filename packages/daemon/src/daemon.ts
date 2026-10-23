@@ -14,6 +14,7 @@ import { GitHubSync } from "./github-sync.ts";
 import { readItemFile } from "./item-file.ts";
 import { type Launcher, processLauncher } from "./launcher.ts";
 import { Notifier, type Notify, osNotify } from "./notifier.ts";
+import { pruneRecords } from "./prune.ts";
 import { Reconciler } from "./reconcile.ts";
 import { readCharter } from "./repository.ts";
 import { Runner } from "./runner.ts";
@@ -149,6 +150,11 @@ export class Daemon {
           throw new CommandError(409, "in local mode, kozo admin install writes the files itself");
         return await github.install(repository);
       }, false),
+      prune: apiCall(
+        ({ older_than_days, dry_run }) =>
+          pruneRecords(home, store, older_than_days, dry_run ?? false),
+        false,
+      ),
     };
     // For the dashboard's levels: each repository's Charter and each item's requested class.
     const charterOf = minuteCache((repository) =>

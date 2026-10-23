@@ -88,6 +88,9 @@ Commands:
       Add kozo's files to a repository; in GitHub mode kozod opens them as a
       pull request
   admin db-rebuild          Rebuild kozo.db from the event logs
+  admin prune --older-than <days> [--dry-run] [--json]
+      Remove all but the event log, report, verdicts and decision log of
+      every run whose item closed at least <days> days ago
 
   gates [--level fast|full|deep] [--base <ref>] [--json]
       Run the gates of one level (default full); with --base, take the

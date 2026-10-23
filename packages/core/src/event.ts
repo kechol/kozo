@@ -137,6 +137,11 @@ export const eventSchema = z
     event("factory.applied", z.strictObject({ commit: text })),
     /** The factory definition at `commit` did not validate; the one in use stays. */
     event("factory.refused", z.strictObject({ commit: text, issues: z.array(text).nonempty() })),
+    /** A human pruned the records of `runs`, whose items closed before `before`, to their logs. */
+    event(
+      "factory.pruned",
+      z.strictObject({ before: z.iso.datetime(), runs: z.array(runReferenceSchema).nonempty() }),
+    ),
     /** The run's log as it ended; nothing is appended to it afterwards. */
     event(
       "log.sealed",

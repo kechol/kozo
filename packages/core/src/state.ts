@@ -143,6 +143,7 @@ export const recordOnlyTypes: ReadonlySet<EventType> = new Set<EventType>([
   "review.verdict",
   "external.write",
   "cost.tick",
+  "factory.pruned",
 ]);
 
 /** An event that the current state does not allow, which means a broken log or a kozod bug. */
@@ -262,6 +263,8 @@ export function applyEvent(state: FactoryState, event: Event): void {
       return;
     case "factory.refused":
       state.definition = { ...state.definition, refused: event.data.commit };
+      return;
+    case "factory.pruned":
       return;
     case "item.created": {
       const ref = event.item ?? "";
