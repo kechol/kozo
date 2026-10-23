@@ -47,7 +47,7 @@ export interface RunnerOps {
   session(spec: WorkerSpec, envelope: Envelope, maxMinutes: number): Promise<SessionResult>;
   startRun(
     envelope: Omit<Envelope, "run_id">,
-    agent: "triage" | "plan" | "implement" | "review" | "verify",
+    agent: "triage" | "plan" | "implement" | "review" | "verify" | "explorer",
     charterCommit: string,
     definition: Definition,
   ): Promise<string>;

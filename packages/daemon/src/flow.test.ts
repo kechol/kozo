@@ -1439,6 +1439,55 @@ test("one unit is still counted", () => {
     expect(nodes).not.toContain("implement");
   }, 120_000);
 
+  test("kozo say --ask answers from the records in an explorer run and leaves the task as it was", async () => {
+    const prompts: string[] = [];
+    const accepting = judgeWith("accept");
+    const judge: Judge = {
+      async judge(request) {
+        if (!request.instructions.includes("You answer one question"))
+          return accepting.judge(request);
+        prompts.push(request.prompt);
+        // More than the day's budget, so that the next ask is refused.
+        return { output: { answer: "It waits for your merge." }, model: request.model, costUsd: 2 };
+      },
+    };
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+      judge,
+      { factory: "budget: { daily_usd: 1 }\n" },
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const task = `${ref}/t1`;
+    const reference = { kind: "task", item: { repo: null, number: 1 }, task: 1 } as const;
+    const before = structuredClone(env.store.state.tasks[task]);
+    const asked = await env.control.act(task, reference, "say", {
+      text: "Why is it not merged yet?",
+      ask: true,
+    });
+    expect(asked.message).toBe("It waits for your merge.");
+    const [prompt] = prompts;
+    expect(prompt).toStartWith("<question>\nWhy is it not merged yet?\n</question>");
+    expect(prompt).toContain('<records trust="untrusted">');
+    expect(prompt).toContain(`${task} handoff, hold none`);
+    expect(prompt).toMatch(/RUN REPORT OF r-\d+/);
+    expect(prompt).toContain("src/stock.ts");
+    const explorer = Object.values(env.store.state.runs).find((run) => run.agent === "explorer");
+    expect(explorer?.state).toBe("succeeded");
+    expect({ ...env.store.state.tasks[task], runs: [], updatedAt: "" }).toEqual({
+      ...before,
+      runs: [],
+      updatedAt: "",
+    });
+    expect(env.store.state.tasks[task]?.runs.at(-1)).toBe(explorer?.ref);
+
+    await expect(
+      env.control.act(task, reference, "say", { text: "And now?", ask: true }),
+    ).rejects.toThrow("the daily budget of 1 USD is spent");
+  }, 120_000);
+
   test("kozo say reaches a running run at its next turn", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage"

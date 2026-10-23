@@ -68,7 +68,14 @@ export function parseFactoryConfig(text: string, issues: string[]): Factory | nu
   };
 }
 
-export const definedAgents = ["triage", "plan", "implement", "review", "verify"] as const;
+export const definedAgents = [
+  "triage",
+  "plan",
+  "implement",
+  "review",
+  "verify",
+  "explorer",
+] as const;
 export type DefinedAgent = (typeof definedAgents)[number];
 
 /** One version of the factory definition, applied only as a whole. */

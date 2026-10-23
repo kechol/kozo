@@ -468,6 +468,7 @@ export async function verb(name: Verb, args: readonly string[], out: Lines): Pro
     options: {
       json: { type: "boolean" },
       now: { type: "boolean" },
+      ask: { type: "boolean" },
       done: { type: "boolean" },
       cancel: { type: "string" },
     },
@@ -484,7 +485,10 @@ export async function verb(name: Verb, args: readonly string[], out: Lines): Pro
     throw new UsageError(`a ${reference.kind} does not take ${name}`);
   }
   const bodies: Record<Verb, () => unknown> = {
-    say: () => ({ text: text ?? missing("say needs the text to send") }),
+    say: () => ({
+      text: text ?? missing("say needs the text to send"),
+      ...(values.ask ? { ask: true } : {}),
+    }),
     approve: () => ({ text }),
     reject: () => ({ reason: text ?? missing("reject needs a reason") }),
     pause: () => (values.now ? { now: true } : {}),

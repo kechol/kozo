@@ -21,6 +21,7 @@ import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
 import { enqueue } from "./instructions.ts";
 import { type ItemFile, itemPath, writeItemFile } from "./item-file.ts";
+import { costSince } from "./queries.ts";
 import { readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
 import { taskBranch, worktreePath } from "./worktrees.ts";
@@ -264,7 +265,16 @@ export class ControlPlane {
   }
 
   private async say(ref: string, kind: "item" | "task", body: Body<"say">): Promise<VerbResult> {
-    const { subject, item } = this.subject(ref, kind);
+    const { subject, item, task } = this.subject(ref, kind);
+    if (body.ask) {
+      if (!this.runner) throw new CommandError(409, "kozod answers questions only while it runs");
+      const midnight = new Date();
+      midnight.setHours(0, 0, 0, 0);
+      const budget = this.definition.current.factory.budget.daily_usd;
+      if (costSince(this.store.db, midnight) >= budget)
+        throw new CommandError(409, `the daily budget of ${budget} USD is spent; ask tomorrow`);
+      return { message: await this.runner.ask(item, task, body.text) };
+    }
     if (subject.hold?.kind === "question") {
       await this.note(item, ref, "answer", body.text);
       await this.clearHold(kind, ref, body.text);

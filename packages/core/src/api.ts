@@ -32,7 +32,8 @@ const text = z.string().trim().min(1);
 
 /** The body of each verb. */
 export const verbBodySchemas = {
-  say: z.strictObject({ text }),
+  /** With `ask`, the text is a question that the explorer answers from the records instead. */
+  say: z.strictObject({ text, ask: z.boolean().optional() }),
   approve: z.strictObject({ text: text.optional() }),
   reject: z.strictObject({ reason: text }),
   pause: z.strictObject({ now: z.boolean().optional() }),

@@ -4,6 +4,8 @@ import {
   autonomyLevel,
   blueprintNodes,
   type Charter,
+  explorerAnswerJsonSchema,
+  explorerAnswerSchema,
   type GateLevel,
   highestTask,
   isClosed,
@@ -44,6 +46,7 @@ import {
   packageLocks,
   readBaseDocuments,
   runGates,
+  SessionError,
   type Verifier,
 } from "@kozo/verify";
 import type { WorkerSpec } from "@kozo/worker";
@@ -51,6 +54,7 @@ import { taskSandbox } from "@kozo/worker";
 import pkg from "../package.json" with { type: "json" };
 import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
+import { explorerPrompt, explorerRecords } from "./explorer.ts";
 import { checkNotes, ownerNotes } from "./instructions.ts";
 import {
   handoffReportPath,
@@ -62,6 +66,7 @@ import {
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { nodeSteps } from "./nodes.ts";
 import { checkPlan } from "./plan-checks.ts";
+import { readCharter } from "./repository.ts";
 import { layersFor } from "./risk.ts";
 import { type Envelope, pumpSession, type SessionResult } from "./session-pump.ts";
 import {
@@ -209,7 +214,7 @@ export class Runner implements RunnerOps {
 
   async startRun(
     envelope: Omit<Envelope, "run_id">,
-    agent: "triage" | "plan" | "implement" | "review" | "verify",
+    agent: "triage" | "plan" | "implement" | "review" | "verify" | "explorer",
     charterCommit: string,
     definition: Definition,
   ) {
@@ -884,6 +889,42 @@ export class Runner implements RunnerOps {
           reason: "the check after the merge failed, a post-merge defect",
         },
       });
+    }
+  }
+
+  /**
+   * Answers a human's question about an item or one of its tasks from kozod's records, in an
+   * explorer run of its own; nothing else about the subject changes.
+   */
+  async ask(itemRef: string, taskRef: string | null, question: string): Promise<string> {
+    const item = this.store.state.items[itemRef];
+    if (!item) throw new RunnerError(`${itemRef} does not exist`);
+    const definition = this.deps.definition.current;
+    const { mode } = definition.factory;
+    const { ref } = await baseOf(item.repository, mode);
+    const tip = (await git(item.repository, ["rev-parse", ref])).trim();
+    const charter = await readCharter(item.repository, mode);
+    const run = await this.startRun({ item: itemRef, task: taskRef }, "explorer", tip, definition);
+    try {
+      const records = await explorerRecords(this.home, this.store, mode, itemRef, taskRef);
+      const answer = await this.deps.judge.judge({
+        instructions: definition.agents.explorer.instructions,
+        prompt: explorerPrompt(question, records),
+        schema: explorerAnswerJsonSchema,
+        model: modelFor(definition, "explorer"),
+        maxCostUsd: charter.ok ? charter.charter.limits.max_cost_usd : 1,
+      });
+      const parsed = explorerAnswerSchema.safeParse(answer.output);
+      if (!parsed.success) {
+        await this.endRun(run, "failed", "the answer does not match its schema", answer.costUsd);
+        throw new RunnerError("the explorer's answer does not match its schema");
+      }
+      await this.endRun(run, "succeeded", undefined, answer.costUsd);
+      return parsed.data.answer;
+    } catch (error) {
+      const spent = error instanceof SessionError ? error.costUsd : 0;
+      await this.endRun(run, "failed", String((error as Error).message).slice(0, 500), spent);
+      throw error;
     }
   }
 

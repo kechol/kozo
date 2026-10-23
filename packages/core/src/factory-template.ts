@@ -1,3 +1,6 @@
+import explorerAgent from "../../../templates/factory/agents/explorer/agent.md" with {
+  type: "text",
+};
 import implementAgent from "../../../templates/factory/agents/implement/agent.md" with {
   type: "text",
 };
@@ -33,6 +36,7 @@ export const factoryTemplate = {
   "agents/implement/agent.md": implementAgent,
   "agents/review/agent.md": reviewAgent,
   "agents/verify/agent.md": verifyAgent,
+  "agents/explorer/agent.md": explorerAgent,
   "skills/verify-app/SKILL.md": verifyAppSkill,
   "blueprints/bugfix.yml": bugfixBlueprint,
   "blueprints/deps.yml": depsBlueprint,

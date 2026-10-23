@@ -61,6 +61,9 @@ Commands:
       Show an item, task or run; -f follows its events, and --diff prints a
       task's diff against the default branch
   say <ref> <text>          Answer a question or instruct a run or task
+  say --ask <ref> <question>
+      Ask about an item, task or run; the explorer answers from the records
+      without touching the work
   approve <item> [text]     Approve a start or a plan
   reject <item> <reason>    Reject a plan
   pause [ref] [--now] | resume [ref]

@@ -66,3 +66,7 @@ export type VerdictFile = z.infer<typeof verdictFileSchema>;
 
 export const reviewJudgmentJsonSchema = jsonSchema(reviewJudgmentSchema);
 export const verifyJudgmentJsonSchema = jsonSchema(verifyJudgmentSchema);
+
+/** What the explorer answers to a human's question about work in progress. */
+export const explorerAnswerSchema = z.strictObject({ answer: z.string().min(1) });
+export const explorerAnswerJsonSchema = jsonSchema(explorerAnswerSchema);
