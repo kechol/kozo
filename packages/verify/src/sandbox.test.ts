@@ -70,9 +70,14 @@ describe("bubblewrapArgs", () => {
 let confine: Confine;
 
 /** Runs `command` confined to `sandbox` in `cwd`, returning its exit code and output. */
-async function confined(cwd: string, sandbox: CommandSandbox, command: string) {
+async function confined(
+  cwd: string,
+  sandbox: CommandSandbox,
+  command: string,
+  env?: Record<string, string>,
+) {
   let output = "";
-  const code = await runCommand(command, cwd, (text) => (output += text), undefined, {
+  const code = await runCommand(command, cwd, (text) => (output += text), env, {
     confine,
     sandbox,
   });
@@ -191,5 +196,35 @@ describe.skipIf(!sandboxed)("this machine's sandbox", () => {
     expect((await confined(work, { ...local, network: "any" }, outbound)).output).toBe("waited\n");
     const server = `bun -e 'const s = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("up") }); console.log(await (await fetch(s.url)).text()); s.stop()'`;
     expect((await confined(work, local, server)).output).toBe("up\n");
+  });
+
+  test("reaches the worktree's ports this machine listens on and serves on the others", async () => {
+    await using dir = await tempDirectory();
+    const work = await realpath(dir.path);
+    const local = { ...empty, allowWrite: [work] };
+    const host = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("host") });
+    const probe = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } });
+    const free = probe.port;
+    probe.stop(true);
+    try {
+      const env = {
+        ...(process.env as Record<string, string>),
+        KOZO_PORTS: `${host.port} ${free}`,
+      };
+      const reach = `bun -e 'console.log(await (await fetch("http://127.0.0.1:${host.port}")).text())'`;
+      expect((await confined(work, local, reach, env)).output).toBe("host\n");
+      const serve = `bun -e 'const s = Bun.serve({ port: ${free}, hostname: "127.0.0.1", fetch: () => new Response("own") }); console.log(await (await fetch(s.url)).text()); s.stop()'`;
+      expect((await confined(work, local, serve, env)).output).toBe("own\n");
+      if (process.platform !== "linux") return;
+      // Only a relayed port needs socat; without it the command says so instead of running.
+      const bin = join(work, "bin");
+      await mkdir(bin);
+      await symlink(Bun.which("grep") ?? "/usr/bin/grep", join(bin, "grep"));
+      const missing = await confined(work, local, "true", { ...env, PATH: bin });
+      expect(missing.code).toBe(126);
+      expect(missing.output).toContain("install socat");
+    } finally {
+      host.stop(true);
+    }
   });
 });

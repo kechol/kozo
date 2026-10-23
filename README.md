@@ -14,7 +14,9 @@ and hands you a small diff to read. Merging always stays with you.
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) on `PATH`, signed in
   with `claude auth login`; kozo runs its agents through the Agent SDK
 - macOS, or Linux with [bubblewrap](https://github.com/containers/bubblewrap) (`bwrap`)
-  allowed to create user namespaces, which kozo confines the gates with
+  allowed to create user namespaces, which kozo confines the gates with, and
+  [socat](http://www.dest-unreach.org/socat/) when a repository's gates use the services it
+  starts on its worktree's ports
 
 ## Getting started
 

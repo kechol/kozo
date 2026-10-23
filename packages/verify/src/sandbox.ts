@@ -221,9 +221,59 @@ export function bubblewrapArgs(sandbox: CommandSandbox): string[] {
   ];
 }
 
-/** Confines a command with bubblewrap, found on PATH, Linux's sandbox without privileges. */
+// Outside bubblewrap: relays each port of the worktree that this machine listens on to a Unix
+// socket in the command's TMPDIR, which bubblewrap mounts, and names the relayed ports to the
+// inside. A port nobody listens on is left to the command, which may serve on it itself. The
+// relays are quiet, since stopping them makes socat warn; a failed connection reaches the
+// command as one.
+const relayOutside = `ports=
+for port in $KOZO_PORTS; do
+  hex=$(printf %04X "$port")
+  if grep -qs ":$hex [0-9A-F]*:0000 0A" /proc/net/tcp /proc/net/tcp6; then ports="$ports $port"; fi
+done
+export KOZO_RELAYED="$ports" KOZO_RELAY="$TMPDIR/kozo-relay"
+[ -z "$ports" ] && exec "$@"
+if ! command -v socat >/dev/null; then
+  echo "kozo: install socat, which the sandbox needs to reach ports$ports on this machine" >&2
+  exit 126
+fi
+mkdir -m 700 "$KOZO_RELAY" || exit 126
+pids=
+trap 'kill $pids 2>/dev/null' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+for port in $ports; do
+  socat UNIX-LISTEN:"$KOZO_RELAY/$port",fork TCP4:127.0.0.1:"$port" 2>/dev/null &
+  pid=$!
+  pids="$pids $pid"
+  until [ -S "$KOZO_RELAY/$port" ]; do kill -0 "$pid" 2>/dev/null || exit 126; sleep 0.01; done
+done
+"$@"`;
+
+// Inside bubblewrap: listens on each relayed port of the command's own loopback, once ready.
+const relayInside = `for port in $KOZO_RELAYED; do
+  socat TCP4-LISTEN:"$port",bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:"$KOZO_RELAY/$port" &
+  pid=$!
+  socat "TCP6-LISTEN:$port,bind=[::1],fork,reuseaddr" "UNIX-CONNECT:$KOZO_RELAY/$port" 2>/dev/null &
+  hex=$(printf %04X "$port")
+  until grep -qs ":$hex [0-9A-F]*:0000 0A" /proc/net/tcp; do kill -0 "$pid" 2>/dev/null || exit 126; sleep 0.01; done
+done
+unset KOZO_RELAYED KOZO_RELAY
+exec "$@"`;
+
+/**
+ * Confines a command with bubblewrap, found on PATH, Linux's sandbox without privileges. A
+ * `local` command reaches the ports of `KOZO_PORTS` that this machine listens on when it
+ * starts, such as a database its services started, through socat.
+ */
 export function bubblewrap(bwrap: string): Confine {
-  return (sandbox, argv) => [bwrap, ...bubblewrapArgs(sandbox), "--", ...argv];
+  return (sandbox, argv) => {
+    const confined = [bwrap, ...bubblewrapArgs(sandbox), "--"];
+    if (sandbox.network !== "local") return [...confined, ...argv];
+    const relay = (script: string) => ["/bin/sh", "-c", script, "kozo-relay"];
+    return [...relay(relayOutside), ...confined, ...relay(relayInside), ...argv];
+  };
 }
 
 /** This machine's way to confine a command, or why there is none. */
