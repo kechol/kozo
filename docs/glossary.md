@@ -64,12 +64,13 @@
 | item | A request from a human or an automation that kozo splits into one or more tasks. | `K-<n>`, `<repo>#<n>` | job, ticket | - |
 | item order | The order in which kozod starts the work of items and lists them: the order they arrived in, until a human moves one. | `order`, `kozo reorder`, `item.reordered` | priority, rank | - |
 | note | What a human said about an item or a task outside a running run, or what kozod's failed check at Complete found, kept as an event and given to every later run of that item or task. | `note.added` | comment, memo | - |
-| paused | The hold set when a human stops an item, a task or a run, or takes a task over. | `paused` | - | - |
+| paused | The hold set when a human stops an item, a task or a run. | `paused` | - | - |
 | plan | The single document that states an item's work class, risk tier, approach, DONE_WHEN and task split. | `kozo-plan:v1`, `plan.yml` | spec, work order | - |
 | question | The hold that waits for a human answer after `kozo_blocked`, an escalate verdict or a needed protected-path change. | `question`, `kozo say` | - | - |
 | reference | The text that names an item, a task or a run in commands, events and the local API: `K-<n>` or `<repo>#<n>` for an item, `<item>/t<n>` for a task and `r-<nnnn>` for a run. | `Reference` | handle | - |
 | scope | The path globs of a task outside which its diff may not change files. | `scope`, `--scope` | - | - |
 | stage | The position of an item or a task in the flow: Intake, Triage, Planning, Building, Reviewing, Handoff, Complete or Cancelled. | `stage`, `kozo:<stage>` | phase, status, step | - |
+| taken | The hold on a task that a human took over, which only `kozo return` clears. | `taken` | - | - |
 | task | The unit that kozo cuts from an item so that it produces exactly one diff. | `<item>/t<n>` | subtask, ticket | - |
 | trusted requester | A requester whose items need no start approval: the owner in local mode, or in GitHub mode a user with write access who opened the Issue after the repository was registered. | - | - | - |
 
