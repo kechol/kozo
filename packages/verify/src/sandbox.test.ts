@@ -29,6 +29,7 @@ describe("packageLocks", () => {
   test("holds the lock directories pnpm keeps in /tmp whatever TMPDIR says", () => {
     const tmp = process.platform === "darwin" ? "/private/tmp" : "/tmp";
     expect(packageLocks).toContain(`${tmp}/pnpm-store-operation-locks-${process.getuid?.()}`);
+    expect(packageLocks).toContain(`${tmp}/pnpm-verify-deps-install-locks-${process.getuid?.()}`);
   });
 });
 
@@ -219,6 +220,12 @@ describe.skipIf(!sandboxed)("this machine's sandbox", () => {
     expect((await run(`echo x > "${shared}/made/c"`)).code).toBe(0);
     expect((await lstat(join(shared, "made"))).isDirectory()).toBe(true);
     expect((await run(`mkdir "${root}/missing"`)).code).not.toBe(0);
+    // pnpm sets the mode of its lock directories, and only those roots take a new mode.
+    const [lock = ""] = packageLocks;
+    const locked = { ...empty, allowWrite: [work, lock] };
+    expect((await confined(root, locked, `chmod 700 "${lock}"`)).code).toBe(0);
+    if (process.platform === "darwin")
+      expect((await confined(root, locked, `chmod 700 "${work}"`)).code).not.toBe(0);
   });
 
   test("reaches no Unix socket outside its writable roots", async () => {

@@ -130,7 +130,11 @@ export function homeReadable(env: Record<string, string | undefined>): string[] 
  * The lock directories pnpm keeps in /tmp whatever TMPDIR says, which every pnpm command takes,
  * `pnpm run` included, so every confined command may write them.
  */
-export const packageLocks = ["pnpm-dir-locks", "pnpm-store-operation-locks"].map(
+export const packageLocks = [
+  "pnpm-dir-locks",
+  "pnpm-store-operation-locks",
+  "pnpm-verify-deps-install-locks",
+].map(
   (name) =>
     `${process.platform === "darwin" ? "/private/tmp" : "/tmp"}/${name}-${process.getuid?.() ?? 0}`,
 );
@@ -194,6 +198,10 @@ export function seatbeltProfile(sandbox: CommandSandbox): string {
     // A writable root itself may not be removed, renamed or replaced, by a link to anywhere, say,
     // which the next run would resolve and then allow.
     ...sandbox.allowWrite.map((path) => `(deny file-write* (literal ${quoted(path)}))`),
+    // pnpm sets the mode of each lock directory it takes, which moves nothing a later run resolves.
+    ...sandbox.allowWrite
+      .filter((path) => packageLocks.includes(path))
+      .map((path) => `(allow file-write-mode (literal ${quoted(path)}))`),
     '(allow file-write* file-ioctl (literal "/dev/null") (literal "/dev/tty") (regex #"^/dev/fd/"))',
     ...rule("deny file-write*", sandbox.denyWrite),
     ...network,
