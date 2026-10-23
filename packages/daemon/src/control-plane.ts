@@ -2,8 +2,10 @@ import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   type AddItem,
+  type Approvals,
   type Automation,
   autonomyLevel,
+  type Charter,
   isClosed,
   type KozoHome,
   type NoteKind,
@@ -12,6 +14,7 @@ import {
   runFiles,
   type Stage,
   startApprovalReason,
+  startNeeded,
   type Verb,
   type verbBodySchemas,
 } from "@kozo/core";
@@ -86,7 +89,8 @@ export class ControlPlane {
       ref,
       { repository, class: body.class ?? null, title: body.title.trim(), body: body.body ?? "" },
       "local",
-      autonomyLevel(charter.charter, body.class ?? null) === "L1",
+      "level",
+      charter.charter,
     );
     return started
       ? { ref, message: `added ${ref}; it goes to Triage` }
@@ -115,7 +119,8 @@ export class ControlPlane {
       ref,
       { repository, class: automation.class, title: automation.title, body: automation.body },
       "automation",
-      true,
+      "always",
+      charter.charter,
     );
     return { ref };
   }
@@ -128,7 +133,8 @@ export class ControlPlane {
     ref: string,
     file: ItemFile,
     source: "local" | "github" | "automation",
-    startApproval: boolean,
+    approvals: Approvals,
+    charter: Charter,
   ): Promise<boolean> {
     const { repository, title } = file;
     await writeItemFile(this.home, ref, file);
@@ -136,13 +142,13 @@ export class ControlPlane {
       await this.store.append({
         type: "item.created",
         item: ref,
-        data: { repository, title, source, class: file.class },
+        data: { repository, title, source, class: file.class, approvals },
       });
     } catch (error) {
       await rm(itemPath(this.home, ref), { force: true });
       throw error;
     }
-    if (startApproval) {
+    if (startNeeded(approvals, autonomyLevel(charter, file.class))) {
       await this.store.append({
         type: "hold.set",
         item: ref,

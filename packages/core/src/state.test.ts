@@ -16,6 +16,7 @@ import {
   replay,
   StateError,
   startBlocker,
+  startNeeded,
 } from "./state.ts";
 
 const plan = (tasks = 1, risk: Plan["risk"] = "normal"): Plan => ({
@@ -41,7 +42,7 @@ function planned(write = eventWriter(), accepted = plan()): Event[] {
   return [
     write(
       "item.created",
-      { repository: "~/src/app", title: "Fix", source: "local", class: null },
+      { repository: "~/src/app", title: "Fix", source: "local", class: null, approvals: "level" },
       item,
     ),
     write(
@@ -65,7 +66,13 @@ describe("replay", () => {
     const asked = replay([
       write(
         "item.created",
-        { repository: "~/src/app", title: "Docs", source: "local", class: "docs" },
+        {
+          repository: "~/src/app",
+          title: "Docs",
+          source: "local",
+          class: "docs",
+          approvals: "level",
+        },
         { item: "K-1" },
       ),
     ]);
@@ -81,7 +88,7 @@ describe("replay", () => {
     const created = (ref: string) =>
       write(
         "item.created",
-        { repository: "~/src/app", title: ref, source: "local", class: null },
+        { repository: "~/src/app", title: ref, source: "local", class: null, approvals: "level" },
         { item: ref },
       );
     const events = [
@@ -277,7 +284,13 @@ describe("replay", () => {
       replay([
         write(
           "item.created",
-          { repository: "~/src/app", title: "Fix", source: "local", class: null },
+          {
+            repository: "~/src/app",
+            title: "Fix",
+            source: "local",
+            class: null,
+            approvals: "level",
+          },
           item,
         ),
         write(
@@ -399,17 +412,24 @@ describe("itemStage", () => {
 
 describe("branches", () => {
   test("Plan needed? sends L1 and L2 to Planning, and L3 only for high risk, a split or a codemod", () => {
-    expect(planNeeded("L1", plan())).toBe(true);
-    expect(planNeeded("L2", plan())).toBe(true);
-    expect(planNeeded("L3", plan())).toBe(false);
-    expect(planNeeded("L3", plan(1, "high"))).toBe(true);
-    expect(planNeeded("L3", plan(2))).toBe(true);
+    expect(planNeeded("level", "L1", plan())).toBe(true);
+    expect(planNeeded("level", "L2", plan())).toBe(true);
+    expect(planNeeded("level", "L3", plan())).toBe(false);
+    expect(planNeeded("level", "L3", plan(1, "high"))).toBe(true);
+    expect(planNeeded("level", "L3", plan(2))).toBe(true);
     const codemod = plan();
     codemod.tasks = codemod.tasks.map((task) => ({
       ...task,
       codemod: "npx codemod",
     })) as Plan["tasks"];
-    expect(planNeeded("L3", codemod)).toBe(true);
+    expect(planNeeded("level", "L3", codemod)).toBe(true);
+  });
+
+  test("an item whose approvals are always needed waits for both at every level", () => {
+    expect(startNeeded("always", "L3")).toBe(true);
+    expect(planNeeded("always", "L3", plan())).toBe(true);
+    expect(startNeeded("level", "L1")).toBe(true);
+    expect(startNeeded("level", "L2")).toBe(false);
   });
 
   test("Revision needed? retries a revise up to inner_retries and then asks for attention", () => {
@@ -437,7 +457,7 @@ describe("holds", () => {
     const created = [
       write(
         "item.created",
-        { repository: "~/src/app", title: "Fix", source: "local", class: null },
+        { repository: "~/src/app", title: "Fix", source: "local", class: null, approvals: "level" },
         item,
       ),
     ];
@@ -519,7 +539,7 @@ describe("holds", () => {
     const state = replay([
       write(
         "item.created",
-        { repository: "~/src/app", title: "Fix", source: "local", class: null },
+        { repository: "~/src/app", title: "Fix", source: "local", class: null, approvals: "level" },
         item,
       ),
       write(

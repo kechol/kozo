@@ -3,6 +3,7 @@ import type { Event, EventType, NoteKind } from "./event.ts";
 import type { Plan } from "./plan.ts";
 import type { ReviewVerdict } from "./verdict.ts";
 import {
+  type Approvals,
   type HoldKind,
   type RiskTier,
   type RunState,
@@ -32,6 +33,7 @@ export interface ItemState {
   source: "local" | "github" | "automation";
   /** The class the request asked for, or null. */
   requestedClass: WorkClass | null;
+  approvals: Approvals;
   /** Who accepted the item's latest plan, or null before one is accepted. */
   acceptedBy: "human" | "kozod" | null;
   /**
@@ -270,6 +272,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
         title: event.data.title,
         source: event.data.source,
         requestedClass: event.data.class,
+        approvals: event.data.approvals,
         acceptedBy: null,
         stage: "intake",
         hold: null,
@@ -548,13 +551,19 @@ export function itemLevel(
   return levels.sort()[0] ?? charter.levels.default;
 }
 
+/** Start approval needed?: whether a new item waits for a human before it goes to Triage. */
+export function startNeeded(approvals: Approvals, level: AutonomyLevel): boolean {
+  return approvals === "always" || level === "L1";
+}
+
 /**
  * Plan needed?: whether an item goes from Triage to Planning for a plan approval or has its
  * draft accepted as it is. L3 skips Planning only for a single task below the high risk tier
  * without a codemod, a command that a human reads before kozod runs it.
  */
-export function planNeeded(level: AutonomyLevel, plan: Plan): boolean {
-  if (level !== "L3" || plan.tasks.some((task) => task.codemod !== undefined)) return true;
+export function planNeeded(approvals: Approvals, level: AutonomyLevel, plan: Plan): boolean {
+  if (approvals === "always" || level !== "L3") return true;
+  if (plan.tasks.some((task) => task.codemod !== undefined)) return true;
   return plan.risk === "high" || plan.tasks.length > 1;
 }
 

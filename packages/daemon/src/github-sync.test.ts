@@ -122,9 +122,16 @@ describe("GitHubSync", () => {
     await env.sync.poll();
     const { items } = env.store.state;
     expect(Object.keys(items)).toEqual([`shop#${trusted}`, `shop#${reader}`, `shop#${old}`]);
-    expect(items[`shop#${trusted}`]).toMatchObject({ stage: "triage", hold: null });
-    expect(items[`shop#${reader}`]?.hold?.reason).toBe("start approval");
-    expect(items[`shop#${old}`]?.hold?.reason).toBe("start approval");
+    expect(items[`shop#${trusted}`]).toMatchObject({
+      stage: "triage",
+      hold: null,
+      approvals: "level",
+    });
+    for (const untrusted of [reader, old])
+      expect(items[`shop#${untrusted}`]).toMatchObject({
+        hold: { reason: "start approval" },
+        approvals: "always",
+      });
     expect(await readItemFile(env.home, `shop#${trusted}`)).toMatchObject({
       title: "Low stock",
       body: "Say only N left.",

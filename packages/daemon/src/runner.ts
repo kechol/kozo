@@ -499,9 +499,8 @@ export class Runner implements RunnerOps {
     requested: WorkClass | null,
   ) {
     const level = itemLevel(charter, requested, plan.class);
-    // An automation adds work while nobody watches, so a human approves each of its plans.
-    const automated = this.store.state.items[itemRef]?.source === "automation";
-    if (!automated && !planNeeded(level, plan)) {
+    const approvals = this.store.state.items[itemRef]?.approvals ?? "always";
+    if (!planNeeded(approvals, level, plan)) {
       await this.store.append({
         type: "plan.accepted",
         item: itemRef,
@@ -517,9 +516,10 @@ export class Runner implements RunnerOps {
         from: "triage",
         to: "planning",
         by: "kozod",
-        reason: automated
-          ? "an automation's plan always needs an approval"
-          : `the plan needs an approval at ${level}`,
+        reason:
+          approvals === "always"
+            ? "the request has no trusted requester, so its plan always needs an approval"
+            : `the plan needs an approval at ${level}`,
       },
     });
     await this.hold(itemRef, null, "approval", planApprovalReason);

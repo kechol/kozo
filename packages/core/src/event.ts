@@ -13,6 +13,7 @@ import {
 import { reviewVerdictSchema } from "./verdict.ts";
 import {
   agentNameSchema,
+  approvalsSchema,
   holdKindSchema,
   riskTierSchema,
   runStateSchema,
@@ -108,6 +109,7 @@ export const eventSchema = z
         source: z.enum(["local", "github", "automation"]),
         /** The class the request asked for, or null when triage drafts one. */
         class: workClassSchema.nullable(),
+        approvals: approvalsSchema,
       }),
     ),
     /** A human moved the item before another, or to the end when `before` is null. */

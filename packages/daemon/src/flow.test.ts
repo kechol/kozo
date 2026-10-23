@@ -1520,6 +1520,7 @@ test("one unit is still counted", () => {
     expect(Object.keys(env.store.state.items)).toEqual(["K-1"]);
     expect(env.store.state.items["K-1"]).toMatchObject({
       source: "automation",
+      approvals: "always",
       hold: { kind: "approval", reason: "start approval" },
     });
     await automations.run(new Date("2026-10-24T03:00:00"));

@@ -1,6 +1,5 @@
 import { join, resolve } from "node:path";
 import {
-  autonomyLevel,
   type GitHub,
   type GitHubIssue,
   type GitHubPermission,
@@ -683,7 +682,7 @@ Part of #${issue}`;
 
   /**
    * Takes an Issue as an item. Only a writer's Issue opened after the repository was registered
-   * is trusted; any other waits for a start approval whatever the autonomy level.
+   * is trusted; any other needs a start and a plan approval whatever the autonomy level.
    */
   private async take(path: string, github: string, ref: string, issue: GitHubIssue) {
     const charter = await readCharter(path, "github");
@@ -698,7 +697,8 @@ Part of #${issue}`;
       ref,
       { repository: path, class: null, title: issue.title.trim(), body: issue.body },
       "github",
-      !trusted || autonomyLevel(charter.charter, null) === "L1",
+      trusted ? "level" : "always",
+      charter.charter,
     );
   }
 

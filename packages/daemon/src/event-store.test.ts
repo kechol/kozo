@@ -13,6 +13,7 @@ const created = {
     title: "Reject a blank quantity",
     source: "local",
     class: null,
+    approvals: "level",
   },
 } as const;
 

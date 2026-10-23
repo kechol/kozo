@@ -56,6 +56,7 @@ const examples: Record<EventType, unknown> = {
     title: "Low stock notice",
     source: "local",
     class: null,
+    approvals: "level",
   },
   "item.edited": {
     title: "Low stock notice for 0 units",

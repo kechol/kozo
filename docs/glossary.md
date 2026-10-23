@@ -72,7 +72,7 @@
 | stage | The position of an item or a task in the flow: Intake, Triage, Planning, Building, Reviewing, Handoff, Complete or Cancelled. | `stage`, `kozo:<stage>` | phase, status, step | - |
 | taken | The hold on a task that a human took over, which only `kozo return` clears. | `taken` | - | - |
 | task | The unit that kozo cuts from an item so that it produces exactly one diff. | `<item>/t<n>` | subtask, ticket | - |
-| trusted requester | A requester whose items need no start approval: the owner in local mode, or in GitHub mode a user with write access who opened the Issue after the repository was registered. | - | - | - |
+| trusted requester | A requester whose items' start and plan approvals follow the autonomy level: the owner in local mode, or in GitHub mode a user with write access who opened the Issue after the repository was registered, and never an automation. | `approvals: level` | - | - |
 
 ## Execution
 

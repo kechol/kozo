@@ -24,6 +24,13 @@ export const holdKindSchema = z.enum([
 ]);
 export type HoldKind = z.infer<typeof holdKindSchema>;
 
+/**
+ * Whether an item's start and plan approvals follow its autonomy level, for a trusted requester's
+ * request, or are always needed.
+ */
+export const approvalsSchema = z.enum(["level", "always"]);
+export type Approvals = z.infer<typeof approvalsSchema>;
+
 /** The reasons of the two approval holds, by which kozod tells a start from a plan approval. */
 export const startApprovalReason = "start approval";
 export const planApprovalReason = "plan approval";
