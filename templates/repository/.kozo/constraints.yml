@@ -21,6 +21,6 @@ levels:
   fast: [lint]
   full: [lint, test]
   deep: [lint, test]
-# Commands that run the changed test files, which must fail without the change; {files} is
-# replaced with their paths.
+# Commands that run the changed test files, which must fail without the change, or keep passing
+# for work that keeps behaviour, such as a refactor; {files} is replaced with their paths.
 prove: []
