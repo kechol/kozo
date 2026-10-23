@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { lstat, mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -74,7 +75,8 @@ export const packageCaches = [
  * `pnpm run` included, so every confined command may write them.
  */
 export const packageLocks = ["pnpm-dir-locks", "pnpm-store-operation-locks"].map(
-  (name) => `/private/tmp/${name}-${process.getuid?.() ?? 0}`,
+  (name) =>
+    `${process.platform === "darwin" ? "/private/tmp" : "/tmp"}/${name}-${process.getuid?.() ?? 0}`,
 );
 
 const quoted = (path: string) => `"${path.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
@@ -152,20 +154,85 @@ export const seatbelt: Confine = (sandbox, argv) => [
   ...argv,
 ];
 
+/**
+ * The bubblewrap arguments of `sandbox` on Linux: the whole system read-only, each denied path
+ * hidden under an empty directory or /dev/null, the readable and writable ones mounted again on
+ * top, the paths inside them that may not be written read-only once more, and a network of its
+ * own for `local`, whose loopback is all it reaches. Later mounts cover earlier ones, so the
+ * order is that of the lists; a writable root is a mount point, which the command cannot
+ * remove, rename or replace. A path that may not be written is kept read-only only when it
+ * exists, as a worktree's .git file does. Sockets of the user's session, such as a container
+ * engine's, are hidden with the runtime directory.
+ */
+export function bubblewrapArgs(sandbox: CommandSandbox): string[] {
+  const kind = (path: string) => {
+    try {
+      return statSync(path).isDirectory() ? "directory" : "file";
+    } catch {
+      return null;
+    }
+  };
+  const hide = (path: string) => {
+    const found = kind(path);
+    if (found === "directory") return ["--tmpfs", path];
+    if (found === "file") return ["--ro-bind", "/dev/null", path];
+    return [];
+  };
+  const mount = (flag: string, path: string) => (kind(path) ? [flag, path, path] : []);
+  const runtime = process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid?.() ?? 0}`;
+  return [
+    "--die-with-parent",
+    "--new-session",
+    "--unshare-pid",
+    "--unshare-ipc",
+    "--unshare-uts",
+    ...(sandbox.network === "local" ? ["--unshare-net"] : []),
+    "--ro-bind",
+    "/",
+    "/",
+    "--dev",
+    "/dev",
+    "--proc",
+    "/proc",
+    ...[runtime, "/run/docker.sock", "/var/run/docker.sock", ...sandbox.denyRead].flatMap(hide),
+    ...sandbox.allowRead.flatMap((path) => mount("--ro-bind", path)),
+    ...sandbox.allowWrite.flatMap((path) => mount("--bind", path)),
+    ...sandbox.denyWrite.flatMap((path) => mount("--ro-bind", path)),
+  ];
+}
+
+/** Confines a command with bubblewrap, found on PATH, Linux's sandbox without privileges. */
+export function bubblewrap(bwrap: string): Confine {
+  return (sandbox, argv) => [bwrap, ...bubblewrapArgs(sandbox), "--", ...argv];
+}
+
 /** This machine's way to confine a command, or why there is none. */
 export async function platformConfine(): Promise<Confine> {
-  if (process.platform !== "darwin") {
-    throw new SandboxUnavailable(`kozo has no sandbox for ${process.platform} yet`);
+  const empty: CommandSandbox = {
+    denyRead: [],
+    allowRead: [],
+    allowWrite: [],
+    denyWrite: [],
+    network: "local",
+  };
+  const probe = async (confine: Confine, name: string) => {
+    const child = Bun.spawn(confine(empty, ["/bin/sh", "-c", "true"]), {
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "pipe",
+    });
+    const [stderr, code] = await Promise.all([new Response(child.stderr).text(), child.exited]);
+    if (code !== 0) throw new SandboxUnavailable(`${name} does not run: ${stderr.trim()}`);
+    return confine;
+  };
+  if (process.platform === "darwin") return await probe(seatbelt, "sandbox-exec");
+  if (process.platform === "linux") {
+    const bwrap = Bun.which("bwrap");
+    if (!bwrap)
+      throw new SandboxUnavailable("bubblewrap is not installed; install the bwrap command");
+    return await probe(bubblewrap(bwrap), "bwrap");
   }
-  const probe = Bun.spawn(
-    seatbelt({ denyRead: [], allowRead: [], allowWrite: [], denyWrite: [], network: "local" }, [
-      "/usr/bin/true",
-    ]),
-    { stdin: "ignore", stdout: "ignore", stderr: "pipe" },
-  );
-  const [stderr, code] = await Promise.all([new Response(probe.stderr).text(), probe.exited]);
-  if (code !== 0) throw new SandboxUnavailable(`sandbox-exec does not run: ${stderr.trim()}`);
-  return seatbelt;
+  throw new SandboxUnavailable(`kozo has no sandbox for ${process.platform}`);
 }
 
 /** `path` with symbolic links resolved, or as given when it does not exist. */

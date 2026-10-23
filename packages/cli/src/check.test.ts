@@ -8,6 +8,7 @@ import {
   tempDirectory,
   testGitEnvironment,
 } from "@kozo/testing";
+import { platformConfine } from "@kozo/verify";
 import { run } from "./index.ts";
 
 async function kozo(...args: string[]) {
@@ -119,7 +120,13 @@ esac
       ["claude sign-in", "ok"],
       ["hooks", "ok"],
       ["sandbox", expect.any(String)],
-      ["kozo sandbox", process.platform === "darwin" ? "ok" : "fail"],
+      [
+        "kozo sandbox",
+        await platformConfine().then(
+          () => "ok",
+          () => "fail",
+        ),
+      ],
     ]);
     expect(report.checks.find((entry) => entry.name === "claude flags")?.detail).toBe(
       "missing --no-session-persistence; update claude",

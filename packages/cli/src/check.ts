@@ -260,7 +260,8 @@ async function claudeChecks(): Promise<Check[]> {
 async function kozoSandboxCheck(): Promise<Check> {
   try {
     await platformConfine();
-    return { name: "kozo sandbox", status: "ok", detail: "sandbox-exec confines the gates" };
+    const tool = process.platform === "darwin" ? "sandbox-exec" : "bwrap";
+    return { name: "kozo sandbox", status: "ok", detail: `${tool} confines the gates` };
   } catch (error) {
     if (!(error instanceof SandboxUnavailable)) throw error;
     return { name: "kozo sandbox", status: "fail", detail: error.message };

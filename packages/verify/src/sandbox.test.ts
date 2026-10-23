@@ -1,10 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { chmod, lstat, mkdir, realpath, stat, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tempDirectory } from "@kozo/testing";
 import { runCommand } from "./command.ts";
 import {
+  bubblewrapArgs,
   type CommandSandbox,
+  type Confine,
   packageLocks,
   platformConfine,
   seatbelt,
@@ -21,7 +23,8 @@ const empty: CommandSandbox = {
 
 describe("packageLocks", () => {
   test("holds the lock directories pnpm keeps in /tmp whatever TMPDIR says", () => {
-    expect(packageLocks).toContain(`/private/tmp/pnpm-store-operation-locks-${process.getuid?.()}`);
+    const tmp = process.platform === "darwin" ? "/private/tmp" : "/tmp";
+    expect(packageLocks).toContain(`${tmp}/pnpm-store-operation-locks-${process.getuid?.()}`);
   });
 });
 
@@ -37,19 +40,58 @@ describe("seatbeltProfile", () => {
   });
 });
 
+describe("bubblewrapArgs", () => {
+  test("mounts the system read-only, hides the denied paths and mounts the writable ones on top", async () => {
+    await using dir = await tempDirectory();
+    const work = join(dir.path, "work");
+    await mkdir(join(work, ".git"), { recursive: true });
+    await Bun.write(join(dir.path, "token"), "secret");
+    const args = bubblewrapArgs({
+      ...empty,
+      denyRead: [dir.path, join(dir.path, "token"), join(dir.path, "missing")],
+      allowRead: [work],
+      allowWrite: [work],
+      denyWrite: [join(work, ".git")],
+    });
+    const text = args.join(" ");
+    expect(text).toContain("--unshare-net --ro-bind / /");
+    expect(text).toContain(`--tmpfs ${dir.path}`);
+    expect(text).toContain(`--ro-bind /dev/null ${join(dir.path, "token")}`);
+    expect(text).not.toContain("missing");
+    expect(text.indexOf(`--bind ${work} ${work}`)).toBeGreaterThan(
+      text.indexOf(`--tmpfs ${dir.path}`),
+    );
+    expect(text).toEndWith(`--ro-bind ${join(work, ".git")} ${join(work, ".git")}`);
+    expect(bubblewrapArgs({ ...empty, network: "any" })).not.toContain("--unshare-net");
+  });
+});
+
+let confine: Confine;
+
 /** Runs `command` confined to `sandbox` in `cwd`, returning its exit code and output. */
 async function confined(cwd: string, sandbox: CommandSandbox, command: string) {
   let output = "";
   const code = await runCommand(command, cwd, (text) => (output += text), undefined, {
-    confine: seatbelt,
+    confine,
     sandbox,
   });
   return { code, output };
 }
 
-describe.skipIf(process.platform !== "darwin")("seatbelt", () => {
-  test("is this machine's sandbox", async () => {
-    expect(await platformConfine()).toBe(seatbelt);
+// Where this machine can confine a command at all: not on a platform kozo has no sandbox for,
+// nor where bubblewrap is missing or may not create namespaces.
+const sandboxed = await platformConfine().then(
+  () => true,
+  () => false,
+);
+
+describe.skipIf(!sandboxed)("this machine's sandbox", () => {
+  beforeAll(async () => {
+    confine = await platformConfine();
+  });
+
+  test("is Seatbelt on macOS", () => {
+    if (process.platform === "darwin") expect(confine).toBe(seatbelt);
   });
 
   test("writes only where allowed, reads all but the denied paths, and has its own TMPDIR", async () => {
@@ -59,6 +101,8 @@ describe.skipIf(process.platform !== "darwin")("seatbelt", () => {
     await mkdir(work, { recursive: true });
     await Bun.write(join(root, "home", "api.token"), "secret");
     await Bun.write(join(root, "readable"), "open");
+    // A worktree's .git file, which bubblewrap can keep read-only only once it exists.
+    await Bun.write(join(work, ".git"), "gitdir: elsewhere\n");
     const sandbox = {
       ...empty,
       denyRead: [join(root, "home")],
@@ -71,11 +115,12 @@ describe.skipIf(process.platform !== "darwin")("seatbelt", () => {
     expect((await run("echo x > made && cat made")).output).toBe("x\n");
     expect((await run(`echo x > "${root}/outside"`)).code).not.toBe(0);
     expect((await run("echo x > .git")).code).not.toBe(0);
+    expect(await Bun.file(join(work, ".git")).text()).toBe("gitdir: elsewhere\n");
     expect((await run(`cat "${root}/home/api.token"`)).code).not.toBe(0);
     expect((await run(`cat "${root}/readable"`)).output).toBe("open");
     // Node resolves a script's path through every directory above it, the denied home included.
     expect((await run("echo 'console.log(1)' > s.js && node s.js")).output).toBe("1\n");
-    expect((await run(`ls "${root}/home"`)).code).not.toBe(0);
+    expect((await run(`ls "${root}/home" 2>&1`)).output).not.toContain("api.token");
     const temp = await run('echo x > "$TMPDIR/t" && echo "$TMPDIR"');
     expect(temp.code).toBe(0);
     expect(temp.output).not.toContain(root);
@@ -112,10 +157,13 @@ describe.skipIf(process.platform !== "darwin")("seatbelt", () => {
   test("reaches only this machine unless the network is open", async () => {
     await using dir = await tempDirectory();
     const work = await realpath(dir.path);
-    // The sandbox refuses a connection at once; outside it, TEST-NET-1 never answers.
+    // The sandbox refuses a connection at once, or has no route on Linux; outside it, TEST-NET-1
+    // never answers.
     const outbound = `bun -e 'const s = require("net").connect(80, "192.0.2.1"); s.on("error", (e) => { console.log(e.code); process.exit(0) }); setTimeout(() => { console.log("waited"); process.exit(0) }, 1500)'`;
     const local = { ...empty, allowWrite: [work] };
-    expect((await confined(work, local, outbound)).output).toBe("ECONNREFUSED\n");
+    expect((await confined(work, local, outbound)).output).toMatch(
+      /^(ECONNREFUSED|ENETUNREACH)\n$/,
+    );
     expect((await confined(work, { ...local, network: "any" }, outbound)).output).toBe("waited\n");
     const server = `bun -e 'const s = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("up") }); console.log(await (await fetch(s.url)).text()); s.stop()'`;
     expect((await confined(work, local, server)).output).toBe("up\n");
