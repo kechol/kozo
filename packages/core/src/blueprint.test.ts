@@ -23,6 +23,10 @@ describe("parseBlueprint", () => {
       ok: true,
       value: { reproduce: false, gates: "full" },
     });
+    expect(parseBlueprint(factoryTemplate["blueprints/migration.yml"])).toMatchObject({
+      ok: true,
+      value: { reproduce: false, gates: "deep" },
+    });
   });
 
   test("refuses nodes out of order or a required node left out, and allows leaving out verify-app", () => {

@@ -80,8 +80,10 @@
 | agent node | A blueprint node that a model executes. | `A` | - | - |
 | blueprint | The per-work-class state machine of deterministic and agent nodes that moves a task from Building to Handoff. | `blueprints/<class>.yml` | pipeline, playbook, workflow | - |
 | brief | The fixed-format instructions, with every field filled, that kozod builds from the plan for one run. | `brief.md` | prompt, work order | - |
+| characterization task | A plan task that only adds tests pinning behaviour its item keeps, which prove checks pass without the item's change. | `characterize: true` | - | - |
 | checkpoint | A recorded point at a node entry from which a new run can resume. | `checkpoint` | snapshot | - |
 | child run | A run in a separate session, such as review, that is grouped under its parent run. | `parent_run` | sub-run | - |
+| codemod | One shell command in a plan task that rewrites code mechanically, which kozod runs in the worktree before the task's first implement session and commits as kozo. | `codemod` | script, transform | - |
 | command sandbox | The sandbox of kozo's own in which the diff's commands of prepare, the gates and prove run, as opposed to Claude Code's sandbox around an agent's shell. | `CommandSandbox`, `seatbeltProfile` | jail | - |
 | decision log | The per-run file in which the agent records, one line each, what it chose and why. | `decisions.md` in the run directory, `kozo_note` | - | - |
 | deterministic node | A blueprint node that kozod executes without a model. | `D` | - | - |

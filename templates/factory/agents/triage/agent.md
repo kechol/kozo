@@ -38,6 +38,13 @@ breaks them, telling you why.
   time, so their scopes must not share a file or a pattern.
 - Every condition of the item's done_when appears, word for word, in the done_when of at least
   one task.
+- A migration's tasks form one chain in order, each depending on the task before it alone, and
+  the first sets `characterize: true`: it adds tests that pin the behaviour the migration keeps
+  and changes nothing else.
+- A task may set `codemod` to one shell command that rewrites code mechanically with tools the
+  repository already has, such as a codemod over the task's scope. kozod runs it without
+  network access before the implement session, and a human approves every plan with one. A
+  task that characterizes runs none.
 
 ## When to ask instead
 

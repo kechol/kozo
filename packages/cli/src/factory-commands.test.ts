@@ -10,7 +10,7 @@ import {
   tempDirectory,
   testGitEnvironment,
 } from "@kozo/testing";
-import { printable } from "./factory-commands.ts";
+import { detailLines, printable } from "./factory-commands.ts";
 import { run } from "./index.ts";
 
 const kozod = join(import.meta.dir, "..", "..", "daemon", "src", "main.ts");
@@ -109,6 +109,39 @@ describe("the daily commands", () => {
     expect((await kozo("down")).stdout).toBe("kozod is not running");
     expect((await kozo("ls")).code).toBe(1);
   }, 60_000);
+});
+
+describe("detailLines", () => {
+  test("shows a plan that waits for approval with each task's codemod", () => {
+    const lines = detailLines({
+      kind: "item",
+      item: {
+        ref: "K-1",
+        title: "Move to the new router",
+        shown_stage: "planning",
+        hold: "approval",
+        hold_reason: "plan approval",
+        repository: "/src/shop",
+        plan: null,
+        draft: {
+          class: "migration",
+          risk: "normal",
+          approach: "Pin the routes, then rewrite them",
+          tasks: [
+            { id: "t1", goal: "Pin the routes", characterize: true },
+            { id: "t2", goal: "Rewrite the routes", codemod: "npx router-codemod src" },
+          ],
+        },
+      },
+      tasks: [],
+    });
+    expect(lines.slice(4)).toEqual([
+      "draft      migration, normal risk: Pin the routes, then rewrite them",
+      "  t1  Pin the routes (characterizes)",
+      "  t2  Rewrite the routes",
+      "      codemod: npx router-codemod src",
+    ]);
+  });
 });
 
 describe("printable", () => {

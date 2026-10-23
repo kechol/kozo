@@ -7,6 +7,7 @@ import {
   type KozoHome,
   kozoHome,
   listKindSchema,
+  type Plan,
   parseReference,
   type Verb,
   verbsByKind,
@@ -329,9 +330,10 @@ export async function ls(args: readonly string[], out: Lines): Promise<number> {
 
 // --- kozo show --------------------------------------------------------------------------------
 
-function describe(body: Record<string, unknown>): string[] {
+/** The lines `kozo show` prints for the detail of an item, a task or a run. */
+export function detailLines(body: Record<string, unknown>): string[] {
   if (body.kind === "item") {
-    const item = body.item as Row & { plan: { approach: string } | null };
+    const item = body.item as Row & { plan: { approach: string } | null; draft: Plan | null };
     const tasks = (body.tasks ?? []) as Row[];
     return [
       `${item.ref}  ${item.title}`,
@@ -339,6 +341,16 @@ function describe(body: Record<string, unknown>): string[] {
       `hold       ${item.hold ? `${item.hold} (${item.hold_reason})` : "-"}`,
       `repository ${item.repository}`,
       ...(item.plan ? [`approach   ${item.plan.approach}`] : []),
+      // A plan that waits for approval shows what approving it lets kozod run.
+      ...(item.draft
+        ? [
+            `draft      ${item.draft.class}, ${item.draft.risk} risk: ${item.draft.approach}`,
+            ...item.draft.tasks.flatMap((task) => [
+              `  ${task.id}  ${task.goal}${task.characterize ? " (characterizes)" : ""}`,
+              ...(task.codemod ? [`      codemod: ${task.codemod}`] : []),
+            ]),
+          ]
+        : []),
       ...tasks.map(
         (task) => `  ${task.ref}  ${task.stage}${task.hold ? ` [${task.hold}]` : ""}  ${task.goal}`,
       ),
@@ -421,7 +433,7 @@ export async function show(args: readonly string[], out: Lines): Promise<number>
       for (const line of text.trimEnd().split("\n")) out.stdout(printable(line));
       return ExitCode.success;
     }
-    const code = printAnswer(out, values.json, answer, () => describe(answer.body));
+    const code = printAnswer(out, values.json, answer, () => detailLines(answer.body));
     if (!values.follow || code !== ExitCode.success) return code;
     const response = await client.stream(`${refPath(ref)}/events`);
     const reader = response.body?.getReader();

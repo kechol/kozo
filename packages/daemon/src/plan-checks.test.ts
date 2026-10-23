@@ -36,6 +36,33 @@ describe("checkPlan", () => {
     expect(checkPlan(plan, charter, files)).toEqual({ plan, issues: [] });
   });
 
+  test("takes a migration as one chain from a task that characterizes", () => {
+    const migration = (tasks: PlanTask[]) => ({ ...planOf(tasks), class: "migration" }) as Plan;
+    const chain = [
+      task("t1", { characterize: true }),
+      task("t2", { depends_on: ["t1"], codemod: "npx codemod" }),
+      task("t3", { depends_on: ["t2"] }),
+    ];
+    expect(checkPlan(migration(chain), charter, files).issues).toEqual([]);
+    expect(
+      checkPlan(
+        migration([
+          task("t1"),
+          task("t2", { depends_on: ["t1"] }),
+          task("t3", { depends_on: ["t1"] }),
+          task("t4", { depends_on: ["t2", "t3"], characterize: true, codemod: "npx codemod" }),
+        ]),
+        charter,
+        files,
+      ).issues,
+    ).toEqual([
+      "a migration's tasks form one chain in order, so t3 depends on t2 alone",
+      "a migration's tasks form one chain in order, so t4 depends on t3 alone",
+      "a migration starts with a task that characterizes: t1 must add tests that pin the behaviour the migration keeps",
+      "t4 characterizes, so it adds tests only and runs no codemod",
+    ]);
+  });
+
   test("refuses a dependency cycle", () => {
     const plan = planOf([
       task("t1", { depends_on: ["t3"] }),

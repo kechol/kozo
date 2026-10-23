@@ -26,10 +26,10 @@ import {
   writeReviewVerdict,
   writeVerifyVerdict,
 } from "@kozo/verify";
-import { taskSandbox } from "@kozo/worker";
+import { factoryGitEnvironment, taskSandbox } from "@kozo/worker";
 import { checkNotes } from "./instructions.ts";
 import { handoffReportPath, readItemFile, requestText } from "./item-file.ts";
-import { firstCodeChange, layersFor, onlyDependencyFiles } from "./risk.ts";
+import { firstCodeChange, firstNonTestChange, layersFor, onlyDependencyFiles } from "./risk.ts";
 import { type BlueprintRun, describe, type Node, type RunEnd, tail } from "./task-run.ts";
 import { atMergedCommit, claimTask } from "./worktrees.ts";
 
@@ -169,6 +169,16 @@ const brief: NodeStep = async (run, current) => {
           : [
               "This blueprint starts from no failing test: make the change, keep every existing test passing and run the gates. A test you add must pass without your change too, since it pins behaviour the change keeps.",
             ]),
+        ...(current.characterize
+          ? [
+              "This task characterizes: add tests that pin the behaviour the code has now, which pass before and after the item's change, and change no file but tests.",
+            ]
+          : []),
+        ...(current.codemod !== null
+          ? [
+              `Before your session kozod runs the codemod \`${current.codemod}\` in the worktree and commits what it changed; finish the task from that commit.`,
+            ]
+          : []),
         ...run.ownerWords().map((note) => `The owner said (${note.kind}): ${note.text}`),
         ...(run.failure
           ? [`The previous attempt did not pass: ${run.failure.slice(0, 1500)}`]
@@ -205,6 +215,10 @@ const implement: NodeStep = async (run, current) => {
   const { runner, worktree, charter, constraints, definition, repository, branch } = run;
   await run.enter("implement", "A");
   if (run.prompt === "") run.prompt = await runner.lastBrief(current, run.run);
+  if (current.codemod !== null) {
+    const ended = await applyCodemod(run, current.codemod);
+    if (ended) return ended;
+  }
   const refsBefore = await runner.refs(repository.path, branch);
   const processesBefore = await runningProcesses();
   const result = await runner.session(
@@ -291,6 +305,49 @@ const implement: NodeStep = async (run, current) => {
   await run.exit("implement", true, report.data.summary);
 };
 
+/**
+ * Runs the task's codemod in the gates' sandbox before its first implement session, when the
+ * task branch has no commit of its own yet, and commits what it changed as kozo, so that the
+ * session finishes from its result and review sees it in the diff.
+ */
+async function applyCodemod(run: BlueprintRun, codemod: string): Promise<RunEnd | undefined> {
+  const { runner, worktree, repository } = run;
+  const ahead = (await git(worktree, ["rev-list", "--count", `${repository.base}..HEAD`])).trim();
+  if (ahead !== "0") return;
+  const code = await runCommand(
+    codemod,
+    worktree,
+    (text) => void run.log(text),
+    runner.commandEnv,
+    runner.confined(worktree),
+  );
+  if (code !== 0) {
+    return await run.halt("implement", {
+      hold: "attention",
+      reason: `the codemod ${codemod} exited with ${code}`,
+      summary: `codemod exited with ${code}`,
+      end: "failed",
+      why: "codemod failed",
+    });
+  }
+  await git(worktree, ["add", "--all"]);
+  if ((await git(worktree, ["status", "--porcelain"])).trim() === "") return;
+  await git(worktree, [
+    "-c",
+    `user.name=${factoryGitEnvironment.GIT_AUTHOR_NAME}`,
+    "-c",
+    `user.email=${factoryGitEnvironment.GIT_AUTHOR_EMAIL}`,
+    "-c",
+    "commit.gpgsign=false",
+    "-c",
+    "core.hooksPath=/dev/null",
+    "commit",
+    "--quiet",
+    "--message",
+    `codemod: ${codemod}`,
+  ]);
+}
+
 const verifyDeterministic: NodeStep = async (run, current) => {
   const node = "verify-deterministic";
   const { runner, worktree, repository, blueprint } = run;
@@ -309,6 +366,15 @@ const verifyDeterministic: NodeStep = async (run, current) => {
         },
       });
       run.raise(layersFor.normal);
+    }
+  }
+  if (current.characterize) {
+    const changed = await firstNonTestChange(worktree, repository.base, run.constraints.tests);
+    if (changed) {
+      return await run.retry(
+        node,
+        `the task characterizes, so its diff changes only test files, but it changes ${changed}`,
+      );
     }
   }
   const recorded = await runner.recordedGates(
@@ -339,9 +405,11 @@ const verifyDeterministic: NodeStep = async (run, current) => {
     // A blueprint that starts from no failing test keeps the behaviour its tests pin, but the
     // class comes from a session that read the request: only a class a human chose, or a diff
     // of dependency files alone, lets prove check that instead of a failing test.
+    // A task that characterizes changes only tests, which must pass on the code as it is.
     const preserve =
-      !blueprint.reproduce &&
-      ((await chosenByHuman(run)) || (await onlyDependencyFiles(worktree, repository.base)));
+      current.characterize ||
+      (!blueprint.reproduce &&
+        ((await chosenByHuman(run)) || (await onlyDependencyFiles(worktree, repository.base))));
     const prove = await runProve({
       cwd: worktree,
       base: repository.base,

@@ -1,5 +1,5 @@
 import { type GateLevel, gateLevelSchema, type RiskTier } from "@kozo/core";
-import { git } from "@kozo/verify";
+import { git, globMatcher } from "@kozo/verify";
 
 /** What each risk tier verifies beyond diff-guard and review, which every tier runs. */
 export const layersFor: Record<RiskTier, { gates: GateLevel; prove: boolean; verify: boolean }> = {
@@ -34,6 +34,16 @@ async function changedPaths(cwd: string, base: string): Promise<string[]> {
  */
 export async function firstCodeChange(cwd: string, base: string): Promise<string | null> {
   return (await changedPaths(cwd, base)).find((path) => !documentation.test(path)) ?? null;
+}
+
+/** The first file that the diff from `base` to HEAD changes and that no `tests` glob matches. */
+export async function firstNonTestChange(
+  cwd: string,
+  base: string,
+  tests: readonly string[],
+): Promise<string | null> {
+  const isTest = globMatcher(tests);
+  return (await changedPaths(cwd, base)).find((path) => !isTest(path)) ?? null;
 }
 
 /** Whether the diff from `base` to HEAD changes dependency manifests and lockfiles and nothing else. */

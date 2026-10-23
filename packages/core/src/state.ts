@@ -61,6 +61,10 @@ export interface TaskState {
   done_when: string[];
   scope: string[];
   depends_on: string[];
+  /** Whether the task only adds tests that pin behaviour its item keeps. */
+  characterize: boolean;
+  /** The command kozod runs in the worktree before the task's first implement session. */
+  codemod: string | null;
   /** The plan's tier, or the higher one kozod rated the task's diff at. */
   risk: RiskTier;
   stage: Stage;
@@ -367,6 +371,8 @@ export function applyEvent(state: FactoryState, event: Event): void {
           done_when: planned.done_when,
           scope: planned.scope,
           depends_on: planned.depends_on.map((id) => `${plan.item}/${id}`),
+          characterize: planned.characterize ?? false,
+          codemod: planned.codemod ?? null,
           risk: plan.risk,
           stage: "building",
           hold: null,
@@ -493,10 +499,11 @@ export function autonomyLevel(charter: Charter, workClass: WorkClass | null): Au
 
 /**
  * Plan needed?: whether an item goes from Triage to Planning for a plan approval or has its
- * draft accepted as it is. L3 skips Planning only for a single task below the high risk tier.
+ * draft accepted as it is. L3 skips Planning only for a single task below the high risk tier
+ * without a codemod, a command that a human reads before kozod runs it.
  */
 export function planNeeded(level: AutonomyLevel, plan: Plan): boolean {
-  if (level !== "L3") return true;
+  if (level !== "L3" || plan.tasks.some((task) => task.codemod !== undefined)) return true;
   return plan.risk === "high" || plan.tasks.length > 1;
 }
 

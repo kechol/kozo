@@ -10,6 +10,9 @@ import bugfixBlueprint from "../../../templates/factory/blueprints/bugfix.yml" w
 };
 import depsBlueprint from "../../../templates/factory/blueprints/deps.yml" with { type: "text" };
 import docsBlueprint from "../../../templates/factory/blueprints/docs.yml" with { type: "text" };
+import migrationBlueprint from "../../../templates/factory/blueprints/migration.yml" with {
+  type: "text",
+};
 import perfBlueprint from "../../../templates/factory/blueprints/perf.yml" with { type: "text" };
 import refactorBlueprint from "../../../templates/factory/blueprints/refactor.yml" with {
   type: "text",
@@ -36,4 +39,5 @@ export const factoryTemplate = {
   "blueprints/docs.yml": docsBlueprint,
   "blueprints/refactor.yml": refactorBlueprint,
   "blueprints/perf.yml": perfBlueprint,
+  "blueprints/migration.yml": migrationBlueprint,
 } as const;

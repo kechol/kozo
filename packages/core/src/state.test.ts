@@ -347,12 +347,18 @@ describe("itemStage", () => {
 });
 
 describe("branches", () => {
-  test("Plan needed? sends L1 and L2 to Planning, and L3 only for high risk or a split", () => {
+  test("Plan needed? sends L1 and L2 to Planning, and L3 only for high risk, a split or a codemod", () => {
     expect(planNeeded("L1", plan())).toBe(true);
     expect(planNeeded("L2", plan())).toBe(true);
     expect(planNeeded("L3", plan())).toBe(false);
     expect(planNeeded("L3", plan(1, "high"))).toBe(true);
     expect(planNeeded("L3", plan(2))).toBe(true);
+    const codemod = plan();
+    codemod.tasks = codemod.tasks.map((task) => ({
+      ...task,
+      codemod: "npx codemod",
+    })) as Plan["tasks"];
+    expect(planNeeded("L3", codemod)).toBe(true);
   });
 
   test("Revision needed? retries a revise up to inner_retries and then asks for attention", () => {

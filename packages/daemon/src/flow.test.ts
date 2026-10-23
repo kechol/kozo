@@ -1276,6 +1276,95 @@ test("one unit is still counted", () => {
     }
   }, 240_000);
 
+  test("kozod runs a task's codemod before its implement session and commits it as kozo", async () => {
+    const codemod = "perl -pi -e 's/units/count/g' src/stock.ts";
+    const codemodPlan = {
+      ...plan,
+      plan: { ...plan.plan, tasks: [{ ...plan.plan.tasks[0], codemod }] },
+    };
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: codemodPlan }] : implement(),
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock" });
+    for (;;) {
+      await env.settle();
+      if (env.store.state.items[ref]?.hold?.kind !== "approval") break;
+      await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    }
+    const task = `${ref}/t1`;
+    expect(env.store.state.tasks[task]).toMatchObject({ stage: "handoff", hold: null, codemod });
+    expect(env.agent.requests.at(-1)?.prompt).toContain(
+      `Before your session kozod runs the codemod \`${codemod}\``,
+    );
+    const branch = `kozo/${env.store.factoryId}/${ref}-t1`;
+    const log = await env.repo.git("log", "--format=%ae %s", `main..${branch}`);
+    expect(log.trim().split("\n").at(-1)).toBe(`kozo@localhost.invalid codemod: ${codemod}`);
+    const codemodded = await env.repo.git("show", `${branch}~1:src/stock.ts`);
+    expect(codemodded).toContain("count");
+  }, 120_000);
+
+  test("a task that characterizes may change only test files", async () => {
+    const pinned = `import { expect, test } from "bun:test";
+import { stockLabel } from "./stock.ts";
+
+test("one unit is still counted", () => {
+  expect(stockLabel(1)).toBe("1 in stock");
+});
+`;
+    const characterizePlan = {
+      ...plan,
+      plan: { ...plan.plan, tasks: [{ ...plan.plan.tasks[0], characterize: true }] },
+    };
+    for (const [files, expected] of [
+      [{ "src/stock-count.test.ts": pinned }, null],
+      [
+        {
+          "src/stock-count.test.ts": pinned,
+          // Behaviour kept, so only the characterization check refuses it.
+          "src/stock.ts": [
+            "export function stockLabel(units: number): string {",
+            '  return units === 0 ? "Sold out" : String(units) + " in stock";',
+            "}",
+            "",
+          ].join("\n"),
+        },
+        "the task characterizes, so its diff changes only test files, but it changes src/stock.ts",
+      ],
+    ] as const) {
+      let runs = 0;
+      await using env = await factoryOf((request): FakeStep[] =>
+        request.agent === "triage"
+          ? [{ answer: characterizePlan }]
+          : [
+              ...(runs++ === 0
+                ? [{ write: { ...files } }, { commit: "test: pin the stock label" }]
+                : []),
+              { use: "kozo_gates", input: { level: "full" } },
+              { use: "kozo_note", input: { choice: "One unit", reason: "The edge" } },
+              { answer: { ...report, tests: ["src/stock-count.test.ts"] } },
+            ],
+      );
+      const { ref } = await env.control.addItem({ title: "Pin the stock label" });
+      for (;;) {
+        await env.settle();
+        if (env.store.state.items[ref]?.hold?.kind !== "approval") break;
+        await env.control.act(
+          ref,
+          { kind: "item", item: { repo: null, number: 1 } },
+          "approve",
+          {},
+        );
+      }
+      const task = env.store.state.tasks[`${ref}/t1`];
+      if (expected === null) {
+        expect(task).toMatchObject({ stage: "handoff", hold: null });
+        expect(env.agent.requests.at(-1)?.prompt).toContain("This task characterizes");
+      } else {
+        expect(task?.hold?.reason).toContain(expected);
+      }
+    }
+  }, 240_000);
+
   test("kozo say reaches a running run at its next turn", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage"

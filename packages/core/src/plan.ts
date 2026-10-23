@@ -15,6 +15,10 @@ export const planTaskSchema = z.strictObject({
   scope: z.array(text).nonempty(),
   depends_on: z.array(taskId),
   estimate: z.strictObject({ lines: z.int().positive(), files: z.int().positive() }),
+  /** The task adds tests that pin behaviour the item keeps, and changes nothing else. */
+  characterize: z.boolean().optional(),
+  /** A command that kozod runs in the worktree before the implement session, never the agent. */
+  codemod: text.optional(),
 });
 export type PlanTask = z.infer<typeof planTaskSchema>;
 

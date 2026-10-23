@@ -45,6 +45,31 @@ export function checkPlan(
     }
   });
 
+  // A migration moves step by step from code whose behaviour tests pin first.
+  if (plan.class === "migration") {
+    plan.tasks.forEach((task, index) => {
+      const before = plan.tasks[index - 1];
+      const chained = before
+        ? task.depends_on.length === 1 && task.depends_on[0] === before.id
+        : task.depends_on.length === 0;
+      if (!chained) {
+        issues.push(
+          `a migration's tasks form one chain in order, so ${task.id} depends on ${before ? `${before.id} alone` : "no task"}`,
+        );
+      }
+    });
+    const [first] = plan.tasks;
+    if (first && !first.characterize) {
+      issues.push(
+        `a migration starts with a task that characterizes: ${first.id} must add tests that pin the behaviour the migration keeps`,
+      );
+    }
+  }
+  for (const task of plan.tasks) {
+    if (task.characterize && task.codemod !== undefined)
+      issues.push(`${task.id} characterizes, so it adds tests only and runs no codemod`);
+  }
+
   const carried = new Set(plan.tasks.flatMap((task) => task.done_when.map((text) => text.trim())));
   for (const condition of plan.done_when) {
     if (!carried.has(condition.trim()))

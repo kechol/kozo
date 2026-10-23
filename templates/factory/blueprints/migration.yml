@@ -1,0 +1,16 @@
+# How each task of a migration goes from Building to Handoff. A migration's plan is one chain
+# of tasks that starts with one pinning the behaviour it keeps; a task's codemod runs before its
+# implement session. Nothing to reproduce, and the deep gates check every step.
+version: 1
+nodes:
+  - claim
+  - prepare
+  - brief
+  - implement
+  - verify-deterministic
+  - review
+  - verify-app
+  - handoff
+  - final-verify
+reproduce: false
+gates: deep
