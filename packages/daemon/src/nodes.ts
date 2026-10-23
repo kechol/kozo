@@ -29,7 +29,7 @@ import {
 import { taskSandbox } from "@kozo/worker";
 import { checkNotes } from "./instructions.ts";
 import { handoffReportPath, readItemFile, requestText } from "./item-file.ts";
-import { firstCodeChange, layersFor } from "./risk.ts";
+import { firstCodeChange, layersFor, onlyDependencyFiles } from "./risk.ts";
 import { type BlueprintRun, describe, type Node, type RunEnd, tail } from "./task-run.ts";
 import { atMergedCommit, claimTask } from "./worktrees.ts";
 
@@ -336,11 +336,16 @@ const verifyDeterministic: NodeStep = async (run, current) => {
     return await run.retry(node, `the ${gates.failed} gate failed:\n${tail(output)}`);
   output = "";
   if (run.layers.prove) {
-    // A blueprint that starts from no failing test keeps the behaviour its tests pin.
+    // A blueprint that starts from no failing test keeps the behaviour its tests pin, but the
+    // class comes from a session that read the request: only a class a human chose, or a diff
+    // of dependency files alone, lets prove check that instead of a failing test.
+    const preserve =
+      !blueprint.reproduce &&
+      ((await chosenByHuman(run)) || (await onlyDependencyFiles(worktree, repository.base)));
     const prove = await runProve({
       cwd: worktree,
       base: repository.base,
-      mode: blueprint.reproduce ? "reproduce" : "preserve",
+      mode: preserve ? "preserve" : "reproduce",
       log: collect,
       env: runner.commandEnv,
       confined: runner.confined(worktree),
@@ -376,6 +381,17 @@ const verifyDeterministic: NodeStep = async (run, current) => {
     `the checks of the ${runner.store.state.tasks[run.task.ref]?.risk} risk tier passed`,
   );
 };
+
+/** Whether a human chose the plan's work class, by asking for it or by accepting the plan. */
+async function chosenByHuman({ runner, item, plan }: BlueprintRun): Promise<boolean> {
+  if ((await readItemFile(runner.home, item.ref)).class === plan.class) return true;
+  const accepted = runner.store.db
+    .query<{ by: string }, [string]>(
+      "select json_extract(line, '$.data.by') as by from events where item = ? and type = 'plan.accepted' order by id desc limit 1",
+    )
+    .get(item.ref);
+  return accepted?.by === "human";
+}
 
 const review: NodeStep = async (run, current) => {
   const { runner, item, worktree, repository, definition, charter } = run;

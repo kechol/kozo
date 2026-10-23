@@ -1229,18 +1229,28 @@ test("one unit is still counted", () => {
         },
       },
     ];
-    for (const [files, expected] of [
-      [{ "src/stock.ts": refactored, "src/stock-count.test.ts": pinned }, null],
-      [goodChange, "KOZO_PROVE: status=fail reason=fails-without-change mode=preserve"],
+    const keeps = { "src/stock.ts": refactored, "src/stock-count.test.ts": pinned };
+    // The class counts as chosen when the human asked for it; at L3 nobody approves the plan,
+    // so a class only the triage session chose leaves prove asking for a failing test.
+    for (const [files, requested, expected] of [
+      [keeps, "refactor", null],
+      [goodChange, "refactor", "KOZO_PROVE: status=fail reason=fails-without-change mode=preserve"],
+      [keeps, undefined, "KOZO_PROVE: status=fail reason=passes-without-change tests=1"],
     ] as const) {
       let runs = 0;
-      await using env = await factoryOf((request) =>
-        request.agent === "triage" ? [{ answer: refactorPlan }] : steps(files, runs++ === 0),
+      await using env = await factoryOf(
+        (request) =>
+          request.agent === "triage" ? [{ answer: refactorPlan }] : steps(files, runs++ === 0),
+        judgeWith("accept"),
+        { charter: (text) => text.replace("default: L1", "default: L3") },
       );
-      const { ref } = await env.control.addItem({ title: "Tidy stockLabel", class: "refactor" });
-      // A refactor runs at L1, so its start and its plan each wait for an approval.
-      for (let approvals = 0; approvals < 2; approvals += 1) {
+      const { ref } = await env.control.addItem({
+        title: "Tidy stockLabel",
+        ...(requested ? { class: requested } : {}),
+      });
+      for (;;) {
         await env.settle();
+        if (env.store.state.items[ref]?.hold?.kind !== "approval") break;
         await env.control.act(
           ref,
           { kind: "item", item: { repo: null, number: 1 } },
@@ -1248,7 +1258,12 @@ test("one unit is still counted", () => {
           {},
         );
       }
-      await env.settle();
+      const accepted = env.store.db
+        .query<{ by: string }, []>(
+          "select json_extract(line, '$.data.by') as by from events where type = 'plan.accepted'",
+        )
+        .get();
+      expect(accepted?.by).toBe("kozod");
       const task = env.store.state.tasks[`${ref}/t1`];
       if (expected === null) {
         expect(task).toMatchObject({ stage: "handoff", hold: null });
