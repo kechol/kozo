@@ -66,6 +66,30 @@ describe("readDefinition", () => {
     expect(modelFor(definition, "implement")).toBe(builtInFactory.agent_defaults.model);
   });
 
+  test("reads only the definition's own automations, and refuses one that does not parse", async () => {
+    await using repo = await gitRepository();
+    const nightly =
+      '---\nversion: 1\nschedule: "0 3 * * *"\n---\n\n# Tidy one module\n\nPick one.\n';
+    const commit = await repo.commit({
+      "factory.yml": "concurrency: 1\n",
+      "automations/tidy.md": nightly,
+    });
+    const result = await readDefinition(repo.path, commit);
+    if (!result.ok) throw new Error(result.issues.join("; "));
+    expect(result.definition.automations.map(({ name, title }) => ({ name, title }))).toEqual([
+      { name: "tidy", title: "Tidy one module" },
+    ]);
+    const bad = await repo.commit({ "automations/broken.md": "# No front matter\n" });
+    expect(await readDefinition(repo.path, bad)).toMatchObject({
+      ok: false,
+      issues: [expect.stringContaining("automations/broken.md: the automation starts with")],
+    });
+
+    await using dir = await tempDirectory();
+    const builtIn = await readDefinition(join(dir.path, "factory"), null);
+    expect(builtIn.ok && builtIn.definition.automations).toEqual([]);
+  });
+
   test("takes each class's blueprint from the definition, kozo's template or bugfix's", async () => {
     await using dir = await tempDirectory({
       "factory/blueprints/refactor.yml": "version: 1\nreproduce: false\nnodes: [claim]\n",

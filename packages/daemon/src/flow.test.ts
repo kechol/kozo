@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
-import { kozoHome, runFiles, sha256 } from "@kozo/core";
+import { kozoHome, parseAutomation, runFiles, sha256 } from "@kozo/core";
 import {
   type FakeStep,
   fakeAgent,
@@ -15,6 +15,7 @@ import {
 import type { Judge, Verifier } from "@kozo/verify";
 import { git, readDefinition } from "@kozo/verify";
 import type { AgentRequest } from "@kozo/worker";
+import { Automations } from "./automations.ts";
 import { ControlPlane } from "./control-plane.ts";
 import { EventStore } from "./event-store.ts";
 import { inProcessLauncher, type Launcher } from "./launcher.ts";
@@ -1486,6 +1487,44 @@ test("one unit is still counted", () => {
     await expect(
       env.control.act(task, reference, "say", { text: "And now?", ask: true }),
     ).rejects.toThrow("the daily budget of 1 USD is spent");
+  }, 120_000);
+
+  test("an automation adds its item once a matching minute, and every approval waits even at L3", async () => {
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+      judgeWith("accept"),
+      { charter: (text) => text.replace("default: L1", "default: L3") },
+    );
+    const automation = parseAutomation(
+      "nightly",
+      '---\nversion: 1\nschedule: "0 3 * * *"\n---\n\n# Low stock\n\nSay only N left.\n',
+    );
+    const reported: string[] = [];
+    const automations = new Automations(
+      env.control,
+      () => [automation],
+      (line) => reported.push(line),
+    );
+    await automations.run(new Date("2026-10-23T02:59:00"));
+    await automations.run(new Date("2026-10-23T03:00:05"));
+    await automations.run(new Date("2026-10-23T03:00:40"));
+    expect(Object.keys(env.store.state.items)).toEqual(["K-1"]);
+    expect(env.store.state.items["K-1"]).toMatchObject({
+      source: "automation",
+      hold: { kind: "approval", reason: "start approval" },
+    });
+    await automations.run(new Date("2026-10-24T03:00:00"));
+    expect(reported).toEqual([
+      "kozod: automation nightly added K-1",
+      "kozod: automation nightly added nothing: K-1 still asks for it",
+    ]);
+
+    await env.control.act("K-1", { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    expect(env.store.state.items["K-1"]).toMatchObject({
+      stage: "planning",
+      hold: { kind: "approval", reason: "plan approval" },
+    });
   }, 120_000);
 
   test("kozo say reaches a running run at its next turn", async () => {

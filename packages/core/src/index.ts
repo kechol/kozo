@@ -1,8 +1,10 @@
 export * from "./api.ts";
+export * from "./automation.ts";
 export * from "./blueprint.ts";
 export * from "./brief.ts";
 export * from "./charter.ts";
 export * from "./constraints.ts";
+export * from "./cron.ts";
 export { issueText, type ParseResult } from "./document.ts";
 export * from "./event.ts";
 export * from "./event-log.ts";

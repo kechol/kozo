@@ -498,7 +498,9 @@ export class Runner implements RunnerOps {
     // autonomy level but never raise it above the level of the class the human asked for.
     const levels = [autonomyLevel(charter, requested), autonomyLevel(charter, plan.class)].sort();
     const level = levels[0] ?? "L1";
-    if (!planNeeded(level, plan)) {
+    // An automation adds work while nobody watches, so a human approves each of its plans.
+    const automated = this.store.state.items[itemRef]?.source === "automation";
+    if (!automated && !planNeeded(level, plan)) {
       await this.store.append({
         type: "plan.accepted",
         item: itemRef,
@@ -514,7 +516,9 @@ export class Runner implements RunnerOps {
         from: "triage",
         to: "planning",
         by: "kozod",
-        reason: `the plan needs an approval at ${level}`,
+        reason: automated
+          ? "an automation's plan always needs an approval"
+          : `the plan needs an approval at ${level}`,
       },
     });
     await this.hold(itemRef, null, "approval", planApprovalReason);

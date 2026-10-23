@@ -1,12 +1,14 @@
-import { stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
+  type Automation,
   type Blueprint,
   type Factory,
   factorySchema,
   factoryTemplate,
   issueText,
+  parseAutomation,
   parseBlueprint,
   type WorkClass,
   workClassSchema,
@@ -87,6 +89,8 @@ export interface Definition {
   verifyApp: Skill;
   /** The blueprints the definition or kozo's template has; bugfix's is always there. */
   blueprints: Partial<Record<WorkClass, Blueprint>> & { bugfix: Blueprint };
+  /** The definition's own automations, by file name; kozo's template supplies none. */
+  automations: Automation[];
 }
 
 /** The blueprint a task of `workClass` runs: its own, else bugfix's. */
@@ -180,6 +184,24 @@ export async function readDefinition(
     if (result.ok) blueprints[workClass] = result.value;
     else issues.push(...result.issues.map((issue) => `${path}: ${issue}`));
   }
+  // Automations add work on their own, so only the definition's own files count.
+  const automations: Automation[] = [];
+  const listed =
+    commit === null
+      ? await readdir(join(directory, "automations")).catch(() => [])
+      : (await git(directory, ["ls-tree", "--name-only", "-z", commit, "automations/"]))
+          .split("\0")
+          .filter(Boolean)
+          .map((path) => path.slice("automations/".length));
+  for (const file of listed.filter((name) => name.endsWith(".md")).sort()) {
+    const path = `automations/${file}`;
+    const text =
+      commit === null
+        ? await Bun.file(join(directory, path)).text()
+        : await showFile(directory, commit, path);
+    const automation = parsed(path, text ?? "", (body) => parseAutomation(file.slice(0, -3), body));
+    if (automation) automations.push(automation);
+  }
   const bugfix = blueprints.bugfix;
   if (issues.length > 0 || !factory || !verifyApp || !bugfix) return { ok: false, commit, issues };
   return {
@@ -190,6 +212,7 @@ export async function readDefinition(
       agents: agents as Record<DefinedAgent, AgentDefinition>,
       verifyApp,
       blueprints: { ...blueprints, bugfix },
+      automations,
     },
   };
 }

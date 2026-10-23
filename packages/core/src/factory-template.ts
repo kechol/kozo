@@ -8,6 +8,9 @@ import planAgent from "../../../templates/factory/agents/plan/agent.md" with { t
 import reviewAgent from "../../../templates/factory/agents/review/agent.md" with { type: "text" };
 import triageAgent from "../../../templates/factory/agents/triage/agent.md" with { type: "text" };
 import verifyAgent from "../../../templates/factory/agents/verify/agent.md" with { type: "text" };
+import nightlyHabit from "../../../templates/factory/automations/nightly-habit.md" with {
+  type: "text",
+};
 import bugfixBlueprint from "../../../templates/factory/blueprints/bugfix.yml" with {
   type: "text",
 };
@@ -44,4 +47,5 @@ export const factoryTemplate = {
   "blueprints/refactor.yml": refactorBlueprint,
   "blueprints/perf.yml": perfBlueprint,
   "blueprints/migration.yml": migrationBlueprint,
+  "automations/nightly-habit.md": nightlyHabit,
 } as const;

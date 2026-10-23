@@ -4,6 +4,7 @@ import { apiPort, type KozoHome, kozoHome } from "@kozo/core";
 import { baseOf, type Confine, claudeJudge, claudeVerifier, platformConfine } from "@kozo/verify";
 import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
+import { Automations } from "./automations.ts";
 import { ControlPlane } from "./control-plane.ts";
 import { type DefinitionInUse, refreshDefinition, startingDefinition } from "./definition.ts";
 import { EventStore } from "./event-store.ts";
@@ -153,6 +154,12 @@ export class Daemon {
       () => definition.current.factory.mode,
     );
     await reconciler.recover();
+    // In GitHub mode work arrives as Issues, so automations add items only in local mode.
+    const automations = new Automations(
+      control,
+      () => (definition.current.factory.mode === "local" ? definition.current.automations : []),
+      report,
+    );
     const notifier = new Notifier(store, () => definition.current.factory, notify);
     notifier.start();
     void notifier.remind();
@@ -179,6 +186,9 @@ export class Daemon {
           .then(() => scheduler.tick());
       }
       if (every(3_600_000)) void notifier.remind();
+      reconciling = reconciling
+        .then(() => automations.run(new Date()))
+        .then(() => scheduler.tick());
       scheduler.tick();
     }, tickMs);
     scheduler.tick();

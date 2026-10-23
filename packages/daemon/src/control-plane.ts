@@ -2,6 +2,7 @@ import { rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   type AddItem,
+  type Automation,
   autonomyLevel,
   isClosed,
   type KozoHome,
@@ -94,13 +95,40 @@ export class ControlPlane {
   }
 
   /**
+   * Adds an automation's request as an item that waits for a start approval, unless the
+   * repository has an open item of the same title. Returns the new item's reference, or why
+   * there is none.
+   */
+  async addAutomated(automation: Automation): Promise<{ ref: string } | { skipped: string }> {
+    const repository = this.repositoryFor(automation.repository ?? undefined);
+    const charter = await readCharter(repository, this.definition.current.factory.mode);
+    if (!charter.ok) return { skipped: `not accepted: ${charter.reason}` };
+    const title = normalTitle(automation.title);
+    const open = Object.values(this.store.state.items).find(
+      (item) =>
+        !isClosed(item.stage) &&
+        item.repository === repository &&
+        normalTitle(item.title) === title,
+    );
+    if (open) return { skipped: `${open.ref} still asks for it` };
+    const ref = this.store.nextLocalItem();
+    await this.admit(
+      ref,
+      { repository, class: automation.class, title: automation.title, body: automation.body },
+      "automation",
+      true,
+    );
+    return { ref };
+  }
+
+  /**
    * Writes an item's file and records it, then holds it for a start approval or sends it to
    * Triage. Returns whether it went to Triage.
    */
   async admit(
     ref: string,
     file: ItemFile,
-    source: "local" | "github",
+    source: "local" | "github" | "automation",
     startApproval: boolean,
   ): Promise<boolean> {
     const { repository, title } = file;
