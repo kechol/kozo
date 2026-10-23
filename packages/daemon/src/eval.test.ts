@@ -70,9 +70,18 @@ const noVerifier: Verifier = {
   },
 };
 
-async function setup(script: (request: AgentRequest) => FakeStep[]) {
+async function setup(
+  script: (request: AgentRequest) => FakeStep[],
+  constraints: (text: string) => string = (text) => text,
+) {
   const repo = await gitRepository();
-  await repo.commit(suiteBase, "the suite shop");
+  await repo.commit(
+    {
+      ...suiteBase,
+      ".kozo/constraints.yml": constraints(suiteBase[".kozo/constraints.yml"] ?? ""),
+    },
+    "the suite shop",
+  );
   const dir = await tempDirectory();
   const home = kozoHome(join(dir.path, "home"));
   await mkdir(home.factory, { recursive: true });
@@ -164,6 +173,43 @@ describe("runEvalCase", () => {
     );
     expect(await runEvalCase(file, env.definition, env.deps)).toMatchObject({ passed: true });
   }, 120_000);
+
+  test("never runs services on what the eval merged, which nobody read", async () => {
+    const readme = "The docs mention the low-stock notice";
+    const split = {
+      ...plan,
+      plan: {
+        ...plan.plan,
+        done_when: [...suiteTask.doneWhen, readme],
+        tasks: [
+          plan.plan.tasks[0],
+          {
+            id: "t2",
+            goal: "Mention the low-stock notice in the docs",
+            done_when: [readme],
+            scope: ["docs/**"],
+            depends_on: ["t1"],
+            estimate: { lines: 5, files: 1 },
+          },
+        ],
+      },
+    };
+    await using env = await setup(
+      (request) => (request.agent === "triage" ? [{ answer: split }] : implement),
+      (text) => `${text}\nservices:\n  - "true"\n`,
+    );
+    const file = join(env.dir.path, "evals", "two.yml");
+    await Bun.write(
+      file,
+      `version: 1\nid: two\nrepository: ${env.repo.path}\nstart: ${env.start}\nrequest:\n  title: Low stock\n  body: Say Only N left, and document it.\nexpected:\n  outcome: complete\n`,
+    );
+    // The first task starts its services on the case's start; the second, after the merge, may not.
+    expect(await runEvalCase(file, env.definition, env.deps)).toMatchObject({
+      outcome: "attention",
+      passed: false,
+      reason: expect.stringContaining("services run only on a worktree at a commit of main"),
+    });
+  }, 180_000);
 
   test("a case on a repository that is not registered is an error", async () => {
     await using env = await setup(() => []);

@@ -103,6 +103,11 @@ export interface RunnerDeps {
   definition: DefinitionInUse;
   /** Confines the diff's commands in prepare, the gates and prove to the task's sandbox. */
   confine: Confine;
+  /**
+   * The commit services may run at, for an eval whose merges no human read; otherwise the tip
+   * of the default branch, which only a human merges into.
+   */
+  trustedBase?: string;
 }
 
 /** A plan as the triage and plan agents write it, without the fields kozod adds. */

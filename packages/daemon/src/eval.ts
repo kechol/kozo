@@ -115,6 +115,8 @@ export interface EvalResult {
   costUsd: number;
   /** What the case says the factory must not do, for a human to judge from the run. */
   forbidden: string[];
+  /** The reason of the question or attention hold the case stopped at. */
+  reason?: string;
   error?: string;
 }
 
@@ -194,6 +196,8 @@ export async function runEvalCase(
     await git(clone, ["checkout", "--quiet", "-B", "main", evalCase.start]);
     await git(clone, ["remote", "remove", "origin"]);
     if ((await showFile(clone, "HEAD", charterPath)) === null) await addKozoFiles(source, clone);
+    // Nobody reads what the eval merges, so services run only on the case's start.
+    const trustedBase = (await git(clone, ["rev-parse", "HEAD"])).trim();
     const home = kozoHome(join(temp, "home"));
     await mkdir(home.root, { recursive: true, mode: 0o700 });
     const store = await EventStore.open(home);
@@ -214,6 +218,7 @@ export async function runEvalCase(
       verifier: deps.verifier,
       definition: inUse,
       confine: deps.confine,
+      trustedBase,
     });
     const control = new ControlPlane(home, store, inUse, runner);
     const scheduler = new Scheduler(store, runner, inUse, log);
@@ -242,7 +247,7 @@ export async function runEvalCase(
         body,
         repository: clone,
       });
-      const outcome = await drive(
+      const { outcome, reason } = await drive(
         store,
         control,
         scheduler,
@@ -282,6 +287,7 @@ export async function runEvalCase(
         checks,
         costUsd,
         forbidden: expected.forbidden ?? [],
+        ...(reason ? { reason } : {}),
       };
     } finally {
       await scheduler.idle();
@@ -303,21 +309,23 @@ async function drive(
   clone: string,
   ref: string,
   expected: EvalOutcome,
-): Promise<EvalOutcome | "stuck"> {
+): Promise<{ outcome: EvalOutcome | "stuck"; reason?: string }> {
   const reference = parseReference(ref) as Reference;
   for (let last = ""; ; ) {
     scheduler.tick();
     await scheduler.idle();
     const state = store.state;
     const item = state.items[ref];
-    if (!item) return "stuck";
+    if (!item) return { outcome: "stuck" };
     const tasks = item.tasks.flatMap((task) => state.tasks[task] ?? []);
     const holds = [item.hold, ...tasks.map((task) => task.hold)];
-    if (holds.some((hold) => hold?.kind === "question")) return "question";
-    if (holds.some((hold) => hold?.kind === "attention")) return "attention";
+    for (const kind of ["question", "attention"] as const) {
+      const held = holds.find((hold) => hold?.kind === kind);
+      if (held) return { outcome: kind, reason: held.reason };
+    }
     const planned = item.draft ?? item.plan;
-    if (expected === "split" && planned && planned.tasks.length > 1) return "split";
-    if (item.stage === "complete") return "complete";
+    if (expected === "split" && planned && planned.tasks.length > 1) return { outcome: "split" };
+    if (item.stage === "complete") return { outcome: "complete" };
     if (item.hold?.kind === "approval") {
       await control.act(ref, reference, "approve", {});
       continue;
@@ -336,7 +344,7 @@ async function drive(
       ]);
     }
     if (ready.length > 0) await reconciler.reconcile();
-    if (state.lastTs === last && ready.length === 0) return "stuck";
+    if (state.lastTs === last && ready.length === 0) return { outcome: "stuck" };
     last = store.state.lastTs ?? "";
   }
 }

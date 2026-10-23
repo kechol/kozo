@@ -80,7 +80,8 @@ const prepare: NodeStep = async (run) => {
   // Services run outside the command sandbox, as a database container must, so only on
   // merged code: a worktree made again from a task branch carries the agent's changes to
   // the files they read, such as package.json or a compose file.
-  if (constraints.services.length > 0 && !(await atMergedCommit(worktree, repository.tip))) {
+  const trusted = runner.deps.trustedBase ?? repository.tip;
+  if (constraints.services.length > 0 && !(await atMergedCommit(worktree, trusted))) {
     return await run.halt("prepare", {
       hold: "attention",
       reason: `services run only on a worktree at a commit of ${repository.branch}, and this one carries the task's changes`,

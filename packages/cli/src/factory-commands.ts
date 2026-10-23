@@ -659,6 +659,7 @@ interface EvalSummary {
     checks: { command: string; code: number }[];
     costUsd: number;
     forbidden: string[];
+    reason?: string;
     error?: string;
   }[];
   passed: number;
@@ -712,7 +713,7 @@ async function evalCommand(args: string[], json: boolean | undefined, out: Lines
     const failed = result.checks.find((check) => check.code !== 0);
     out.stdout(
       printable(
-        `${result.passed ? "pass" : "FAIL"}  ${result.id}  ${result.outcome}${result.passed ? "" : `, expected ${result.expected}`}${failed ? `; ${failed.command} exited with ${failed.code}` : ""}${result.error ? `; ${result.error}` : ""}  ${dollars(result.costUsd)}`,
+        `${result.passed ? "pass" : "FAIL"}  ${result.id}  ${result.outcome}${result.passed ? "" : `, expected ${result.expected}`}${failed ? `; ${failed.command} exited with ${failed.code}` : ""}${result.reason ? `: ${result.reason}` : ""}${result.error ? `; ${result.error}` : ""}  ${dollars(result.costUsd)}`,
       ),
     );
     for (const rule of result.forbidden) out.stdout(printable(`      check by hand: ${rule}`));
