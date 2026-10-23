@@ -1404,7 +1404,7 @@ test("one unit is still counted", () => {
     const taken = await env.control.act(task, reference, "take", {});
     const worktree = worktreePath(env.home, env.repo.path, task);
     expect(taken.message).toStartWith(`${task} is yours: commit in ${worktree} on kozo/`);
-    expect(env.store.state.tasks[task]?.hold).toMatchObject({ kind: "paused" });
+    expect(env.store.state.tasks[task]?.hold).toMatchObject({ kind: "taken" });
     await expect(env.control.act(task, reference, "resume", {})).rejects.toThrow(
       "kozo return gives it back",
     );

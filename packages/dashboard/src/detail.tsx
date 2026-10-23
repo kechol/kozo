@@ -48,15 +48,8 @@ interface Verdicts {
   costUsd: number;
 }
 
-// The text kozo take puts on the hold it sets, which kozo return alone clears.
-const takenReason = "the human took it; kozo return gives it back";
-
 /** The verbs the detail view offers for a reference in its present state. */
-export function detailActions(
-  kind: "item" | "task" | "run",
-  hold: string | null,
-  reason: string | null,
-): Action[] {
+export function detailActions(kind: "item" | "task" | "run", hold: string | null): Action[] {
   const say: Action = {
     verb: "say",
     label: hold === "question" ? "Answer" : "Send",
@@ -71,8 +64,7 @@ export function detailActions(
       ? { verb: "resume", label: "Resume" }
       : { verb: "pause", label: "Pause", body: { now: true } };
   if (kind === "run") return [say, pause];
-  const taken = hold === "paused" && reason === takenReason;
-  if (kind === "task" && taken) {
+  if (kind === "task" && hold === "taken") {
     return [
       {
         verb: "return",
@@ -149,7 +141,7 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
           {detail.cost_usd !== undefined ? <span>cost {usd(detail.cost_usd)}</span> : null}
         </p>
         <div class="row actions">
-          {detailActions(kind, hold, reason).map((action) => (
+          {detailActions(kind, hold).map((action) => (
             <ActionButton key={action.label} api={api} refName={refName} action={action} />
           ))}
         </div>

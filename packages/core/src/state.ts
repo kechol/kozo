@@ -498,6 +498,7 @@ const holdTargets: Record<HoldKind, readonly ("item" | "task")[]> = {
   dependency: ["item", "task"],
   capacity: ["task"],
   paused: ["item", "task"],
+  taken: ["task"],
 };
 
 const runEdges: Partial<Record<RunState, readonly RunState[]>> = {

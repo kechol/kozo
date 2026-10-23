@@ -30,7 +30,6 @@ import { hasWorktree, taskBranch, worktreePath } from "./worktrees.ts";
 type Body<V extends Verb> = z.infer<(typeof verbBodySchemas)[V]>;
 
 /** The reason of the paused hold that `kozo take` sets, which `kozo return` alone clears. */
-export const takenReason = "the human took it; kozo return gives it back";
 
 const normalTitle = (title: string) => title.trim().replace(/\s+/g, " ").toLowerCase();
 
@@ -212,7 +211,12 @@ export class ControlPlane {
     });
   }
 
-  private async setHold(kind: "item" | "task", ref: string, hold: "paused", reason: string) {
+  private async setHold(
+    kind: "item" | "task",
+    ref: string,
+    hold: "paused" | "taken",
+    reason: string,
+  ) {
     const { item, task } = this.subject(ref, kind);
     await this.store.append({
       type: "hold.set",
@@ -355,10 +359,10 @@ export class ControlPlane {
 
   private async resume(ref: string, kind: "item" | "task"): Promise<VerbResult> {
     const { subject } = this.subject(ref, kind);
-    if (subject.hold?.kind !== "paused") return { message: `${ref} is not paused` };
     // The human works in the worktree of a task they took, so only kozo return hands it back.
-    if (subject.hold.reason === takenReason)
+    if (subject.hold?.kind === "taken")
       throw new CommandError(409, `${ref} is yours; kozo return gives it back`);
+    if (subject.hold?.kind !== "paused") return { message: `${ref} is not paused` };
     await this.clearHold(kind, ref);
     return { message: `resumed ${ref}` };
   }
@@ -396,8 +400,7 @@ export class ControlPlane {
     const item = task ? this.store.state.items[task.item] : undefined;
     if (!task || !item) throw new CommandError(404, `${ref} does not exist`);
     if (isClosed(subject.stage)) throw new CommandError(409, `${ref} is ${subject.stage}`);
-    if (subject.hold?.kind === "paused" && subject.hold.reason === takenReason)
-      return { message: `${ref} is already yours` };
+    if (subject.hold?.kind === "taken") return { message: `${ref} is already yours` };
     if (subject.hold && subject.hold.kind !== "attention" && subject.hold.kind !== "question")
       throw new CommandError(409, `${ref} is held by ${subject.hold.kind}`);
     const worktree = worktreePath(this.home, item.repository, ref);
@@ -406,7 +409,7 @@ export class ControlPlane {
     const running = this.runner?.sessionFor(ref);
     if (running) this.runner?.stopSession(running);
     await this.clearHold("task", ref, "kozo take");
-    await this.setHold("task", ref, "paused", takenReason);
+    await this.setHold("task", ref, "taken", "kozo take");
     const branch = taskBranch(this.store.factoryId, ref);
     return {
       message: `${ref} is yours: commit in ${worktree} on ${branch}, then run kozo return ${ref} <what you changed and checked>`,
@@ -419,7 +422,7 @@ export class ControlPlane {
    */
   private async giveBack(ref: string, body: Body<"return">): Promise<VerbResult> {
     const { subject, item } = this.subject(ref, "task");
-    if (subject.hold?.kind !== "paused" || subject.hold.reason !== takenReason)
+    if (subject.hold?.kind !== "taken")
       throw new CommandError(409, `${ref} is not taken; kozo take hands it to you`);
     const repository = this.store.state.items[item]?.repository ?? "";
     const worktree = worktreePath(this.home, repository, ref);

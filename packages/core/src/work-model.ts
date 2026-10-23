@@ -20,6 +20,7 @@ export const holdKindSchema = z.enum([
   "dependency",
   "capacity",
   "paused",
+  "taken",
 ]);
 export type HoldKind = z.infer<typeof holdKindSchema>;
 

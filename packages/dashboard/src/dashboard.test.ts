@@ -142,19 +142,11 @@ describe("detailActions", () => {
     detailActions(...args).map((action) => action.label);
 
   test("offers what each kind takes in its state, never a merge", () => {
-    expect(labels("run", null, null)).toEqual(["Send", "Pause"]);
-    expect(labels("item", null, null)).toEqual(["Send", "Pause", "Cancel"]);
-    expect(labels("task", null, null)).toEqual(["Send", "Pause", "Take it over", "Cancel"]);
-    expect(labels("task", "question", "ambiguous")).toEqual([
-      "Answer",
-      "Retry",
-      "Take it over",
-      "Cancel",
-    ]);
-    expect(labels("task", "paused", "kozo pause")).toEqual(["Send", "Resume", "Cancel"]);
-    expect(labels("task", "paused", "the human took it; kozo return gives it back")).toEqual([
-      "Give it back",
-      "Cancel",
-    ]);
+    expect(labels("run", null)).toEqual(["Send", "Pause"]);
+    expect(labels("item", null)).toEqual(["Send", "Pause", "Cancel"]);
+    expect(labels("task", null)).toEqual(["Send", "Pause", "Take it over", "Cancel"]);
+    expect(labels("task", "question")).toEqual(["Answer", "Retry", "Take it over", "Cancel"]);
+    expect(labels("task", "paused")).toEqual(["Send", "Resume", "Cancel"]);
+    expect(labels("task", "taken")).toEqual(["Give it back", "Cancel"]);
   });
 });
