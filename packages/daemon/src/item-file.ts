@@ -66,3 +66,7 @@ export const requestText = (item: Pick<ItemFile, "title" | "body">) =>
 export async function readItemFile(home: KozoHome, ref: string): Promise<ItemFile> {
   return parseItemFile(await Bun.file(itemPath(home, ref)).text());
 }
+
+/** Where kozod writes a task's handoff report, beside its item's records. */
+export const handoffReportPath = (home: KozoHome, item: string, task: string) =>
+  join(itemDirectory(home, item), `handoff-${task.split("/").at(-1)}.md`);
