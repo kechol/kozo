@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
-import { kozoHome, parseAutomation, runFiles, sha256 } from "@kozo/core";
+import { autonomyLevel, kozoHome, parseAutomation, runFiles, sha256 } from "@kozo/core";
 import {
   type FakeStep,
   fakeAgent,
@@ -20,6 +20,7 @@ import { ControlPlane } from "./control-plane.ts";
 import { EventStore } from "./event-store.ts";
 import { inProcessLauncher, type Launcher } from "./launcher.ts";
 import { Reconciler } from "./reconcile.ts";
+import { readCharter } from "./repository.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
 import { worktreePath } from "./worktrees.ts";
@@ -863,10 +864,52 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[task]?.stage).toBe("complete");
     expect(env.store.state.items[ref]).toMatchObject({ stage: "triage", hold: null });
     expect(env.store.state.items[ref]?.notes.at(-1)).toMatchObject({
-      target: ref,
+      target: task,
       kind: "check",
       text: expect.stringContaining("DONE_WHEN is not met"),
     });
+    expect(env.store.state.tasks[task]?.defectAt).not.toBeNull();
+  }, 180_000);
+
+  test("a post-merge defect lowers its class one level until the Charter changes", async () => {
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+      judgeWith("accept"),
+      { charter: (text) => text.replace("default: L1", "default: L1\n  bugfix: L2") },
+    );
+    const { task } = await toHandoff(env);
+    await env.control.pauseFactory();
+    await env.repo.git(
+      "merge",
+      "--no-ff",
+      "--quiet",
+      "-m",
+      "merge",
+      `kozo/${env.store.factoryId}/K-1-t1`,
+    );
+    await env.repo.commit({ "src/debug.ts": "console.log('left over');\n" }, "debug");
+    await env.reconciler.reconcile();
+    await env.scheduler.idle();
+    await env.reconciler.reconcile();
+    expect(Object.values(env.store.state.demotions)).toEqual([
+      expect.objectContaining({
+        repository: env.repo.path,
+        class: "bugfix",
+        from: "L2",
+        to: "L1",
+        reason: `a post-merge defect in ${task}`,
+      }),
+    ]);
+    const charter = await readCharter(env.repo.path, "local", env.store.state);
+    expect(charter.ok && autonomyLevel(charter.charter, "bugfix")).toBe("L1");
+    await env.repo.commit(
+      {
+        ".kozo/charter.yml": `${await env.repo.git("show", "HEAD:.kozo/charter.yml")}\n# reviewed\n`,
+      },
+      "charter",
+    );
+    const edited = await readCharter(env.repo.path, "local", env.store.state);
+    expect(edited.ok && autonomyLevel(edited.charter, "bugfix")).toBe("L2");
   }, 180_000);
 
   test("a failing check after merging a task that is not the item's last holds it and its dependents", async () => {
@@ -1604,6 +1647,7 @@ test("one unit is still counted", () => {
     await git(worktree, ["merge", "--quiet", "--ff-only", "mine"]);
     const sessions = env.agent.requests.length;
     await env.control.act(task, reference, "return", { text: "Wrote the low-stock branch" });
+    expect(env.store.state.tasks[task]?.intervened).toBe(true);
     await env.settle();
     expect(env.store.state.tasks[task]).toMatchObject({
       stage: "handoff",

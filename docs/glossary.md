@@ -131,9 +131,12 @@
 | Charter | The per-repository file, changed only by humans, that sets what the factory may do in that repository. | `.kozo/charter.yml` | config, policy | - |
 | constraints | The per-repository file that defines each gate once for all gate levels. | `.kozo/constraints.yml` | - | - |
 | daily budget | The machine-wide daily spending cap after which kozod starts nothing new. | `budget.daily_usd` | - | - |
+| demotion | kozod's lowering of a class's autonomy level in one repository by one step on a post-merge defect or over 30 percent intervention in the last ten merged diffs, which lasts until the Charter changes. | `factory.demoted` | downgrade | - |
 | factory definition | The git repository of agents, skills, blueprints, automations, eval cases and `factory.yml` that kozod applies only after `kozo check` passes. | `~/.kozo/factory/`, `factory.yml` | factory config | - |
+| intervention | A human's work on a task: taking it with `kozo take`, committing to its branch at Handoff or sending it back from there. | `intervened` | - | - |
 | limits | The Charter caps per task and per run, such as changed lines, files, retries, turns, minutes and cost. | `limits` | - | - |
 | mode | The way kozo connects to the outside: `local` with local branches, or `github` with Issues and pull requests. | `mode` | - | - |
+| promotion proposal | kozod's suggestion to raise a class from L2 to L3 once its last 20 merged diffs were all autonomous and free of defects, which only a human applies in the Charter. | `promotionProposals` | upgrade | - |
 | protected path | A Charter path pattern that is never changed unattended, so that touching it raises a question; it also covers everything under what it matches, read both as a glob and as a literal path. | `protected_paths` | - | - |
 | risk tier | The plan setting, low, normal or high, that decides verification depth and that kozod may only raise. | `risk` | risk class, risk level | - |
 | service | A command in the constraints that starts what the gates need and the command sandbox cannot run, such as a database container, which kozod runs outside the sandbox before prepare. | `services` in `.kozo/constraints.yml` | - | - |

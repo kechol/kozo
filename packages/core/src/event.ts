@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { workClassSchema } from "./charter.ts";
+import { autonomyLevelSchema, workClassSchema } from "./charter.ts";
 import { gateLevelSchema } from "./constraints.ts";
 import { type ParseResult, parseJsonDocument } from "./document.ts";
 import { planSchema } from "./plan.ts";
@@ -137,6 +137,19 @@ export const eventSchema = z
     event("factory.applied", z.strictObject({ commit: text })),
     /** The factory definition at `commit` did not validate; the one in use stays. */
     event("factory.refused", z.strictObject({ commit: text, issues: z.array(text).nonempty() })),
+    /** kozod lowered a class of a repository one level for its record since the last demotion. */
+    event(
+      "factory.demoted",
+      z.strictObject({
+        repository: text,
+        class: workClassSchema,
+        from: autonomyLevelSchema,
+        to: autonomyLevelSchema,
+        /** The SHA-256 of the Charter text it demoted from; an edited Charter ends the demotion. */
+        charter_sha: sha256,
+        reason: text,
+      }),
+    ),
     /** A human pruned the records of `runs`, whose items closed before `before`, to their logs. */
     event(
       "factory.pruned",

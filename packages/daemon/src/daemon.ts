@@ -158,7 +158,7 @@ export class Daemon {
     };
     // For the dashboard's levels: each repository's Charter and each item's requested class.
     const charterOf = minuteCache((repository) =>
-      readCharter(repository, definition.current.factory.mode),
+      readCharter(repository, definition.current.factory.mode, store.state),
     );
     const requestedClass = minuteCache((ref) => readItemFile(home, ref).then((file) => file.class));
     const app = createApi({

@@ -1,14 +1,25 @@
-import { type Charter, type Factory, parseCharter } from "@kozo/core";
+import {
+  type Charter,
+  demotedCharter,
+  type Factory,
+  type FactoryState,
+  parseCharter,
+  sha256,
+} from "@kozo/core";
 import { baseOf, charterPath, git, showFile } from "@kozo/verify";
 
 export type CharterResult =
-  | { ok: true; charter: Charter; commit: string }
+  | { ok: true; charter: Charter; commit: string; sha: string }
   | { ok: false; reason: string };
 
-/** Reads the Charter from the tip of the base; anything short of ready is a refusal. */
+/**
+ * Reads the Charter from the tip of the base; anything short of ready is a refusal. With
+ * `state`, the levels are the ones kozod applies, its demotions included.
+ */
 export async function readCharter(
   repository: string,
   mode: Factory["mode"],
+  state?: FactoryState,
 ): Promise<CharterResult> {
   let branch: string;
   let ref: string;
@@ -29,5 +40,7 @@ export async function readCharter(
       reason: `${charterPath} on ${branch} is ${result.value.status}, not ready`,
     };
   }
-  return { ok: true, charter: result.value, commit };
+  const sha = sha256(text);
+  const charter = state ? demotedCharter(state, repository, result.value, sha) : result.value;
+  return { ok: true, charter, commit, sha };
 }

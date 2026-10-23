@@ -73,6 +73,12 @@ export interface TaskState {
   codemod: string | null;
   /** Whether a human gave the task back after taking it, until its next blueprint run starts. */
   returned: boolean;
+  /** The work class of the plan that made the task. */
+  class: WorkClass;
+  /** Whether a human took the task, committed to its branch at Handoff or sent it back from there. */
+  intervened: boolean;
+  /** When a check after the task's merge failed, a post-merge defect, or null. */
+  defectAt: string | null;
   /** The plan's tier, or the higher one kozod rated the task's diff at. */
   risk: RiskTier;
   stage: Stage;
@@ -104,6 +110,19 @@ export interface RunInfo {
   sealed: boolean;
 }
 
+export interface Demotion {
+  repository: string;
+  class: WorkClass;
+  from: AutonomyLevel;
+  to: AutonomyLevel;
+  charterSha: string;
+  reason: string;
+  at: string;
+}
+
+export const demotionKey = (repository: string, workClass: WorkClass) =>
+  `${workClass}@${repository}`;
+
 export interface FactoryState {
   /** The factory's ID from `factory.created`, null only before kozod first starts. */
   factoryId: string | null;
@@ -121,6 +140,8 @@ export interface FactoryState {
   order: string[];
   tasks: Record<string, TaskState>;
   runs: Record<string, RunInfo>;
+  /** kozod's demotions of a class in a repository, by `demotionKey`. */
+  demotions: Record<string, Demotion>;
   /** The `ts` of the last event applied; events must come in strictly increasing order. */
   lastTs: string | null;
 }
@@ -160,6 +181,7 @@ export function emptyState(): FactoryState {
     order: [],
     tasks: {},
     runs: {},
+    demotions: {},
     lastTs: null,
   };
 }
@@ -267,6 +289,19 @@ export function applyEvent(state: FactoryState, event: Event): void {
       return;
     case "factory.pruned":
       return;
+    case "factory.demoted": {
+      const { repository, from, to, charter_sha, reason } = event.data;
+      state.demotions[demotionKey(repository, event.data.class)] = {
+        repository,
+        class: event.data.class,
+        from,
+        to,
+        charterSha: charter_sha,
+        reason,
+        at: event.ts,
+      };
+      return;
+    }
     case "item.created": {
       const ref = event.item ?? "";
       if (item) throw new StateError(`item ${ref} already exists`);
@@ -325,6 +360,13 @@ export function applyEvent(state: FactoryState, event: Event): void {
         // A human's change request sends a task back as well, but only kozod's sends are fix rounds.
         if (task.stage === "handoff" && event.data.to === "building" && event.data.by === "kozod")
           task.handoffFixes += 1;
+        // Only a human's commit moves a task from Handoff to Reviewing.
+        if (
+          task.stage === "handoff" &&
+          (event.data.to === "reviewing" ||
+            (event.data.to === "building" && event.data.by === "human"))
+        )
+          task.intervened = true;
       }
       if (event.data.target === "item" && item && event.data.to === "triage") item.rejections = 0;
       subject.stage = event.data.to;
@@ -363,6 +405,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
         text: event.data.text,
       });
       if (event.data.kind === "rejection" && event.task === null) subject.rejections += 1;
+      if (event.data.kind === "check" && task) task.defectAt = event.ts;
       return;
     }
     case "plan.proposed": {
@@ -405,6 +448,9 @@ export function applyEvent(state: FactoryState, event: Event): void {
           characterize: planned.characterize ?? false,
           codemod: planned.codemod ?? null,
           returned: false,
+          class: plan.class,
+          intervened: false,
+          defectAt: null,
           risk: plan.risk,
           stage: "building",
           hold: null,
@@ -486,6 +532,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
     case "task.returned": {
       const subject = required(task, `task ${event.task}`);
       subject.returned = true;
+      subject.intervened = true;
       subject.updatedAt = event.ts;
       return;
     }

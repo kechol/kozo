@@ -1,5 +1,6 @@
 export * from "./api.ts";
 export * from "./automation.ts";
+export * from "./autonomy.ts";
 export * from "./blueprint.ts";
 export * from "./brief.ts";
 export * from "./charter.ts";

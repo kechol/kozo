@@ -1,4 +1,4 @@
-import { type Charter, type Constraints, parseCharter, parseConstraints } from "@kozo/core";
+import { type Charter, type Constraints, parseCharter, parseConstraints, sha256 } from "@kozo/core";
 import { showFile } from "./git.ts";
 
 // Repository paths, used both on disk and inside git commits.
@@ -12,7 +12,8 @@ export type BaseDocumentsProblem =
   | "constraints-invalid";
 
 export type BaseDocuments =
-  | { ok: true; charter: Charter; constraints: Constraints }
+  /** `charterSha` is the SHA-256 of the Charter's text, which a demotion is tied to. */
+  | { ok: true; charter: Charter; charterSha: string; constraints: Constraints }
   | { ok: false; problem: BaseDocumentsProblem; issues: string[] };
 
 /**
@@ -32,5 +33,10 @@ export async function readBaseDocuments(cwd: string, commit: string): Promise<Ba
   if (!constraints.ok) {
     return { ok: false, problem: "constraints-invalid", issues: constraints.issues };
   }
-  return { ok: true, charter: charter.value, constraints: constraints.value };
+  return {
+    ok: true,
+    charter: charter.value,
+    charterSha: sha256(charterText),
+    constraints: constraints.value,
+  };
 }

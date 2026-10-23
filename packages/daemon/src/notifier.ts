@@ -100,6 +100,11 @@ export class Notifier {
       case "factory.refused":
         await send(`kozod refused the factory definition: ${event.data.issues.join("; ")}`);
         break;
+      case "factory.demoted":
+        await send(
+          `kozod lowered ${event.data.class} in ${event.data.repository} from ${event.data.from} to ${event.data.to}: ${event.data.reason}; editing the Charter ends it`,
+        );
+        break;
     }
     const usd = event.cost?.usd ?? 0;
     if (usd > 0) await this.followSpending(usd, send);

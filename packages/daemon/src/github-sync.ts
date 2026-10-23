@@ -685,7 +685,7 @@ Part of #${issue}`;
    * is trusted; any other needs a start and a plan approval whatever the autonomy level.
    */
   private async take(path: string, github: string, ref: string, issue: GitHubIssue) {
-    const charter = await readCharter(path, "github");
+    const charter = await readCharter(path, "github", this.store.state);
     if (!charter.ok) {
       this.report(`kozod: ${ref} is not taken: ${charter.reason}`);
       return;

@@ -5,6 +5,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import {
   blueprintNodes,
   type Charter,
+  demotedCharter,
   explorerAnswerJsonSchema,
   explorerAnswerSchema,
   type GateLevel,
@@ -232,7 +233,7 @@ export class Runner implements RunnerOps {
       base,
       ref,
       tip,
-      charter: documents.charter,
+      charter: demotedCharter(this.store.state, path, documents.charter, documents.charterSha),
       constraints: documents.constraints,
     };
   }
@@ -897,9 +898,11 @@ export class Runner implements RunnerOps {
       },
     });
     if (result.status !== "pass") {
+      // The note names the task, which the defect is counted against.
       await this.store.append({
         type: "note.added",
         item: item.ref,
+        task: taskRef,
         data: {
           kind: "check",
           text: failed,

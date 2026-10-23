@@ -1,7 +1,16 @@
-import { type Factory, isRunOver, type TaskState } from "@kozo/core";
+import {
+  autonomyLevel,
+  demotionDue,
+  type Factory,
+  isRunOver,
+  lowerLevel,
+  type TaskState,
+  type WorkClass,
+} from "@kozo/core";
 import { baseOf, branchTip, git, isAncestor } from "@kozo/verify";
 import { factoryGitEnvironment } from "@kozo/worker";
 import type { EventStore } from "./event-store.ts";
+import { readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
 import { awaitingMerge } from "./scheduler.ts";
 import { taskBranch } from "./worktrees.ts";
@@ -181,7 +190,7 @@ export class Reconciler {
     }
   }
 
-  /** One pass over the tasks that wait on something outside kozod. */
+  /** One pass over the tasks that wait on something outside kozod, then over their record. */
   async reconcile(): Promise<void> {
     for (const task of Object.values(this.store.state.tasks)) {
       if (!awaitingMerge(this.store.state, task)) continue;
@@ -190,6 +199,37 @@ export class Reconciler {
           `kozod: reconciling ${task.ref}: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
+    }
+    await this.demote().catch((error: unknown) =>
+      this.report(`kozod: demoting: ${error instanceof Error ? error.message : String(error)}`),
+    );
+  }
+
+  /**
+   * Lowers each class of a repository one level, from the level kozod applies, when its merged
+   * diffs since its last demotion call for it; a class at L1 stays.
+   */
+  async demote(): Promise<void> {
+    const state = this.store.state;
+    const pairs = new Map<string, { repository: string; workClass: WorkClass }>();
+    for (const task of Object.values(state.tasks)) {
+      const repository = state.items[task.item]?.repository;
+      if (task.merged && repository)
+        pairs.set(`${task.class}@${repository}`, { repository, workClass: task.class });
+    }
+    for (const { repository, workClass } of pairs.values()) {
+      const reason = demotionDue(this.store.state, repository, workClass);
+      if (reason === null) continue;
+      const charter = await readCharter(repository, this.mode(), this.store.state);
+      if (!charter.ok) continue;
+      const from = autonomyLevel(charter.charter, workClass);
+      const to = lowerLevel(from);
+      if (to === null) continue;
+      await this.store.append({
+        type: "factory.demoted",
+        data: { repository, class: workClass, from, to, charter_sha: charter.sha, reason },
+      });
+      this.report(`kozod: lowered ${workClass} in ${repository} from ${from} to ${to}: ${reason}`);
     }
   }
 }

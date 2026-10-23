@@ -73,7 +73,11 @@ export class ControlPlane {
    */
   async addItem(body: AddItem): Promise<{ ref: string } & VerbResult> {
     const repository = this.repositoryFor(body.repository);
-    const charter = await readCharter(repository, this.definition.current.factory.mode);
+    const charter = await readCharter(
+      repository,
+      this.definition.current.factory.mode,
+      this.store.state,
+    );
     if (!charter.ok) throw new CommandError(422, `not accepted: ${charter.reason}`);
     const title = normalTitle(body.title);
     const duplicate = Object.values(this.store.state.items).find(
