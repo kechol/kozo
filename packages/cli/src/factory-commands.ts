@@ -565,6 +565,7 @@ interface Metrics {
   levels?: { repository: string; class: string; level: string }[];
   demotions?: { repository: string; class: string; from: string; to: string; reason: string }[];
   cost_usd?: number;
+  failures?: { kind: string; ref: string; at: string; text: string }[];
 }
 
 interface CostReport {
@@ -583,6 +584,18 @@ function metricLines(r: Metrics): string[] {
     `time to merge     ${r.hours_to_merge === null ? "-" : `${r.hours_to_merge.toFixed(1)} h`}  (median, within 24 h)`,
     `revise rate       ${percent(r.revise_rate)} of ${r.reviews} reviews  (10% to 30%)`,
     `held              ${r.held} questions and attention  (10 or fewer)`,
+    ...(r.failures === undefined
+      ? []
+      : [
+          "",
+          r.failures.length === 0
+            ? "no failures in the window"
+            : `failures in the window, for the retrospective: ${r.failures.length}`,
+          ...r.failures.map(
+            (f) =>
+              `  ${f.at.slice(0, 16).replace("T", " ")}  ${f.kind}  ${f.ref}  ${f.text.split("\n")[0]}`,
+          ),
+        ]),
     ...(r.promotions.length === 0
       ? []
       : [

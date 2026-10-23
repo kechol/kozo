@@ -48,6 +48,61 @@ function costSince(db: Database, since: Date): number {
   );
 }
 
+export interface Failure {
+  kind: "revise" | "escalate" | "defect" | "human-commit" | "missing-tool";
+  ref: string;
+  at: string;
+  text: string;
+}
+
+/**
+ * The failures since `since` that the retrospective reads: review verdicts of revise and
+ * escalate, failed checks after a merge, human commits and blocks for a missing tool, oldest
+ * first.
+ */
+function failures(db: Database, since: string): Failure[] {
+  const rows = db
+    .query<
+      {
+        ts: string;
+        type: string;
+        ref: string;
+        verdict: string | null;
+        text: string | null;
+        kind: string | null;
+        from: string | null;
+        to: string | null;
+      },
+      [string]
+    >(
+      `select ts, type, coalesce(task, item) as ref,
+              json_extract(line, '$.data.verdict') as verdict,
+              coalesce(json_extract(line, '$.data.summary'), json_extract(line, '$.data.text'),
+                       json_extract(line, '$.data.reason')) as text,
+              json_extract(line, '$.data.kind') as kind,
+              json_extract(line, '$.data.from') as "from", json_extract(line, '$.data.to') as "to"
+         from events
+        where ts >= ? and type in ('review.verdict', 'note.added', 'task.returned', 'stage.changed', 'hold.set')
+        order by ts, id`,
+    )
+    .all(since);
+  return rows.flatMap((row): Failure[] => {
+    const failure = (kind: Failure["kind"], text = row.text ?? "") => [
+      { kind, ref: row.ref, at: row.ts, text },
+    ];
+    if (row.type === "review.verdict" && (row.verdict === "revise" || row.verdict === "escalate"))
+      return failure(row.verdict);
+    if (row.type === "note.added" && row.kind === "check") return failure("defect");
+    if (row.type === "task.returned") return failure("human-commit", "taken and given back");
+    // Only a human's commit moves a task from Handoff to Reviewing.
+    if (row.type === "stage.changed" && row.from === "handoff" && row.to === "reviewing")
+      return failure("human-commit");
+    if (row.type === "hold.set" && row.text?.startsWith("missing-tool: "))
+      return failure("missing-tool", row.text.slice("missing-tool: ".length));
+    return [];
+  });
+}
+
 /** The metrics over the diffs merged since `since`, and what waits now. */
 function metrics(db: Database, state: FactoryState, since: string) {
   const merged = Object.values(state.tasks).filter(
@@ -126,7 +181,8 @@ export async function buildReport(
       : [],
   );
   const result = { view, days, since, ...metrics(db, state, since), promotions };
-  if (view !== "review") return result;
+  if (view === "summary") return result;
+  if (view === "week") return { ...result, failures: failures(db, since) };
   const levels = repositories.flatMap(({ path, charter }) =>
     charter.ok
       ? workClassSchema.options.map((workClass) => ({
@@ -138,6 +194,7 @@ export async function buildReport(
   );
   return {
     ...result,
+    failures: failures(db, since),
     levels,
     demotions: Object.values(state.demotions),
     cost_usd: costSince(db, new Date(since)),

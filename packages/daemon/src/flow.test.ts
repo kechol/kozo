@@ -223,6 +223,39 @@ describe("feature items", () => {
   }, 120_000);
 });
 
+describe("the retrospective", () => {
+  test("a block for a missing tool is a failure of the week", async () => {
+    const question = "Playwright's browsers are not installed";
+    await using env = await factoryOf((request) =>
+      request.agent === "triage"
+        ? [{ answer: plan }]
+        : [
+            { use: "kozo_blocked", input: { reason: "missing-tool", question } },
+            {
+              answer: {
+                ...report,
+                outcome: "blocked",
+                blocked: { reason: "missing-tool", question },
+              },
+            },
+          ],
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const week = (await buildReport(
+      env.store.db,
+      env.store.state,
+      env.definition.current.factory,
+      "week",
+    )) as { failures: unknown[] };
+    expect(week.failures).toEqual([
+      { kind: "missing-tool", ref: `${ref}/t1`, at: expect.any(String), text: question },
+    ]);
+  }, 120_000);
+});
+
 describe("splitting again", () => {
   test("a task stopped for its scope sends its item back to Planning, and the rest stays", async () => {
     const readme = "The README says when Only N left appears";
@@ -453,6 +486,14 @@ describe("the minimal path", () => {
     expect(env.agent.requests[2]?.prompt).toContain("The previous attempt did not pass");
     expect(task?.revisions).toBe(2);
     expect(task?.hold).toMatchObject({ kind: "attention" });
+    const week = (await buildReport(
+      env.store.db,
+      env.store.state,
+      env.definition.current.factory,
+      "week",
+    )) as { failures: { kind: string; ref: string }[] };
+    expect(week.failures.filter((failure) => failure.kind === "revise")).toHaveLength(2);
+    expect(week.failures[0]).toMatchObject({ kind: "revise", ref: `${ref}/t1` });
   }, 180_000);
 
   test("a blocked run holds the task with its question, and an answer resumes it", async () => {
@@ -927,6 +968,13 @@ describe("the minimal path", () => {
     );
     const edited = await readCharter(env.repo.path, "local", env.store.state);
     expect(edited.ok && autonomyLevel(edited.charter, "bugfix")).toBe("L2");
+    const week = (await buildReport(
+      env.store.db,
+      env.store.state,
+      env.definition.current.factory,
+      "week",
+    )) as { failures: { kind: string; ref: string }[] };
+    expect(week.failures).toContainEqual(expect.objectContaining({ kind: "defect", ref: task }));
   }, 180_000);
 
   test("a failing check after merging a task that is not the item's last holds it and its dependents", async () => {
@@ -1665,6 +1713,15 @@ test("one unit is still counted", () => {
     const sessions = env.agent.requests.length;
     await env.control.act(task, reference, "return", { text: "Wrote the low-stock branch" });
     expect(env.store.state.tasks[task]?.humanCommits).toBe(true);
+    const week = (await buildReport(
+      env.store.db,
+      env.store.state,
+      env.definition.current.factory,
+      "week",
+    )) as { failures: { kind: string; ref: string; text: string }[] };
+    expect(week.failures).toContainEqual(
+      expect.objectContaining({ kind: "human-commit", ref: task, text: "taken and given back" }),
+    );
     await env.settle();
     expect(env.store.state.tasks[task]).toMatchObject({
       stage: "handoff",
