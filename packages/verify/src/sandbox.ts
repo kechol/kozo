@@ -225,14 +225,21 @@ export function bubblewrapArgs(sandbox: CommandSandbox): string[] {
 // socket in the command's TMPDIR, which bubblewrap mounts, and names the relayed ports to the
 // inside. A port nobody listens on is left to the command, which may serve on it itself. The
 // relays are quiet, since stopping them makes socat warn; a failed connection reaches the
-// command as one.
-const relayOutside = `ports=
+// command as one. The script runs outside the sandbox in the worktree, so it finds its tools only
+// on the absolute directories of kozod's PATH, never on a relative entry that the diff could
+// fill, and gives the command its own PATH back.
+const relayOutside = (path: string) => `original=$PATH
+PATH='${path.replaceAll("'", `'\\''`)}'
+ports=
 for port in $KOZO_PORTS; do
   hex=$(printf %04X "$port")
   if grep -qs ":$hex [0-9A-F]*:0000 0A" /proc/net/tcp /proc/net/tcp6; then ports="$ports $port"; fi
 done
 export KOZO_RELAYED="$ports" KOZO_RELAY="$TMPDIR/kozo-relay"
-[ -z "$ports" ] && exec "$@"
+if [ -z "$ports" ]; then
+  export PATH="$original"
+  exec "$@"
+fi
 if ! command -v socat >/dev/null; then
   echo "kozo: install socat, which the sandbox needs to reach ports$ports on this machine" >&2
   exit 126
@@ -249,10 +256,13 @@ for port in $ports; do
   pids="$pids $pid"
   until [ -S "$KOZO_RELAY/$port" ]; do kill -0 "$pid" 2>/dev/null || exit 126; sleep 0.01; done
 done
-"$@"`;
+PATH=$original "$@"`;
 
-// Inside bubblewrap: listens on each relayed port of the command's own loopback, once ready.
-const relayInside = `for port in $KOZO_RELAYED; do
+// Inside bubblewrap: listens on each relayed port of the command's own loopback, once ready, with
+// the same tools as outside, so that a file of the diff cannot hold the command up.
+const relayInside = (path: string) => `original=$PATH
+PATH='${path.replaceAll("'", `'\\''`)}'
+for port in $KOZO_RELAYED; do
   socat TCP4-LISTEN:"$port",bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:"$KOZO_RELAY/$port" &
   pid=$!
   socat "TCP6-LISTEN:$port,bind=[::1],fork,reuseaddr" "UNIX-CONNECT:$KOZO_RELAY/$port" 2>/dev/null &
@@ -260,6 +270,7 @@ const relayInside = `for port in $KOZO_RELAYED; do
   until grep -qs ":$hex [0-9A-F]*:0000 0A" /proc/net/tcp; do kill -0 "$pid" 2>/dev/null || exit 126; sleep 0.01; done
 done
 unset KOZO_RELAYED KOZO_RELAY
+export PATH="$original"
 exec "$@"`;
 
 /**
@@ -268,11 +279,15 @@ exec "$@"`;
  * starts, such as a database its services started, through socat.
  */
 export function bubblewrap(bwrap: string): Confine {
+  const path = (process.env.PATH ?? "")
+    .split(":")
+    .filter((entry) => entry.startsWith("/"))
+    .join(":");
   return (sandbox, argv) => {
     const confined = [bwrap, ...bubblewrapArgs(sandbox), "--"];
     if (sandbox.network !== "local") return [...confined, ...argv];
     const relay = (script: string) => ["/bin/sh", "-c", script, "kozo-relay"];
-    return [...relay(relayOutside), ...confined, ...relay(relayInside), ...argv];
+    return [...relay(relayOutside(path)), ...confined, ...relay(relayInside(path)), ...argv];
   };
 }
 

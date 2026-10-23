@@ -1,9 +1,10 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { chmod, lstat, mkdir, realpath, stat, symlink } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { tempDirectory } from "@kozo/testing";
 import { runCommand } from "./command.ts";
 import {
+  bubblewrap,
   bubblewrapArgs,
   type CommandSandbox,
   type Confine,
@@ -216,13 +217,29 @@ describe.skipIf(!sandboxed)("this machine's sandbox", () => {
       const serve = `bun -e 'const s = Bun.serve({ port: ${free}, hostname: "127.0.0.1", fetch: () => new Response("own") }); console.log(await (await fetch(s.url)).text()); s.stop()'`;
       expect((await confined(work, local, serve, env)).output).toBe("own\n");
       if (process.platform !== "linux") return;
-      // Only a relayed port needs socat; without it the command says so instead of running.
-      const bin = join(work, "bin");
-      await mkdir(bin);
-      await symlink(Bun.which("grep") ?? "/usr/bin/grep", join(bin, "grep"));
-      const missing = await confined(work, local, "true", { ...env, PATH: bin });
-      expect(missing.code).toBe(126);
-      expect(missing.output).toContain("install socat");
+      // The relay outside the sandbox finds no tool in the worktree, even on a relative PATH entry.
+      const marker = join(work, "..", `${basename(work)}-escaped`);
+      await Bun.write(join(work, "grep"), `#!/bin/sh\ntouch '${marker}'\nexit 1\n`);
+      await chmod(join(work, "grep"), 0o755);
+      const planted = await confined(work, local, reach, { ...env, PATH: `.:${process.env.PATH}` });
+      expect(planted.output).toBe("host\n");
+      expect(await Bun.file(marker).exists()).toBe(false);
+      // Only a relayed port needs socat; without it on kozod's PATH the command says so instead.
+      const parent = await realpath(join(work, ".."));
+      const tools = join(parent, `${basename(work)}-tools`);
+      await mkdir(tools);
+      await symlink(Bun.which("grep") ?? "/usr/bin/grep", join(tools, "grep"));
+      const path = process.env.PATH;
+      process.env.PATH = tools;
+      const withoutSocat = bubblewrap(Bun.which("bwrap", { PATH: path }) ?? "bwrap");
+      process.env.PATH = path;
+      let output = "";
+      const code = await runCommand("true", work, (text) => (output += text), env, {
+        confine: withoutSocat,
+        sandbox: local,
+      });
+      expect(code).toBe(126);
+      expect(output).toContain("install socat");
     } finally {
       host.stop(true);
     }
