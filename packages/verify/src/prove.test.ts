@@ -26,9 +26,9 @@ async function repository(documents = constraints) {
   return { repo, base };
 }
 
-async function prove(cwd: string, base: string) {
+async function prove(cwd: string, base: string, mode?: "reproduce" | "preserve") {
   let log = "";
-  const result = await runProve({ cwd, base, log: (text) => (log += text) });
+  const result = await runProve({ cwd, base, mode, log: (text) => (log += text) });
   return { result, log, line: proveLine(result) };
 }
 
@@ -71,6 +71,29 @@ describe("runProve", () => {
     await repo.commit({ "src/value.txt": "2\n", "tests/helper.sh": "echo help\n" });
     expect((await prove(repo.path, base)).line).toBe(
       "KOZO_PROVE: status=fail reason=no-tests tests=0 reverted=1",
+    );
+  });
+
+  test("in preserve mode, the changed tests must pass without the change too, and none may change", async () => {
+    const { repo, base } = await repository();
+    await using _ = repo;
+    await repo.git("checkout", "--quiet", "-b", "keeps");
+    await repo.commit({ "src/old.txt": "older\n" });
+    expect((await prove(repo.path, base, "preserve")).line).toBe(
+      "KOZO_PROVE: status=pass mode=preserve tests=0 reverted=1",
+    );
+    await repo.commit({ "tests/one.test.sh": 'test "$(cat src/value.txt)" = 1\n' });
+    expect((await prove(repo.path, base, "preserve")).line).toBe(
+      "KOZO_PROVE: status=pass mode=preserve tests=1 reverted=1",
+    );
+    await repo.git("checkout", "--quiet", "-b", "changes", base);
+    await repo.commit({ "src/value.txt": "2\n", "tests/two.test.sh": checksTwo });
+    const changed = await prove(repo.path, base, "preserve");
+    expect(changed.line).toBe(
+      "KOZO_PROVE: status=fail reason=fails-without-change mode=preserve tests=1 reverted=1",
+    );
+    expect(changed.log).toContain(
+      "the tests fail without the change, so it changes the behaviour they pin: tests/two.test.sh",
     );
   });
 

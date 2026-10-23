@@ -75,6 +75,7 @@ export interface RunnerOps {
     task: TaskState,
     base: string,
     worktree: string,
+    reproduce: boolean,
   ): Promise<void>;
 }
 

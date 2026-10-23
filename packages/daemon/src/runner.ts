@@ -708,7 +708,13 @@ export class Runner implements RunnerOps {
     return [...changed];
   }
 
-  async writeHandoffReport(itemRef: string, task: TaskState, base: string, worktree: string) {
+  async writeHandoffReport(
+    itemRef: string,
+    task: TaskState,
+    base: string,
+    worktree: string,
+    reproduce: boolean,
+  ) {
     const item = this.store.state.items[itemRef];
     // A task resumed in a new run left its report and verdicts in the runs before it.
     const runs = task.runs
@@ -768,7 +774,7 @@ export class Runner implements RunnerOps {
       "",
       "## Why it is safe",
       "",
-      `- prove: the changed tests fail without the change (${(report?.tests ?? []).join(", ") || "tests"})`,
+      `- prove: the changed tests ${reproduce ? "fail" : "pass"} without the change (${(report?.tests ?? []).join(", ") || "tests"})`,
       `- review: ${verdict.review ? `${verdict.review.verdict} — ${verdict.review.summary}` : "not recorded"}`,
       `- verify: ${verdict.verify ? `${verdict.verify.result} — ${verdict.verify.summary}` : "not run"}`,
       "",

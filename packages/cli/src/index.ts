@@ -83,9 +83,10 @@ Commands:
   diff-guard --base <ref> [--head <ref>] [--scope <glob>]... [--json]
       Check the diff from the merge base of <ref> to <head> (default HEAD)
       against the Charter and constraints at the tip of <ref>
-  prove --base <ref> [--json]
+  prove --base <ref> [--preserve] [--json]
       Require the changed tests to pass at HEAD and to fail with the
-      non-test changes reverted in place; the worktree must be clean
+      non-test changes reverted in place; with --preserve, to pass reverted
+      too, for a change that keeps behaviour; the worktree must be clean
   review --base <ref> --goal <text> --done-when <text>... [--model <id>]
          [--max-cost <usd>] [--out <dir>] [--json]
       Judge the diff from the merge base of <ref> to HEAD in a separate
@@ -213,12 +214,21 @@ async function diffGuard(args: readonly string[], out: Output, cwd: string): Pro
 async function prove(args: readonly string[], out: Output, cwd: string): Promise<number> {
   const { values } = parseArgs({
     args: [...args],
-    options: { base: { type: "string" }, json: { type: "boolean" } },
+    options: {
+      base: { type: "string" },
+      preserve: { type: "boolean" },
+      json: { type: "boolean" },
+    },
     strict: true,
   });
   if (values.base === undefined) throw new UsageError("prove needs --base <ref>");
 
-  const result = await runProve({ cwd, base: values.base, log: logTo(out, values.json) });
+  const result = await runProve({
+    cwd,
+    base: values.base,
+    mode: values.preserve ? "preserve" : "reproduce",
+    log: logTo(out, values.json),
+  });
   report(out, values.json, result, proveLine(result));
   return result.status === "pass" ? ExitCode.success : ExitCode.failure;
 }

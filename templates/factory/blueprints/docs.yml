@@ -1,0 +1,13 @@
+# How a documentation change goes from Building to Handoff: nothing to reproduce, and no app to
+# check. The risk tier still runs verify-app for a diff that changes more than documentation.
+version: 1
+nodes:
+  - claim
+  - prepare
+  - brief
+  - implement
+  - verify-deterministic
+  - review
+  - handoff
+  - final-verify
+reproduce: false

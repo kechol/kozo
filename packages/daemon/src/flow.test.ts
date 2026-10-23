@@ -1202,6 +1202,65 @@ describe("the minimal path", () => {
     expect(env.agent.requests.at(-1)?.prompt).toContain("Call kozo_gates with level deep");
   }, 120_000);
 
+  test("a refactor keeps the behaviour its added tests pin, which prove checks without the change", async () => {
+    const refactorPlan = { ...plan, plan: { ...plan.plan, class: "refactor" } };
+    const refactored = `export function stockLabel(units: number): string {
+  return units === 0 ? "Sold out" : \`\${units} in stock\`;
+}
+`;
+    const pinned = `import { expect, test } from "bun:test";
+import { stockLabel } from "./stock.ts";
+
+test("one unit is still counted", () => {
+  expect(stockLabel(1)).toBe("1 in stock");
+});
+`;
+    // A run after the first finds the change committed already.
+    const steps = (files: Record<string, string | null>, first: boolean): FakeStep[] => [
+      ...(first
+        ? [{ write: files }, { commit: "refactor: one expression for the stock label" }]
+        : []),
+      { use: "kozo_gates", input: { level: "full" } },
+      { use: "kozo_note", input: { choice: "A ternary", reason: "Two cases" } },
+      {
+        answer: {
+          ...report,
+          tests: Object.keys(files).filter((path) => path.endsWith(".test.ts")),
+        },
+      },
+    ];
+    for (const [files, expected] of [
+      [{ "src/stock.ts": refactored, "src/stock-count.test.ts": pinned }, null],
+      [goodChange, "KOZO_PROVE: status=fail reason=fails-without-change mode=preserve"],
+    ] as const) {
+      let runs = 0;
+      await using env = await factoryOf((request) =>
+        request.agent === "triage" ? [{ answer: refactorPlan }] : steps(files, runs++ === 0),
+      );
+      const { ref } = await env.control.addItem({ title: "Tidy stockLabel", class: "refactor" });
+      // A refactor runs at L1, so its start and its plan each wait for an approval.
+      for (let approvals = 0; approvals < 2; approvals += 1) {
+        await env.settle();
+        await env.control.act(
+          ref,
+          { kind: "item", item: { repo: null, number: 1 } },
+          "approve",
+          {},
+        );
+      }
+      await env.settle();
+      const task = env.store.state.tasks[`${ref}/t1`];
+      if (expected === null) {
+        expect(task).toMatchObject({ stage: "handoff", hold: null });
+        const handoff = await Bun.file(join(env.home.items, ref, "handoff-t1.md")).text();
+        expect(handoff).toContain("- prove: the changed tests pass without the change");
+      } else {
+        expect(task?.hold?.kind).toBe("attention");
+        expect(task?.hold?.reason).toContain(expected);
+      }
+    }
+  }, 240_000);
+
   test("kozo say reaches a running run at its next turn", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage"

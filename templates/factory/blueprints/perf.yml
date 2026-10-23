@@ -1,0 +1,16 @@
+# How a performance change goes from Building to Handoff: it keeps behaviour, so it starts from
+# no failing test, any test it adds must pass without the change too, and the full gates run
+# whatever the risk tier.
+version: 1
+nodes:
+  - claim
+  - prepare
+  - brief
+  - implement
+  - verify-deterministic
+  - review
+  - verify-app
+  - handoff
+  - final-verify
+reproduce: false
+gates: full

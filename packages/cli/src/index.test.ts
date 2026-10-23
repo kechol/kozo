@@ -127,6 +127,11 @@ describe("kozo prove", () => {
     const result = await capture(["prove", "--base", base], repo.path);
     expect(result.code).toBe(ExitCode.success);
     expect(result.stdout).toBe("KOZO_PROVE: status=pass tests=1 reverted=1");
+    const preserved = await capture(["prove", "--base", base, "--preserve"], repo.path);
+    expect(preserved.code).toBe(ExitCode.failure);
+    expect(preserved.stdout).toBe(
+      "KOZO_PROVE: status=fail reason=fails-without-change mode=preserve tests=1 reverted=1",
+    );
   });
 });
 

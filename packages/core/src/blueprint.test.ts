@@ -12,6 +12,17 @@ describe("parseBlueprint", () => {
       ok: true,
       value: { reproduce: false, gates: "deep" },
     });
+    const docs = parseBlueprint(factoryTemplate["blueprints/docs.yml"]);
+    expect(docs).toMatchObject({ ok: true, value: { reproduce: false } });
+    expect(docs.ok && docs.value.nodes).not.toContain("verify-app");
+    expect(parseBlueprint(factoryTemplate["blueprints/refactor.yml"])).toMatchObject({
+      ok: true,
+      value: { reproduce: false },
+    });
+    expect(parseBlueprint(factoryTemplate["blueprints/perf.yml"])).toMatchObject({
+      ok: true,
+      value: { reproduce: false, gates: "full" },
+    });
   });
 
   test("refuses nodes out of order or a required node left out, and allows leaving out verify-app", () => {

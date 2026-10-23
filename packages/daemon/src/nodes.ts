@@ -29,7 +29,7 @@ import {
 import { taskSandbox } from "@kozo/worker";
 import { checkNotes } from "./instructions.ts";
 import { handoffReportPath, readItemFile, requestText } from "./item-file.ts";
-import { firstCodeChange, layersFor, onlyDependencyFiles } from "./risk.ts";
+import { firstCodeChange, layersFor } from "./risk.ts";
 import { type BlueprintRun, describe, type Node, type RunEnd, tail } from "./task-run.ts";
 import { atMergedCommit, claimTask } from "./worktrees.ts";
 
@@ -167,7 +167,7 @@ const brief: NodeStep = async (run, current) => {
         ...(blueprint.reproduce
           ? []
           : [
-              "This blueprint starts from no failing test: make the change, keep every existing test passing and run the gates.",
+              "This blueprint starts from no failing test: make the change, keep every existing test passing and run the gates. A test you add must pass without your change too, since it pins behaviour the change keeps.",
             ]),
         ...run.ownerWords().map((note) => `The owner said (${note.kind}): ${note.text}`),
         ...(run.failure
@@ -335,14 +335,12 @@ const verifyDeterministic: NodeStep = async (run, current) => {
   if (gates.status === "fail")
     return await run.retry(node, `the ${gates.failed} gate failed:\n${tail(output)}`);
   output = "";
-  // A blueprint that starts from no failing test has nothing for prove to check, but the
-  // class comes from a session that read the request, so only a diff of dependency
-  // files may go without it.
-  const skipProve = !blueprint.reproduce && (await onlyDependencyFiles(worktree, repository.base));
-  if (run.layers.prove && !skipProve) {
+  if (run.layers.prove) {
+    // A blueprint that starts from no failing test keeps the behaviour its tests pin.
     const prove = await runProve({
       cwd: worktree,
       base: repository.base,
+      mode: blueprint.reproduce ? "reproduce" : "preserve",
       log: collect,
       env: runner.commandEnv,
       confined: runner.confined(worktree),
@@ -529,7 +527,13 @@ const verifyApp: NodeStep = async (run, current) => {
 const handoff: NodeStep = async (run, current) => {
   await run.enter("handoff", "D");
   await run.runner.moveTask(current, "handoff", run.run, "the checks of its risk tier passed");
-  await run.runner.writeHandoffReport(run.item.ref, current, run.repository.base, run.worktree);
+  await run.runner.writeHandoffReport(
+    run.item.ref,
+    current,
+    run.repository.base,
+    run.worktree,
+    run.blueprint.reproduce,
+  );
   await run.exit("handoff", true);
 };
 

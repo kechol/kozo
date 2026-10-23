@@ -1,5 +1,5 @@
-# How a dependency update goes from Building to Handoff: nothing to reproduce, and the deep
-# gates check the update whatever its risk tier.
+# How a dependency update goes from Building to Handoff: nothing to reproduce, any test it adds
+# must pass without the change too, and the deep gates check the update whatever its risk tier.
 version: 1
 nodes:
   - claim

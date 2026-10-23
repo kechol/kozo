@@ -10,7 +10,10 @@ export interface ProveRun {
   command: string;
   /** The exit code with the whole diff applied, which must be zero. */
   withChange: number;
-  /** The exit code with the non-test changes reverted, which must not be zero; null if not run. */
+  /**
+   * The exit code with the non-test changes reverted, which must not be zero, or zero when the
+   * change preserves behaviour; null if not run.
+   */
   withoutChange: number | null;
   seconds: number;
 }
@@ -18,8 +21,12 @@ export interface ProveRun {
 export type ProveResult =
   | {
       status: "pass" | "fail";
-      /** Why prove failed: no runnable changed tests, a test failing with the change, or one passing without it. */
-      reason?: "no-tests" | "fails-with-change" | "passes-without-change";
+      /**
+       * Why prove failed: no runnable changed tests, a test failing with the change, or one
+       * passing without it, or for a change that preserves behaviour, one failing without it.
+       */
+      reason?: "no-tests" | "fails-with-change" | "passes-without-change" | "fails-without-change";
+      mode: ProveMode;
       base: string;
       documentsAt: string;
       reverted: string[];
@@ -28,9 +35,17 @@ export type ProveResult =
   | { status: "MISCONFIGURED"; reason: BaseDocumentsProblem | "no-prove-entries" }
   | { status: "error"; message: string };
 
+/**
+ * `reproduce` proves that the changed tests test the change; `preserve` proves that they pin
+ * behaviour the change keeps, as a refactor's must.
+ */
+export type ProveMode = "reproduce" | "preserve";
+
 export interface ProveOptions {
   cwd: string;
   base: string;
+  /** `reproduce` when unset. */
+  mode?: ProveMode;
   log(text: string): void;
   /** The test commands' environment; they inherit this process's when it is unset. */
   env?: Record<string, string>;
@@ -40,14 +55,22 @@ export interface ProveOptions {
 
 /**
  * Proves that the changed tests test the change: they must pass at HEAD and fail once every
- * non-test change is reverted. The revert happens in place, so the worktree must be clean, and
- * it is restored to HEAD before returning.
+ * non-test change is reverted. In `preserve` mode they must pass reverted too, and a diff that
+ * changes no test passes. The revert happens in place, so the worktree must be clean, and it is
+ * restored to HEAD before returning.
  */
 export async function runProve(options: ProveOptions): Promise<ProveResult> {
   return await guarded(options.log, [GitError], () => prove(options));
 }
 
-async function prove({ cwd, base, log, env, confined }: ProveOptions): Promise<ProveResult> {
+async function prove({
+  cwd,
+  base,
+  mode = "reproduce",
+  log,
+  env,
+  confined,
+}: ProveOptions): Promise<ProveResult> {
   const { baseTip, head, mergeBase } = await resolveRange(cwd, base, "HEAD");
   const documents = await readBaseDocuments(cwd, baseTip);
   if (!documents.ok) {
@@ -82,6 +105,7 @@ async function prove({ cwd, base, log, env, confined }: ProveOptions): Promise<P
     base: mergeBase,
     documentsAt: baseTip,
     reverted: nonTests.map((file) => file.path),
+    mode,
   };
   const runs: ProveRun[] = entries
     .filter((entry) => entry.files.length > 0)
@@ -94,6 +118,7 @@ async function prove({ cwd, base, log, env, confined }: ProveOptions): Promise<P
     }));
   if (runs.length === 0) {
     log("kozo: the diff changes no test file that a prove entry runs\n");
+    if (mode === "preserve") return { status: "pass", ...result, runs };
     return { status: "fail", reason: "no-tests", ...result, runs };
   }
   for (const run of runs) {
@@ -120,6 +145,17 @@ async function prove({ cwd, base, log, env, confined }: ProveOptions): Promise<P
   }
   if (await isDirty(cwd, "no")) throw new GitError("the worktree was not restored to HEAD");
 
+  if (mode === "preserve") {
+    const broken = runs.filter((run) => run.withoutChange !== 0);
+    for (const run of broken) {
+      log(
+        `kozo: the tests fail without the change, so it changes the behaviour they pin: ${run.files.join(", ")}\n`,
+      );
+    }
+    if (broken.length > 0)
+      return { status: "fail", reason: "fails-without-change", ...result, runs };
+    return { status: "pass", ...result, runs };
+  }
   const unproved = runs.filter((run) => run.withoutChange === 0);
   for (const run of unproved) {
     log(
@@ -154,6 +190,7 @@ export function proveLine(result: ProveResult): string {
   if (result.status === "MISCONFIGURED") fields.push(`reason=${result.reason}`);
   if (result.status === "pass" || result.status === "fail") {
     if (result.reason) fields.push(`reason=${result.reason}`);
+    if (result.mode === "preserve") fields.push("mode=preserve");
     fields.push(`tests=${result.runs.reduce((sum, run) => sum + run.files.length, 0)}`);
     fields.push(`reverted=${result.reverted.length}`);
   }

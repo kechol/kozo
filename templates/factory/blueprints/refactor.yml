@@ -1,0 +1,14 @@
+# How a refactor goes from Building to Handoff: it keeps behaviour, so it starts from no failing
+# test, and any test it adds must pass without the change too.
+version: 1
+nodes:
+  - claim
+  - prepare
+  - brief
+  - implement
+  - verify-deterministic
+  - review
+  - verify-app
+  - handoff
+  - final-verify
+reproduce: false
