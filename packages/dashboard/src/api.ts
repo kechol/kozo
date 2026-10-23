@@ -51,6 +51,7 @@ export interface Status {
   activeRuns: number;
   waiting: number;
   costTodayUsd: number;
+  repositories: string[];
 }
 
 export interface InboxRow {
@@ -71,6 +72,10 @@ export interface ItemRow {
   hold: string | null;
   hold_reason: string | null;
   updated_at: string;
+  /** The plan's work class, or the draft's, once triage has one. */
+  class: string | null;
+  /** The autonomy level the item runs at, or null when the Charter cannot be read. */
+  level: string | null;
 }
 
 export interface TaskRow {

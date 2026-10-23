@@ -1,20 +1,24 @@
 import {
   type AddItem,
   type ApiError,
+  type AutonomyLevel,
   addItemSchema,
   type Event,
   helloProof,
   type Install,
   installSchema,
+  isClosed,
   issueText,
   listKindSchema,
   parseReference,
   type Reference,
+  type Stage,
   secretMatches,
   type Verb,
   verbBodySchemas,
   verbSchema,
   verbsByKind,
+  type WorkClass,
 } from "@kozo/core";
 import type { HTMLBundle } from "bun";
 import { type Context, Hono } from "hono";
@@ -69,6 +73,10 @@ export interface ApiOptions {
   locateTask?(ref: string): Promise<{ repository: string; branch: string; base: string } | null>;
   /** The dashboard's sessions, whose tokens the API accepts beside its own. */
   sessions?: DashboardSessions;
+  /** The registered repositories, which the dashboard offers when it adds an item. */
+  repositories?: () => string[];
+  /** The work class and autonomy level an open item runs at, or nulls when they are unknown. */
+  autonomy?(ref: string): Promise<{ class: WorkClass | null; level: AutonomyLevel | null }>;
 }
 
 const error = (c: Context, status: number, message: string, issues?: string[]) =>
@@ -98,6 +106,8 @@ export function createApi({
   now = () => new Date(),
   locateTask,
   sessions = new DashboardSessions(),
+  repositories = () => [],
+  autonomy,
 }: ApiOptions) {
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
   const origins = new Set([...hosts].map((host) => `http://${host}`));
@@ -149,13 +159,32 @@ export function createApi({
       activeRuns: activeRuns(store.db),
       waiting: inboxCount(store.db),
       costTodayUsd: costSince(store.db, today),
+      repositories: repositories(),
     });
   });
 
-  app.get("/api/ls/:kind", (c) => {
+  app.get("/api/ls/:kind", async (c) => {
     const kind = listKindSchema.safeParse(c.req.param("kind"));
     if (!kind.success) return error(c, 400, `unknown list ${c.req.param("kind")}`);
-    return c.json(list(store.db, kind.data));
+    const rows = list(store.db, kind.data);
+    if (kind.data !== "items") return c.json(rows);
+    // Items come in the order kozod starts their work, each open one with the class and level
+    // it runs at.
+    const position = new Map(store.state.order.map((ref, index) => [ref, index]));
+    const items = (rows as { ref: string; stage: Stage }[]).sort(
+      (a, b) => (position.get(a.ref) ?? 0) - (position.get(b.ref) ?? 0),
+    );
+    const unknown = { class: null, level: null };
+    return c.json(
+      await Promise.all(
+        items.map(async (row) => ({
+          ...row,
+          ...(isClosed(row.stage) || !autonomy
+            ? unknown
+            : await autonomy(row.ref).catch(() => unknown)),
+        })),
+      ),
+    );
   });
 
   const reference = (c: Context): [string, Reference] | Response => {

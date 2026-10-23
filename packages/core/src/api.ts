@@ -18,12 +18,13 @@ export const verbSchema = z.enum([
   "close",
   "take",
   "return",
+  "reorder",
 ]);
 export type Verb = z.infer<typeof verbSchema>;
 
 /** The verbs each kind of reference takes; any other pair is a 400. */
 export const verbsByKind: Record<Reference["kind"], readonly Verb[]> = {
-  item: ["say", "approve", "reject", "pause", "resume", "retry", "close"],
+  item: ["say", "approve", "reject", "pause", "resume", "retry", "close", "reorder"],
   task: ["say", "pause", "resume", "retry", "close", "take", "return"],
   run: ["say", "pause", "resume"],
 };
@@ -42,6 +43,8 @@ export const verbBodySchemas = {
   close: z.union([z.strictObject({ done: z.literal(true) }), z.strictObject({ cancel: text })]),
   take: z.strictObject({}),
   return: z.strictObject({ text }),
+  /** Moves the item before another item, or to the end with null. */
+  reorder: z.strictObject({ before: text.nullable() }),
 } satisfies Record<Verb, z.ZodType>;
 
 export const addItemSchema = z.strictObject({

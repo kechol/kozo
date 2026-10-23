@@ -3,11 +3,19 @@ import { usd } from "./format.ts";
 import { problem, run, status } from "./store.ts";
 
 /** The factory at a glance: its mode, whether it runs, what runs and waits, and today's cost. */
-export function Header({ api }: { api: Api }) {
+export function Header({ api, page }: { api: Api; page: string }) {
   const current = status.value;
   return (
     <header class="status">
       <strong class="brand">kozo</strong>
+      <nav>
+        <a href="#/" aria-current={page === "inbox" ? "page" : undefined}>
+          Inbox
+        </a>
+        <a href="#/board" aria-current={page === "board" ? "page" : undefined}>
+          Board
+        </a>
+      </nav>
       {current ? (
         <>
           <span class="mode">{current.mode} mode</span>

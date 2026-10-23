@@ -2,6 +2,7 @@ import {
   blueprintNodes,
   type Factory,
   type FactoryState,
+  inOrder,
   isClosed,
   isRunOver,
   startBlocker,
@@ -228,16 +229,18 @@ export class Scheduler {
     await this.holdForDependencies();
 
     // A merged task's check comes first: it completes items and lets dependent tasks start, and
-    // new work would otherwise take every slot it could start in.
-    for (const task of Object.values(this.store.state.tasks)) {
+    // new work would otherwise take every slot it could start in. Then work starts in item order.
+    const ordered = inOrder(this.store.state);
+    for (const task of ordered.tasks) {
       if (this.active.size >= this.factory().concurrency) return;
       if (!task.merged || task.stage !== "handoff" || task.hold || this.active.has(task.ref))
         continue;
       this.start(task.ref, "task", () => this.runner.complete(task.ref));
     }
-    for (const item of Object.values(this.store.state.items)) {
+    for (const { ref } of ordered.items) {
+      const item = this.store.state.items[ref];
       if (this.active.size >= this.factory().concurrency) return;
-      if (item.hold || this.active.has(item.ref)) continue;
+      if (!item || item.hold || this.active.has(item.ref)) continue;
       // An item in Planning without a hold had its plan rejected or its question answered.
       const draft =
         item.stage === "triage"
@@ -248,9 +251,10 @@ export class Scheduler {
       if (!draft || (await stopOf(item.repository)) !== null) continue;
       this.start(item.ref, "item", draft);
     }
-    for (const task of Object.values(this.store.state.tasks)) {
+    for (const { ref } of ordered.tasks) {
+      const task = this.store.state.tasks[ref];
       if (this.active.size >= this.factory().concurrency) return;
-      if (!this.needsRun(task)) continue;
+      if (!task || !this.needsRun(task)) continue;
       const repository = this.store.state.items[task.item]?.repository ?? "";
       const stop = await stopOf(repository);
       if (stop !== null) {

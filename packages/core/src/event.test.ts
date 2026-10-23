@@ -72,6 +72,7 @@ const examples: Record<EventType, unknown> = {
   "hold.cleared": { target: "item", hold: "approval", by: "human" },
   "note.added": { kind: "answer", text: "Show Sold out for zero." },
   "task.returned": {},
+  "item.reordered": { before: null },
   "plan.proposed": { plan },
   "plan.accepted": { plan, by: "kozod" },
   "factory.applied": { commit: "a1b2c3d" },

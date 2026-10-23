@@ -1,26 +1,45 @@
+import { signal } from "@preact/signals";
+import { AddItem } from "./add-item.tsx";
 import type { Api } from "./api.ts";
+import { Board } from "./board.tsx";
+import { routeOf } from "./format.ts";
 import { Header } from "./header.tsx";
 import { Inbox } from "./inbox.tsx";
-import { notice } from "./store.ts";
+import { notice, status } from "./store.ts";
+
+const route = signal(routeOf(window.location.hash));
+window.addEventListener("hashchange", () => {
+  route.value = routeOf(window.location.hash);
+});
 
 export function App({ api }: { api: Api }) {
   const shown = notice.value;
+  const page = route.value.page;
   return (
     <>
-      <Header api={api} />
+      <Header api={api} page={page} />
       {shown ? (
         <p role="status" class={shown.failed ? "notice failed" : "notice"}>
           {shown.text}
         </p>
       ) : null}
       <main>
-        <h2>Inbox</h2>
-        <Inbox api={api} />
+        {page === "board" ? (
+          <>
+            <h2>Board</h2>
+            {status.value?.mode === "local" ? <AddItem api={api} /> : null}
+            <Board api={api} />
+          </>
+        ) : (
+          <>
+            <h2>Inbox</h2>
+            <Inbox api={api} />
+          </>
+        )}
       </main>
     </>
   );
 }
-
 /** What the page shows without a token: how to open it with one. */
 export function NoToken() {
   return (

@@ -62,6 +62,7 @@
 | external event | A change made outside kozo, such as a merge, a closed pull request or an edited request, that kozod reconciles every minute. | - | - | - |
 | hold | The reason, kept apart from the stage, why an item or a task is not moving, with at most one per item or task. | `hold`, `kozo:needs-*` | block, wait | - |
 | item | A request from a human or an automation that kozo splits into one or more tasks. | `K-<n>`, `<repo>#<n>` | job, ticket | - |
+| item order | The order in which kozod starts the work of items and lists them: the order they arrived in, until a human moves one. | `order`, `kozo reorder`, `item.reordered` | priority, rank | - |
 | note | What a human said about an item or a task outside a running run, or what kozod's failed check at Complete found, kept as an event and given to every later run of that item or task. | `note.added` | comment, memo | - |
 | paused | The hold set when a human stops an item, a task or a run, or takes a task over. | `paused` | - | - |
 | plan | The single document that states an item's work class, risk tier, approach, DONE_WHEN and task split. | `kozo-plan:v1`, `plan.yml` | spec, work order | - |

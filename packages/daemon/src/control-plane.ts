@@ -189,6 +189,8 @@ export class ControlPlane {
         return await this.take(ref);
       case "return":
         return await this.giveBack(ref, body as Body<"return">);
+      case "reorder":
+        return await this.reorder(ref, body as Body<"reorder">);
     }
   }
 
@@ -433,6 +435,19 @@ export class ControlPlane {
     await this.clearHold("task", ref, body.text);
     await this.move("task", ref, "building", "kozo return");
     return { message: `gave ${ref} back; its checks run on your commits` };
+  }
+
+  /** Moves an item before another in the order kozod starts work in, or to the end. */
+  private async reorder(ref: string, body: Body<"reorder">): Promise<VerbResult> {
+    const { before } = body;
+    if (before === ref) throw new CommandError(400, `${ref} cannot move before itself`);
+    if (before !== null && !this.store.state.items[before])
+      throw new CommandError(404, `${before} does not exist`);
+    const order = this.store.state.order;
+    const next = order[order.indexOf(ref) + 1] ?? null;
+    if (next === before) return { message: `${ref} is already there` };
+    await this.store.append({ type: "item.reordered", item: ref, data: { before } });
+    return { message: before ? `moved ${ref} before ${before}` : `moved ${ref} to the end` };
   }
 
   private async close(

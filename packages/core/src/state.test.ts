@@ -9,6 +9,7 @@ import {
   autonomyLevel,
   expiredApprovals,
   highestTask,
+  inOrder,
   itemStage,
   numberAfter,
   planNeeded,
@@ -55,6 +56,32 @@ function planned(write = eventWriter(), accepted = plan()): Event[] {
 }
 
 describe("replay", () => {
+  test("items keep their arrival order until a human moves one, and their tasks follow it", () => {
+    const write = eventWriter();
+    const created = (ref: string) =>
+      write(
+        "item.created",
+        { repository: "~/src/app", title: ref, source: "local" },
+        { item: ref },
+      );
+    const events = [
+      ...planned(write, plan(2)),
+      created("K-2"),
+      created("K-3"),
+      write("item.reordered", { before: "K-1" }, { item: "K-3" }),
+      write("item.reordered", { before: null }, { item: "K-1" }),
+    ];
+    const state = replay(events);
+    expect(state.order).toEqual(["K-3", "K-2", "K-1"]);
+    expect(inOrder(state).tasks.map((task) => task.ref)).toEqual(["K-1/t1", "K-1/t2"]);
+    expect(() =>
+      replay([...events, write("item.reordered", { before: "K-2" }, { item: "K-2" })]),
+    ).toThrow("K-2 cannot move before itself");
+    expect(() =>
+      replay([...events, write("item.reordered", { before: "K-9" }, { item: "K-2" })]),
+    ).toThrow("item K-9 does not exist");
+  });
+
   test("an accepted plan creates its tasks in Building", () => {
     const state = replay(planned(eventWriter(), plan(2)));
     const item = state.items["K-1"];

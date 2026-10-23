@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { inboxActions } from "./actions.tsx";
 import { takeSession } from "./api.ts";
-import { ago } from "./format.ts";
+import { ago, moveTarget, routeOf } from "./format.ts";
 
 const code = "ab".repeat(32);
 
@@ -82,6 +82,22 @@ describe("inboxActions", () => {
 });
 
 describe("format", () => {
+  test("routes the inbox and the board", () => {
+    expect(routeOf("")).toEqual({ page: "inbox" });
+    expect(routeOf("#/board")).toEqual({ page: "board" });
+  });
+
+  test("moves a card above the one above it, or below the one below it", () => {
+    const order = ["K-1", "K-2", "K-3", "K-4", "K-5"];
+    const column = ["K-1", "K-3", "K-4"];
+    expect(moveTarget(column, order, 0, "up")).toBeUndefined();
+    expect(moveTarget(column, order, 1, "up")).toBe("K-1");
+    expect(moveTarget(column, order, 0, "down")).toBe("K-4");
+    expect(moveTarget(column, order, 1, "down")).toBe("K-5");
+    expect(moveTarget(["K-4", "K-5"], order, 0, "down")).toBeNull();
+    expect(moveTarget(column, order, 2, "down")).toBeUndefined();
+  });
+
   test("says how long ago, in the largest whole unit", () => {
     const now = new Date("2026-10-23T12:00:00Z");
     expect(ago("2026-10-23T11:59:30Z", now)).toBe("just now");

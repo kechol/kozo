@@ -72,6 +72,8 @@ Commands:
   retry <ref> [text]        Retry a task from its checkpoint or an item
   close <ref> --done | --cancel <reason>
       Complete an item or task that needed no change, or cancel it
+  reorder <item> [--before <item>]
+      Move an item before another in the order kozod starts work, or to the end
   take <task>               Take a task over and work in its worktree
   return <task> <text>      Give a taken task back once your work is committed;
       its checks run on your commits from the deterministic ones on
@@ -153,6 +155,7 @@ export async function run(
       "close",
       "take",
       "return",
+      "reorder",
     ] as const;
     const named = verbs.find((name) => name === command);
     if (named) return await verb(named, rest, out);

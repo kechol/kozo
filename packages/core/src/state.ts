@@ -111,6 +111,8 @@ export interface FactoryState {
   /** When kozod first ran a definition naming each GitHub repository, by `<owner>/<name>`. */
   repositories: Record<string, { path: string; registeredAt: string }>;
   items: Record<string, ItemState>;
+  /** Every item's reference in the order kozod starts their work: arrival, then a human's moves. */
+  order: string[];
   tasks: Record<string, TaskState>;
   runs: Record<string, RunInfo>;
   /** The `ts` of the last event applied; events must come in strictly increasing order. */
@@ -148,6 +150,7 @@ export function emptyState(): FactoryState {
     definition: { applied: null, refused: null },
     repositories: {},
     items: {},
+    order: [],
     tasks: {},
     runs: {},
     lastTs: null,
@@ -272,6 +275,18 @@ export function applyEvent(state: FactoryState, event: Event): void {
         createdAt: event.ts,
         updatedAt: event.ts,
       };
+      state.order.push(ref);
+      return;
+    }
+    case "item.reordered": {
+      const subject = required(item, `item ${event.item}`);
+      const { before } = event.data;
+      if (before === subject.ref) throw new StateError(`${subject.ref} cannot move before itself`);
+      if (before !== null) required(state.items[before], `item ${before}`);
+      state.order = state.order.filter((ref) => ref !== subject.ref);
+      const at = before === null ? state.order.length : state.order.indexOf(before);
+      state.order.splice(at, 0, subject.ref);
+      subject.updatedAt = event.ts;
       return;
     }
     case "item.edited": {
@@ -555,6 +570,13 @@ export function expiredApprovals(state: FactoryState, now: Date): ItemState[] {
   return Object.values(state.items).filter(
     (item) => item.hold?.kind === "approval" && Date.parse(item.hold.since) <= limit,
   );
+}
+
+/** The items in the order kozod starts their work, and their tasks in that order, by plan. */
+export function inOrder(state: FactoryState): { items: ItemState[]; tasks: TaskState[] } {
+  const items = state.order.flatMap((ref) => state.items[ref] ?? []);
+  const tasks = items.flatMap((item) => item.tasks.flatMap((ref) => state.tasks[ref] ?? []));
+  return { items, tasks };
 }
 
 /** Why a task may not start a run now, or null when it may. */

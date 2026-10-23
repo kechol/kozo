@@ -107,6 +107,8 @@ export const eventSchema = z
         source: z.enum(["local", "github", "automation"]),
       }),
     ),
+    /** A human moved the item before another, or to the end when `before` is null. */
+    event("item.reordered", z.strictObject({ before: itemReferenceSchema.nullable() })),
     /** The request changed at its source, and its new text is what runs read from now on. */
     event(
       "item.edited",

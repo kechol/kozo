@@ -266,3 +266,106 @@ select {
   max-width: 560px;
   padding-top: 15vh;
 }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.board-tools {
+  margin-bottom: var(--gap);
+}
+
+.toggle {
+  display: flex;
+  gap: 12px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.toggle input {
+  width: auto;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(170px, 1fr));
+  gap: var(--gap);
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.column {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.column h3 {
+  text-transform: capitalize;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.count {
+  font-weight: 400;
+}
+
+.board-card {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+}
+
+.board-card .title {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.level {
+  font-size: 0.78rem;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.reorder {
+  justify-content: flex-end;
+}
+
+button.small {
+  padding: 0 8px;
+  font-size: 0.85rem;
+}
+
+.more {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.add-item {
+  display: grid;
+  gap: 8px;
+  margin-bottom: var(--gap);
+}
+
+.add-item label {
+  color: var(--muted);
+}
+
+.add-item select {
+  width: auto;
+}

@@ -1527,6 +1527,35 @@ test("one unit is still counted", () => {
     });
   }, 120_000);
 
+  test("work starts in item order, which a human may change", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage"
+        ? [{ answer: { outcome: "question", question: "Which page?" } }]
+        : implement(),
+    );
+    await env.control.pauseFactory();
+    const first = await env.control.addItem({ title: "Low stock" });
+    const second = await env.control.addItem({ title: "Sort by price" });
+    for (const ref of [first.ref, second.ref]) {
+      const number = Number(ref.slice(2));
+      await env.control.act(ref, { kind: "item", item: { repo: null, number } }, "approve", {});
+    }
+    const moved = await env.control.act(
+      second.ref,
+      { kind: "item", item: { repo: null, number: 2 } },
+      "reorder",
+      { before: first.ref },
+    );
+    expect(moved.message).toBe(`moved ${second.ref} before ${first.ref}`);
+    expect(env.store.state.order).toEqual([second.ref, first.ref]);
+    await env.control.resumeFactory();
+    await env.settle();
+    const triaged = Object.values(env.store.state.runs)
+      .filter((run) => run.agent === "triage")
+      .map((run) => run.item);
+    expect(triaged).toEqual([second.ref, first.ref]);
+  }, 120_000);
+
   test("kozo say reaches a running run at its next turn", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage"

@@ -1,6 +1,6 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { apiPort, type KozoHome, kozoHome } from "@kozo/core";
+import { apiPort, autonomyLevel, type KozoHome, kozoHome } from "@kozo/core";
 import dashboard from "@kozo/dashboard/index.html";
 import { baseOf, type Confine, claudeJudge, claudeVerifier, platformConfine } from "@kozo/verify";
 import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
@@ -11,9 +11,11 @@ import { type DefinitionInUse, refreshDefinition, startingDefinition } from "./d
 import { EventStore } from "./event-store.ts";
 import { ghGitHub } from "./github.ts";
 import { GitHubSync } from "./github-sync.ts";
+import { readItemFile } from "./item-file.ts";
 import { type Launcher, processLauncher } from "./launcher.ts";
 import { Notifier, type Notify, osNotify } from "./notifier.ts";
 import { Reconciler } from "./reconcile.ts";
+import { type CharterResult, readCharter } from "./repository.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
 import { taskBranch } from "./worktrees.ts";
@@ -130,12 +132,36 @@ export class Daemon {
         return await github.install(repository);
       }, false),
     };
+    // The Charter of each repository, read again at most once a minute, for the dashboard's levels.
+    const charters = new Map<string, { at: number; result: Promise<CharterResult> }>();
+    const charterOf = (repository: string) => {
+      const cached = charters.get(repository);
+      if (cached && Date.now() - cached.at < 60_000) return cached.result;
+      const result = readCharter(repository, definition.current.factory.mode);
+      charters.set(repository, { at: Date.now(), result });
+      return result;
+    };
     const app = createApi({
       store,
       token: await apiToken(home),
       port,
       mode: definition.current.factory.mode,
       commands,
+      repositories: () => definition.current.factory.repositories.map(({ path }) => path),
+      // As kozod decides it: the lower of the requested class's level and the plan's.
+      async autonomy(ref) {
+        const item = store.state.items[ref];
+        if (!item) return { class: null, level: null };
+        const requested = (await readItemFile(home, ref)).class;
+        const planned = item.plan?.class ?? item.draft?.class ?? null;
+        const charter = await charterOf(item.repository);
+        if (!charter.ok) return { class: planned ?? requested, level: null };
+        const levels = [requested, planned]
+          .filter((workClass) => workClass !== null)
+          .map((workClass) => autonomyLevel(charter.charter, workClass));
+        const level = levels.sort()[0] ?? autonomyLevel(charter.charter, null);
+        return { class: planned ?? requested, level };
+      },
       async locateTask(ref) {
         const repository = store.state.items[store.state.tasks[ref]?.item ?? ""]?.repository;
         if (!repository) return null;

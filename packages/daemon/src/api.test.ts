@@ -85,7 +85,29 @@ describe("the local API", () => {
     const status = await (await call("/api/status")).json();
     expect(status).toMatchObject({ mode: "local", paused: false, activeRuns: 0, waiting: 0 });
     const items = await (await call("/api/ls/items")).json();
-    expect(items).toMatchObject([{ ref: "K-1", shown_stage: "complete" }]);
+    expect(items).toMatchObject([
+      { ref: "K-1", shown_stage: "complete", class: null, level: null },
+    ]);
+    const leveled = createApi({
+      store,
+      token,
+      port,
+      mode: "local",
+      commands,
+      repositories: () => ["/src/shop"],
+      autonomy: async () => ({ class: "bugfix", level: "L2" }),
+    });
+    const request = (path: string) =>
+      leveled.request(`http://127.0.0.1:${port}${path}`, {
+        headers: { authorization: `Bearer ${token}`, host: `127.0.0.1:${port}` },
+      });
+    // K-1 is complete, so it runs at no level any more.
+    expect(await (await request("/api/ls/items")).json()).toMatchObject([
+      { ref: "K-1", class: null, level: null },
+    ]);
+    expect(await (await request("/api/status")).json()).toMatchObject({
+      repositories: ["/src/shop"],
+    });
     const runs = (await (await call("/api/ls/runs")).json()) as { ref: string }[];
     expect(runs.map((run) => run.ref)).toEqual(["r-0001", "r-0002", "r-0003"]);
     expect(await (await call("/api/ls/inbox")).json()).toEqual([]);
