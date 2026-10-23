@@ -42,6 +42,7 @@ beforeAll(async () => {
   process.env.KOZO_HOME = home.path;
   process.env.KOZO_PORT = String(18000 + Math.floor(Math.random() * 1000));
   process.env.KOZOD = kozod;
+  process.env.KOZO_NOTIFY = "off";
 });
 
 afterAll(async () => {

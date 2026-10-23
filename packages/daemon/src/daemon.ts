@@ -10,6 +10,7 @@ import { EventStore } from "./event-store.ts";
 import { ghGitHub } from "./github.ts";
 import { GitHubSync } from "./github-sync.ts";
 import { type Launcher, processLauncher } from "./launcher.ts";
+import { Notifier, type Notify, osNotify } from "./notifier.ts";
 import { Reconciler } from "./reconcile.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
@@ -24,6 +25,8 @@ export interface DaemonOptions {
   tickMs?: number;
   /** How the diff's commands are confined; this machine's sandbox when unset. */
   confine?: Confine;
+  /** How the human is notified; the OS's notifications when unset. */
+  notify?: Notify;
 }
 
 // A compiled kozod runs alone; under bun the entry points are files beside this one.
@@ -64,6 +67,7 @@ export class Daemon {
     private readonly server: ReturnType<typeof serveApi>,
     readonly scheduler: Scheduler,
     private readonly runner: Runner,
+    private readonly notifier: Notifier,
     private readonly timer: ReturnType<typeof setInterval>,
     private readonly reconciling: () => Promise<void>,
   ) {}
@@ -74,6 +78,7 @@ export class Daemon {
     launcher = processLauncher(kozodCommand()),
     tickMs = 2000,
     confine,
+    notify = osNotify(),
   }: DaemonOptions = {}): Promise<Daemon> {
     // Without a sandbox kozod would run the diff's code with the owner's access, so it stops here.
     const confined = confine ?? (await platformConfine());
@@ -148,6 +153,9 @@ export class Daemon {
       () => definition.current.factory.mode,
     );
     await reconciler.recover();
+    const notifier = new Notifier(store, () => definition.current.factory, notify);
+    notifier.start();
+    void notifier.remind();
     const pollGitHub = () =>
       definition.current.factory.mode === "github"
         ? github.poll().catch((error: unknown) => report(`kozod: polling GitHub failed: ${error}`))
@@ -170,10 +178,21 @@ export class Daemon {
           .then(() => reconciler.reconcile())
           .then(() => scheduler.tick());
       }
+      if (every(3_600_000)) void notifier.remind();
       scheduler.tick();
     }, tickMs);
     scheduler.tick();
-    return new Daemon(home, store, port, server, scheduler, runner, timer, () => reconciling);
+    return new Daemon(
+      home,
+      store,
+      port,
+      server,
+      scheduler,
+      runner,
+      notifier,
+      timer,
+      () => reconciling,
+    );
   }
 
   /**
@@ -182,6 +201,7 @@ export class Daemon {
    */
   async stop() {
     clearInterval(this.timer);
+    this.notifier.stop();
     await this.server.stop(true);
     this.runner.stop();
     const stopped = this.scheduler.stop();
