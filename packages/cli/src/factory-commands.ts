@@ -200,6 +200,41 @@ export async function down(args: readonly string[], out: Lines): Promise<number>
   return ExitCode.failure;
 }
 
+// --- kozo dashboard ---------------------------------------------------------------------------
+
+/**
+ * Opens the dashboard in the browser with the API token in the URL fragment, which the browser
+ * never sends to a server; with --url, prints that URL instead. The token goes only to the kozod
+ * that proved it holds it.
+ */
+export async function dashboard(args: readonly string[], out: Lines): Promise<number> {
+  const { values } = parseArgs({
+    args: [...args],
+    options: { url: { type: "boolean" }, json: { type: "boolean" } },
+  });
+  return withClient(out, async (client) => {
+    const token = (await Bun.file(client.home.apiToken).text()).trim();
+    const url = `${client.base}/#token=${token}`;
+    if (values.url) {
+      out.stdout(values.json ? JSON.stringify({ url }) : url);
+      return ExitCode.success;
+    }
+    const opener = process.platform === "darwin" ? "open" : "xdg-open";
+    // Bun.spawn throws at once when the opener is not installed.
+    const opened = await Promise.resolve()
+      .then(() => Bun.spawn([opener, url], { stdin: "ignore", stdout: "ignore", stderr: "ignore" }))
+      .then((child) => child.exited)
+      .catch(() => 1);
+    if (opened !== 0) {
+      out.stderr(`kozo: ${opener} could not open the browser; run kozo dashboard --url`);
+      return ExitCode.failure;
+    }
+    const message = `opened the dashboard at ${client.base}/`;
+    out.stdout(values.json ? JSON.stringify({ message }) : message);
+    return ExitCode.success;
+  });
+}
+
 // --- kozo status ------------------------------------------------------------------------------
 
 export async function status(args: readonly string[], out: Lines): Promise<number> {

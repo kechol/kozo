@@ -16,6 +16,7 @@ import {
   verbSchema,
   verbsByKind,
 } from "@kozo/core";
+import type { HTMLBundle } from "bun";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { EventStore } from "./event-store.ts";
@@ -255,7 +256,18 @@ export function createApi({
   return app;
 }
 
-/** Serves the API on 127.0.0.1 only; SSE streams keep the connection open, so idling is allowed. */
-export function serveApi(app: Hono, port: number) {
-  return Bun.serve({ hostname: "127.0.0.1", port, idleTimeout: 0, fetch: app.fetch });
+/**
+ * Serves the API on 127.0.0.1 only, and the dashboard at `/`: a page without data, which reads
+ * the API with the token it is handed. SSE streams keep the connection open, so idling is
+ * allowed.
+ */
+export function serveApi(app: Hono, port: number, dashboard?: HTMLBundle) {
+  return Bun.serve({
+    hostname: "127.0.0.1",
+    port,
+    idleTimeout: 0,
+    development: false,
+    ...(dashboard ? { routes: { "/": dashboard } } : {}),
+    fetch: app.fetch,
+  });
 }

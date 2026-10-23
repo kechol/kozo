@@ -16,7 +16,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "skipLibCheck": true,
-    "types": ["bun"]
+    "types": ["bun"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
   },
-  "include": ["packages/*/src", "testing/src", "scripts"]
+  "include": ["packages/*/src", "testing/src", "scripts"],
+  "exclude": ["packages/dashboard"]
 }

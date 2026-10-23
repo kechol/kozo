@@ -1,0 +1,268 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f6f6f4;
+  --surface: #ffffff;
+  --text: #1d1d1b;
+  --muted: #66665f;
+  --line: #deddd6;
+  --accent: #2459c7;
+  --approval: #2459c7;
+  --question: #8a5a00;
+  --attention: #b42318;
+  --merge: #1f7a3d;
+  --danger: #b42318;
+  --radius: 8px;
+  --gap: 12px;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615;
+    --surface: #20201e;
+    --text: #ecebe6;
+    --muted: #a3a29a;
+    --line: #34342f;
+    --accent: #7aa2f7;
+    --approval: #7aa2f7;
+    --question: #e0b14a;
+    --attention: #f2847b;
+    --merge: #6cc48a;
+    --danger: #f2847b;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--gap) 16px 48px;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+}
+
+h2 {
+  font-size: 1.15rem;
+  margin: 8px 0 var(--gap);
+}
+
+h3 {
+  font-size: 1rem;
+}
+
+a {
+  color: var(--accent);
+}
+
+code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.9em;
+}
+
+button {
+  font: inherit;
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--surface);
+  cursor: pointer;
+}
+
+button.quiet {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--line);
+}
+
+button.danger {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+textarea,
+input,
+select {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  width: 100%;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.spread {
+  justify-content: space-between;
+}
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  align-items: center;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.status .brand {
+  color: var(--text);
+  font-size: 1.1rem;
+}
+
+.status nav {
+  display: flex;
+  gap: 12px;
+}
+
+.status nav a[aria-current="page"] {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.state.paused,
+.problem {
+  color: var(--attention);
+}
+
+.state.running {
+  color: var(--merge);
+}
+
+.notice {
+  max-width: 1200px;
+  margin: var(--gap) auto 0;
+  padding: 8px 16px;
+  border-left: 3px solid var(--merge);
+  background: var(--surface);
+}
+
+.notice.failed {
+  border-color: var(--attention);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--gap);
+}
+
+.inbox {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--gap);
+}
+
+.inbox .card {
+  display: grid;
+  gap: 6px;
+  border-left-width: 4px;
+}
+
+.waiting-approval {
+  border-left-color: var(--approval);
+}
+
+.waiting-question {
+  border-left-color: var(--question);
+}
+
+.waiting-attention {
+  border-left-color: var(--attention);
+}
+
+.waiting-merge {
+  border-left-color: var(--merge);
+}
+
+.ref {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.9rem;
+}
+
+.badge {
+  font-size: 0.8rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+
+.badge.approval {
+  color: var(--approval);
+}
+
+.badge.question {
+  color: var(--question);
+}
+
+.badge.attention {
+  color: var(--attention);
+}
+
+.badge.merge {
+  color: var(--merge);
+}
+
+.reason,
+.hint,
+.since,
+.empty {
+  color: var(--muted);
+  margin: 0;
+}
+
+.reason {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.since {
+  margin-left: auto;
+  font-size: 0.85rem;
+}
+
+.action-form {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+
+.no-token {
+  max-width: 560px;
+  padding-top: 15vh;
+}

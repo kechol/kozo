@@ -3,5 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": "./src/index.ts"
+  "exports": {
+    ".": "./src/index.ts",
+    "./index.html": "./src/index.html"
+  },
+  "dependencies": {
+    "@kozo/core": "workspace:*",
+    "@preact/signals": "2.11.3",
+    "preact": "11.0.1"
+  }
 }

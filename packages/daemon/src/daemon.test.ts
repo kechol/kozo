@@ -55,6 +55,27 @@ describe("Daemon", () => {
     }
   });
 
+  test("serves the dashboard without the token, confined to its own origin, and nothing else", async () => {
+    await using dir = await tempDirectory();
+    const home = kozoHome(dir.path);
+    const port = 17000 + Math.floor(Math.random() * 1000);
+    const daemon = await Daemon.start({ home, port, confine: testConfine, notify: silent });
+    try {
+      const page = await fetch(`http://127.0.0.1:${port}/`);
+      expect(page.status).toBe(200);
+      const html = await page.text();
+      expect(html).toContain("Content-Security-Policy");
+      expect(html).toContain("default-src 'self'");
+      const script = /<script[^>]+src="([^"]+)"/.exec(html)?.[1] ?? "";
+      const bundle = await fetch(`http://127.0.0.1:${port}${script}`);
+      expect(bundle.status).toBe(200);
+      expect(await bundle.text()).toContain("kozo dashboard");
+      expect((await fetch(`http://127.0.0.1:${port}/api/status`)).status).toBe(401);
+    } finally {
+      await daemon.stop();
+    }
+  });
+
   test("a run that was going when kozod stopped resumes from its checkpoint at the next start", async () => {
     await using repo = await gitRepository();
     await repo.commit(suiteBase, "the suite shop");

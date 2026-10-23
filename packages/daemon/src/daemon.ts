@@ -1,6 +1,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { apiPort, type KozoHome, kozoHome } from "@kozo/core";
+import dashboard from "@kozo/dashboard/index.html";
 import { baseOf, type Confine, claudeJudge, claudeVerifier, platformConfine } from "@kozo/verify";
 import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
@@ -145,7 +146,7 @@ export class Daemon {
         };
       },
     });
-    const server = serveApi(app, port);
+    const server = serveApi(app, port, dashboard);
     const reconciler = new Reconciler(
       store,
       runner,

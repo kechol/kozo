@@ -6,6 +6,7 @@
   "exports": "./src/index.ts",
   "dependencies": {
     "@kozo/core": "workspace:*",
+    "@kozo/dashboard": "workspace:*",
     "@kozo/verify": "workspace:*",
     "@kozo/worker": "workspace:*",
     "hono": "4.13.13",

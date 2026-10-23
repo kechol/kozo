@@ -21,6 +21,7 @@ import { check } from "./check.ts";
 import {
   add,
   admin,
+  dashboard,
   down,
   ExitCode,
   ls,
@@ -74,6 +75,9 @@ Commands:
   take <task>               Take a task over and work in its worktree
   return <task> <text>      Give a taken task back once your work is committed;
       its checks run on your commits from the deterministic ones on
+  dashboard [--url] [--json]
+      Open the dashboard in the browser, or print its URL, which carries the
+      API token, with --url
   check [path] [--json]
       Check the factory definition, each repository's Charter, claude and the
       sandbox; with a path, only the definition or .kozo/ in that directory
@@ -138,6 +142,7 @@ export async function run(
     if (command === "show") return await show(rest, out);
     if (command === "admin") return await admin(rest, out);
     if (command === "check") return await check(rest, out);
+    if (command === "dashboard") return await dashboard(rest, out);
     const verbs = [
       "say",
       "approve",
