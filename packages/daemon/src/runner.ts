@@ -113,7 +113,6 @@ export interface RunnerDeps {
 /** A plan as the triage and plan agents write it, without the fields kozod adds. */
 const draftOf = ({ version: _version, item: _item, ...draft }: Plan) => draft;
 
-/** Thrown when the repository's documents keep a run from starting at all. */
 /**
  * The git directory that `worktree` shares with its repository, which git in the worktree reads,
  * or nothing when its `.git` does not link to one.
@@ -129,6 +128,7 @@ function sharedGitDirectory(worktree: string): string[] {
   }
 }
 
+/** Thrown when the repository's documents keep a run from starting at all. */
 export class RunnerError extends Error {}
 
 /**
