@@ -31,6 +31,7 @@ import { checkNotes } from "./instructions.ts";
 import { handoffReportPath, readItemFile, requestText } from "./item-file.ts";
 import { firstCodeChange, firstNonTestChange, layersFor, onlyDependencyFiles } from "./risk.ts";
 import { type BlueprintRun, describe, type Node, type RunEnd, tail } from "./task-run.ts";
+import { takePorts } from "./worktree-ports.ts";
 import { atMergedCommit, claimTask } from "./worktrees.ts";
 
 /**
@@ -88,6 +89,8 @@ const prepare: NodeStep = async (run) => {
       why: "services refused",
     });
   }
+  if (constraints.ports > 0) await takePorts(worktree, constraints.ports);
+  const env = await run.env();
   const steps = [
     ...constraints.services.map((command) => ({ command, confined: undefined })),
     ...constraints.prepare.map((command) => ({
@@ -96,13 +99,7 @@ const prepare: NodeStep = async (run) => {
     })),
   ];
   for (const { command, confined } of steps) {
-    const code = await runCommand(
-      command,
-      worktree,
-      (text) => void run.log(text),
-      runner.commandEnv,
-      confined,
-    );
+    const code = await runCommand(command, worktree, (text) => void run.log(text), env, confined);
     if (code !== 0) {
       return await run.halt("prepare", {
         hold: "attention",
@@ -250,7 +247,7 @@ const implement: NodeStep = async (run, current) => {
       gates: {
         level: run.level,
         base: repository.base,
-        env: runner.commandEnv,
+        env: await run.env(),
         sandbox: runner.confined(worktree).sandbox,
       },
       requireNote: true,
@@ -318,7 +315,7 @@ async function applyCodemod(run: BlueprintRun, codemod: string): Promise<RunEnd 
     codemod,
     worktree,
     (text) => void run.log(text),
-    runner.commandEnv,
+    await run.env(),
     runner.confined(worktree),
   );
   if (code !== 0) {
@@ -415,7 +412,7 @@ const verifyDeterministic: NodeStep = async (run, current) => {
       base: repository.base,
       mode: preserve ? "preserve" : "reproduce",
       log: collect,
-      env: runner.commandEnv,
+      env: await run.env(),
       confined: runner.confined(worktree),
     });
     if (prove.status !== "pass")

@@ -1556,6 +1556,35 @@ test("one unit is still counted", () => {
     expect(triaged).toEqual([second.ref, first.ref]);
   }, 120_000);
 
+  test("a repository that asks for ports gets the same ones in prepare, the gates and the session", async () => {
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+      judgeWith("accept"),
+      {
+        constraints: (text) =>
+          text
+            .replace("version: 1\n", 'version: 1\nports: 2\nprepare:\n  - test -n "$KOZO_PORT_2"\n')
+            .replace(
+              "run: sh scripts/lint.sh",
+              'run: test -n "$KOZO_PORT_2" && test -n "$KOZO_TASK_ID" && sh scripts/lint.sh',
+            ),
+      },
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    expect(env.store.state.tasks[`${ref}/t1`]).toMatchObject({ stage: "handoff", hold: null });
+    const worktree = worktreePath(env.home, env.repo.path, `${ref}/t1`);
+    const ports = (await Bun.file(`${worktree}.ports`).json()) as number[];
+    expect(ports).toHaveLength(2);
+    const run = env.store.state.tasks[`${ref}/t1`]?.runs[0] ?? "";
+    const spec = (await Bun.file(join(runFiles(env.home, run).dir, "worker.json")).json()) as {
+      gates: { env: Record<string, string> };
+    };
+    expect(spec.gates.env.KOZO_PORT_2).toBe(String(ports[1]));
+  }, 120_000);
+
   test("kozo say reaches a running run at its next turn", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage"

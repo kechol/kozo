@@ -20,6 +20,7 @@ import { taskOwnerNotes } from "./instructions.ts";
 import { atLeast, layersFor } from "./risk.ts";
 import type { RunnerDeps } from "./runner.ts";
 import type { Envelope, SessionResult } from "./session-pump.ts";
+import { worktreeEnvironment } from "./worktree-ports.ts";
 
 export type Node = BlueprintNode;
 
@@ -136,6 +137,11 @@ export class BlueprintRun {
   raise(layers: Layers) {
     this.layers = layers;
     this.level = atLeast(layers.gates, this.blueprint.gates);
+  }
+
+  /** The environment of the worktree's commands: the base one, its ID and its ports. */
+  async env(): Promise<Record<string, string>> {
+    return { ...this.runner.commandEnv, ...(await worktreeEnvironment(this.worktree)) };
   }
 
   async log(text: string) {

@@ -3,6 +3,10 @@ version: 1
 # Commands that start what the gates need and kozo's sandbox cannot run, such as a database
 # container. kozod runs them outside the sandbox before prepare, as they are on the default branch.
 services: []
+# How many ports each worktree's services and checks take, so that several worktrees check at
+# once. kozod picks free ones and gives every command KOZO_PORT_1 and on, and KOZO_TASK_ID, a name
+# unique to the worktree, such as for a container project.
+ports: 0
 # Commands that set up a fresh worktree, such as installing dependencies. They run in kozo's
 # sandbox, which may reach other hosts and write the package managers' caches.
 prepare: []

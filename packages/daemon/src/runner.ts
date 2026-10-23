@@ -78,6 +78,7 @@ import {
   type RunnerOps,
   tail,
 } from "./task-run.ts";
+import { worktreeEnvironment } from "./worktree-ports.ts";
 import {
   detachedCheckout,
   releaseTask,
@@ -664,7 +665,7 @@ export class Runner implements RunnerOps {
       cwd,
       level,
       base,
-      env: this.commandEnv,
+      env: { ...this.commandEnv, ...(await worktreeEnvironment(cwd)) },
       confined: this.confined(cwd),
       log: (text) => {
         output += text;
