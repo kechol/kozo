@@ -157,12 +157,14 @@ export const seatbelt: Confine = (sandbox, argv) => [
 /**
  * The bubblewrap arguments of `sandbox` on Linux: the whole system read-only, each denied path
  * hidden under an empty directory or /dev/null, the readable and writable ones mounted again on
- * top, the paths inside them that may not be written read-only once more, and a network of its
- * own for `local`, whose loopback is all it reaches. Later mounts cover earlier ones, so the
- * order is that of the lists; a writable root is a mount point, which the command cannot
- * remove, rename or replace. A path that may not be written is kept read-only only when it
- * exists, as a worktree's .git file does. Sockets of the user's session, such as a container
- * engine's, are hidden with the runtime directory.
+ * top, and the paths inside them that may not be written read-only once more, made as empty
+ * files first when they do not exist so that the command cannot make them. Later mounts cover
+ * earlier ones, so the order is that of the lists; a writable root is a mount point, which the
+ * command cannot remove, rename or replace. A `local` command gets a network of its own, whose
+ * loopback is all it reaches, and empty /run and /tmp, so that no Unix socket outside its
+ * writable roots is in reach, as in Seatbelt; prepare keeps /run, which holds the resolver's
+ * configuration on many systems, with the user's runtime directory and the system's sockets
+ * hidden.
  */
 export function bubblewrapArgs(sandbox: CommandSandbox): string[] {
   const kind = (path: string) => {
@@ -172,21 +174,31 @@ export function bubblewrapArgs(sandbox: CommandSandbox): string[] {
       return null;
     }
   };
+  // Each empty directory is made read-only once everything is mounted on it.
+  const covered: string[] = [];
   const hide = (path: string) => {
     const found = kind(path);
-    if (found === "directory") return ["--tmpfs", path];
+    if (found === "directory") {
+      covered.push(path);
+      return ["--tmpfs", path];
+    }
     if (found === "file") return ["--ro-bind", "/dev/null", path];
     return [];
   };
   const mount = (flag: string, path: string) => (kind(path) ? [flag, path, path] : []);
+  const local = sandbox.network === "local";
   const runtime = process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid?.() ?? 0}`;
+  const sockets = local
+    ? ["/run", "/tmp"]
+    : [runtime, "/run/docker.sock", "/run/dbus", "/var/run/docker.sock", "/tmp/.X11-unix"];
+  const hidden = [...sockets, ...sandbox.denyRead].flatMap(hide);
   return [
     "--die-with-parent",
     "--new-session",
     "--unshare-pid",
     "--unshare-ipc",
     "--unshare-uts",
-    ...(sandbox.network === "local" ? ["--unshare-net"] : []),
+    ...(local ? ["--unshare-net"] : []),
     "--ro-bind",
     "/",
     "/",
@@ -194,10 +206,14 @@ export function bubblewrapArgs(sandbox: CommandSandbox): string[] {
     "/dev",
     "--proc",
     "/proc",
-    ...[runtime, "/run/docker.sock", "/var/run/docker.sock", ...sandbox.denyRead].flatMap(hide),
+    ...hidden,
     ...sandbox.allowRead.flatMap((path) => mount("--ro-bind", path)),
     ...sandbox.allowWrite.flatMap((path) => mount("--bind", path)),
-    ...sandbox.denyWrite.flatMap((path) => mount("--ro-bind", path)),
+    // bubblewrap makes the mount point of a missing path, an empty file, before binding on it.
+    ...sandbox.denyWrite.flatMap((path) =>
+      kind(path) ? ["--ro-bind", path, path] : ["--ro-bind", "/dev/null", path],
+    ),
+    ...covered.flatMap((path) => ["--remount-ro", path]),
   ];
 }
 

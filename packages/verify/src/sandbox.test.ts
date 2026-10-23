@@ -61,7 +61,8 @@ describe("bubblewrapArgs", () => {
     expect(text.indexOf(`--bind ${work} ${work}`)).toBeGreaterThan(
       text.indexOf(`--tmpfs ${dir.path}`),
     );
-    expect(text).toEndWith(`--ro-bind ${join(work, ".git")} ${join(work, ".git")}`);
+    expect(text).toContain(`--ro-bind ${join(work, ".git")} ${join(work, ".git")}`);
+    expect(text).toEndWith(`--remount-ro ${dir.path}`);
     expect(bubblewrapArgs({ ...empty, network: "any" })).not.toContain("--unshare-net");
   });
 });
@@ -100,7 +101,6 @@ describe.skipIf(!sandboxed)("this machine's sandbox", () => {
     const work = join(root, "home", "worktree");
     await mkdir(work, { recursive: true });
     await Bun.write(join(root, "home", "api.token"), "secret");
-    await Bun.write(join(root, "readable"), "open");
     // A worktree's .git file, which bubblewrap can keep read-only only once it exists.
     await Bun.write(join(work, ".git"), "gitdir: elsewhere\n");
     const sandbox = {
@@ -108,7 +108,7 @@ describe.skipIf(!sandboxed)("this machine's sandbox", () => {
       denyRead: [join(root, "home")],
       allowRead: [work],
       allowWrite: [work],
-      denyWrite: [join(work, ".git")],
+      denyWrite: [join(work, ".git"), join(work, "locked")],
     };
     const run = (command: string) => confined(work, sandbox, command);
 
@@ -116,8 +116,15 @@ describe.skipIf(!sandboxed)("this machine's sandbox", () => {
     expect((await run(`echo x > "${root}/outside"`)).code).not.toBe(0);
     expect((await run("echo x > .git")).code).not.toBe(0);
     expect(await Bun.file(join(work, ".git")).text()).toBe("gitdir: elsewhere\n");
+    // A path that may not be written stays unwritten when it does not exist yet, too.
+    expect((await run("echo x > locked")).code).not.toBe(0);
+    expect(
+      await Bun.file(join(work, "locked"))
+        .text()
+        .catch(() => ""),
+    ).toBe("");
     expect((await run(`cat "${root}/home/api.token"`)).code).not.toBe(0);
-    expect((await run(`cat "${root}/readable"`)).output).toBe("open");
+    expect((await run("cat /etc/hosts")).code).toBe(0);
     // Node resolves a script's path through every directory above it, the denied home included.
     expect((await run("echo 'console.log(1)' > s.js && node s.js")).output).toBe("1\n");
     expect((await run(`ls "${root}/home" 2>&1`)).output).not.toContain("api.token");
@@ -152,6 +159,23 @@ describe.skipIf(!sandboxed)("this machine's sandbox", () => {
     expect((await run(`echo x > "${shared}/made/c"`)).code).toBe(0);
     expect((await lstat(join(shared, "made"))).isDirectory()).toBe(true);
     expect((await run(`mkdir "${root}/missing"`)).code).not.toBe(0);
+  });
+
+  test("reaches no Unix socket outside its writable roots", async () => {
+    await using dir = await tempDirectory();
+    const root = await realpath(dir.path);
+    const work = join(root, "work");
+    await mkdir(work);
+    const socket = join(root, "engine.sock");
+    const server = Bun.listen({ unix: socket, socket: { data() {} } });
+    try {
+      const reach = `bun -e 'require("net").connect("${socket}").on("connect", () => { console.log("reached"); process.exit(0) }).on("error", () => { console.log("refused"); process.exit(0) })'`;
+      expect((await confined(work, { ...empty, allowWrite: [work] }, reach)).output).toBe(
+        "refused\n",
+      );
+    } finally {
+      server.stop(true);
+    }
   });
 
   test("reaches only this machine unless the network is open", async () => {
