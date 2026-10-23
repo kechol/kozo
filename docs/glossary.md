@@ -70,6 +70,7 @@
 | question | The hold that waits for a human answer after `kozo_blocked`, an escalate verdict or a needed protected-path change. | `question`, `kozo say` | - | - |
 | reference | The text that names an item, a task or a run in commands, events and the local API: `K-<n>` or `<repo>#<n>` for an item, `<item>/t<n>` for a task and `r-<nnnn>` for a run. | `Reference` | handle | - |
 | scope | The path globs of a task outside which its diff may not change files. | `scope`, `--scope` | - | - |
+| split again | Cancelling a task that cannot be done within its scope, with the open tasks that depend on it, and sending its item from Building back to Planning, where the plan agent splits the remaining work. | `splitAgain` | re-plan, resplit | - |
 | stage | The position of an item or a task in the flow: Intake, Triage, Planning, Building, Reviewing, Handoff, Complete or Cancelled. | `stage`, `kozo:<stage>` | phase, status, step | - |
 | taken | The hold on a task that a human took over, which only `kozo return` clears. | `taken` | - | - |
 | task | The unit that kozo cuts from an item so that it produces exactly one diff. | `<item>/t<n>` | subtask, ticket | - |

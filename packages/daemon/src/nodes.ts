@@ -284,6 +284,12 @@ const implement: NodeStep = async (run, current) => {
   await Bun.write(run.files.report, JSON.stringify(report.data, null, 2));
   if (report.data.outcome === "blocked") {
     const { blocked } = report.data;
+    if (blocked.reason === "scope") {
+      await run.exit("implement", true, "blocked: scope; the item is split again");
+      await run.stopHere("succeeded");
+      await runner.splitAgain(run.task.ref, blocked.question);
+      return { kind: "done" };
+    }
     return await run.halt("implement", {
       hold: "question",
       reason: `${blocked.reason}: ${blocked.question}`,

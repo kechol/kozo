@@ -43,6 +43,8 @@ Call `kozo_blocked` instead of guessing or forcing a result, and then finish wit
 whose outcome is `blocked`:
 
 - `scope`: the change needs files outside SCOPE or more than LIMITS allow; propose a split.
+  kozod cancels this task and has the item split again from what you propose, so say in the
+  question what does not fit and why.
 - `ambiguous`: the request can be read in more than one way and the readings lead to
   different code. Ask one question with the options.
 - `environment`: something outside the code, such as a missing service, keeps the gates from

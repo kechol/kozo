@@ -68,6 +68,7 @@ export interface RunnerOps {
     run?: string,
   ): Promise<void>;
   moveTask(task: TaskState, to: Stage, run: string | null, reason: string): Promise<void>;
+  splitAgain(taskRef: string, question: string): Promise<void>;
   recordedGates(
     where: { run_id?: string; item: string; task: string | null; node: string },
     level: GateLevel,

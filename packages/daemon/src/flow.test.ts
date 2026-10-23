@@ -220,6 +220,119 @@ describe("feature items", () => {
   }, 120_000);
 });
 
+describe("splitting again", () => {
+  test("a task stopped for its scope sends its item back to Planning, and the rest stays", async () => {
+    const readme = "The README says when Only N left appears";
+    const estimate = { lines: 20, files: 1 };
+    const split = {
+      outcome: "plan",
+      plan: {
+        ...plan.plan,
+        done_when: [...suiteTask.doneWhen, readme],
+        tasks: [
+          { ...plan.plan.tasks[0], id: "t1" },
+          {
+            id: "t2",
+            goal: "Document it",
+            done_when: [readme],
+            scope: ["docs/**"],
+            depends_on: [],
+            estimate,
+          },
+          {
+            id: "t3",
+            goal: "Link it",
+            done_when: [readme],
+            scope: ["site/**"],
+            depends_on: ["t2"],
+            estimate,
+          },
+        ],
+      },
+    };
+    const question = "The wording is documented in README.md, outside docs/**";
+    const proposed = [
+      { goal: "Document it in the README", done_when: [readme], scope: ["README.md"] },
+    ];
+    const again = {
+      outcome: "plan",
+      plan: {
+        ...plan.plan,
+        done_when: [readme],
+        tasks: [
+          {
+            id: "t1",
+            goal: "Document it in the README",
+            done_when: [readme],
+            scope: ["README.md"],
+            depends_on: [],
+            estimate,
+          },
+        ],
+      },
+    };
+    await using env = await factoryOf(
+      (request) => {
+        if (request.agent === "triage") return [{ answer: split }];
+        if (request.agent === "plan") return [{ answer: again }];
+        if (!request.prompt.includes("docs/**")) return implement();
+        return [
+          { use: "kozo_blocked", input: { reason: "scope", question, split: proposed } },
+          {
+            answer: {
+              ...report,
+              outcome: "blocked",
+              blocked: { reason: "scope", question, split: proposed },
+            },
+          },
+        ];
+      },
+      judgeWith("accept"),
+      { charter: (text) => text.replace("default: L1", "default: L3") },
+    );
+    const item = { kind: "item", item: { repo: null, number: 1 } } as const;
+    const { ref } = await env.control.addItem({ title: "Low stock" });
+    await env.settle();
+    await env.control.act(ref, item, "approve", {});
+    await env.settle();
+
+    const stages = () =>
+      Object.fromEntries(
+        env.store.state.items[ref]?.tasks.map((task) => [
+          task,
+          env.store.state.tasks[task]?.stage,
+        ]) ?? [],
+      );
+    expect(stages()).toEqual({
+      [`${ref}/t1`]: "handoff",
+      [`${ref}/t2`]: "cancelled",
+      [`${ref}/t3`]: "cancelled",
+    });
+    // Even at L3 the new split waits for the owner.
+    expect(env.store.state.items[ref]).toMatchObject({
+      stage: "planning",
+      hold: { kind: "approval", reason: "plan approval" },
+    });
+    const prompt = env.agent.requests.findLast((request) => request.agent === "plan")?.prompt ?? "";
+    expect(prompt).toContain(`TASK        ${ref}/t1 handoff: `);
+    expect(prompt).toContain(`TASK        ${ref}/t3 cancelled: Link it (scope site/**)`);
+    expect(prompt).toContain(
+      `STOPPED     ${ref}/t2 could not be done within its scope: <request trust="untrusted">`,
+    );
+    expect(prompt).toContain("README.md");
+    expect(await env.repo.git("branch", "--list", `kozo/${env.store.factoryId}/K-1-t2`)).toBe("");
+
+    await env.control.pauseFactory();
+    await env.control.act(ref, item, "approve", {});
+    expect(env.store.state.items[ref]?.stage).toBe("building");
+    expect(env.store.state.tasks[`${ref}/t4`]).toMatchObject({
+      stage: "building",
+      scope: ["README.md"],
+    });
+    expect(env.store.state.tasks[`${ref}/t1`]?.stage).toBe("handoff");
+  }, 120_000);
+});
+
 describe("the minimal path", () => {
   test("an item goes from Intake through approvals, Triage and the blueprint to Handoff", async () => {
     await using env = await factoryOf((request) =>

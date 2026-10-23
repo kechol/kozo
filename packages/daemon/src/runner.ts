@@ -21,6 +21,7 @@ import {
   planSchema,
   type RunReport,
   runFiles,
+  runReportSchema,
   type Stage,
   sha256,
   type TaskState,
@@ -415,6 +416,7 @@ export class Runner implements RunnerOps {
       ...(agent === "plan" && current
         ? [`DRAFT       ${wrapRequest(JSON.stringify(draftOf(current), null, 2))}`]
         : []),
+      ...(agent === "plan" ? await this.tasksSoFar(itemRef) : []),
       ...ownerNotes(this.store.state, itemRef, [itemRef]).map(
         (note) => `OWNER       (${note.kind}) ${note.text}`,
       ),
@@ -951,6 +953,84 @@ export class Runner implements RunnerOps {
       await this.endRun(run, "failed", String((error as Error).message).slice(0, 500), spent);
       throw error;
     }
+  }
+
+  /**
+   * What the plan agent learns of an item that already has tasks: each task with its stage, and,
+   * for a task its implement session stopped for its scope, the question and the split it
+   * proposed, which an agent wrote and so are data.
+   */
+  private async tasksSoFar(itemRef: string): Promise<string[]> {
+    const state = this.store.state;
+    const lines: string[] = [];
+    for (const ref of state.items[itemRef]?.tasks ?? []) {
+      const task = state.tasks[ref];
+      if (!task) continue;
+      lines.push(`TASK        ${ref} ${task.stage}: ${task.goal} (scope ${task.scope.join(", ")})`);
+      const last = task.runs.findLast((run) => state.runs[run]?.agent === "implement");
+      if (task.stage !== "cancelled" || !last) continue;
+      const report = runReportSchema.safeParse(
+        await Bun.file(runFiles(this.home, last).report)
+          .json()
+          .catch(() => null),
+      );
+      if (
+        report.success &&
+        report.data.outcome === "blocked" &&
+        report.data.blocked.reason === "scope"
+      )
+        lines.push(
+          `STOPPED     ${ref} could not be done within its scope: ${wrapRequest(JSON.stringify({ question: report.data.blocked.question, split: report.data.blocked.split ?? [] }, null, 2))}`,
+        );
+    }
+    return lines;
+  }
+
+  /**
+   * Splits an item again after an implement session found its task cannot be done within its
+   * scope: the task and every open task that depends on it are cancelled and released, and the
+   * item goes back to Planning with its current plan as the draft, where the plan agent splits
+   * the remaining work. Finished tasks, and open ones that do not depend on the stopped task,
+   * stay.
+   */
+  async splitAgain(taskRef: string, question: string) {
+    const state = this.store.state;
+    const item = state.items[state.tasks[taskRef]?.item ?? ""];
+    if (!item?.plan) return;
+    const stopped = new Set([taskRef]);
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const ref of item.tasks) {
+        const task = state.tasks[ref];
+        if (!task || stopped.has(ref) || isClosed(task.stage)) continue;
+        if (task.depends_on.some((dependency) => stopped.has(dependency))) {
+          stopped.add(ref);
+          grew = true;
+        }
+      }
+    }
+    const reason = `${taskRef} cannot be done within its scope, so the item is split again: ${question}`;
+    for (const ref of stopped) {
+      const running = this.sessionFor(ref);
+      if (running && ref !== taskRef) this.stopSession(running);
+      const task = this.store.state.tasks[ref];
+      if (!task) continue;
+      if (task.hold)
+        await this.store.append({
+          type: "hold.cleared",
+          item: item.ref,
+          task: ref,
+          data: { target: "task", hold: task.hold.kind, by: "kozod" },
+        });
+      await this.moveTask(task, "cancelled", null, reason);
+      await this.release(ref, true);
+    }
+    await this.store.append({ type: "plan.proposed", item: item.ref, data: { plan: item.plan } });
+    await this.store.append({
+      type: "stage.changed",
+      item: item.ref,
+      data: { target: "item", from: "building", to: "planning", by: "kozod", reason },
+    });
   }
 
   /** Removes a task's worktree and branch after it is cancelled. */
