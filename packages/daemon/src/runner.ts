@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
 import {
   blueprintNodes,
   type Charter,
@@ -38,6 +40,7 @@ import {
   GitError,
   git,
   globMatcher,
+  homeReadable,
   type Judge,
   listFiles,
   modelFor,
@@ -104,6 +107,21 @@ export interface RunnerDeps {
 const draftOf = ({ version: _version, item: _item, ...draft }: Plan) => draft;
 
 /** Thrown when the repository's documents keep a run from starting at all. */
+/**
+ * The git directory that `worktree` shares with its repository, which git in the worktree reads,
+ * or nothing when its `.git` does not link to one.
+ */
+function sharedGitDirectory(worktree: string): string[] {
+  try {
+    const link = readFileSync(join(worktree, ".git"), "utf8").match(/^gitdir: (.+)$/m)?.[1];
+    if (!link) return [];
+    const gitDir = resolve(worktree, link.trim());
+    return [resolve(gitDir, readFileSync(join(gitDir, "commondir"), "utf8").trim())];
+  } catch {
+    return [];
+  }
+}
+
 export class RunnerError extends Error {}
 
 /**
@@ -132,17 +150,19 @@ export class Runner implements RunnerOps {
 
   /**
    * The sandbox of the commands run in `worktree`: they read neither the factory's home, which
-   * holds the API token and every other task, nor credentials, and write only the worktree, but
-   * not the file that ties it to its repository, and pnpm's locks. Only prepare, which installs
-   * the base's dependencies before any diff exists, reaches other hosts and writes the package
-   * caches.
+   * holds the API token and every other task, nor anything else in the home directory but the
+   * worktree, its repository's git directory and the tools, nor credentials, and write only the
+   * worktree, but not the file that ties it to its repository, and pnpm's locks. Only prepare,
+   * which installs the base's dependencies before any diff exists, reaches other hosts and
+   * writes the package caches.
    */
   confined(worktree: string, prepare = false): Confined {
     return {
       confine: this.deps.confine,
       sandbox: {
-        denyRead: [this.home.root, ...deniedCredentials(process.env)],
-        allowRead: [worktree],
+        denyRead: [this.home.root, homedir()],
+        allowRead: [worktree, ...sharedGitDirectory(worktree), ...homeReadable(process.env)],
+        denyReadInside: deniedCredentials(process.env),
         allowWrite: [worktree, ...packageLocks, ...(prepare ? packageCaches : [])],
         denyWrite: [join(worktree, ".git")],
         network: prepare ? "any" : "local",

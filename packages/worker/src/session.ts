@@ -56,6 +56,7 @@ export const workerSpecSchema = z.strictObject({
       sandbox: z.strictObject({
         denyRead: z.array(z.string()),
         allowRead: z.array(z.string()),
+        denyReadInside: z.array(z.string()),
         allowWrite: z.array(z.string()),
         denyWrite: z.array(z.string()),
         network: z.enum(["local", "any"]),

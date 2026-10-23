@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { chmod, lstat, mkdir, realpath, stat, symlink } from "node:fs/promises";
+import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { tempDirectory } from "@kozo/testing";
 import { runCommand } from "./command.ts";
@@ -8,6 +9,7 @@ import {
   bubblewrapArgs,
   type CommandSandbox,
   type Confine,
+  homeReadable,
   packageLocks,
   platformConfine,
   seatbelt,
@@ -17,6 +19,7 @@ import {
 const empty: CommandSandbox = {
   denyRead: [],
   allowRead: [],
+  denyReadInside: [],
   allowWrite: [],
   denyWrite: [],
   network: "local",
@@ -29,13 +32,40 @@ describe("packageLocks", () => {
   });
 });
 
+describe("homeReadable", () => {
+  test("takes each tool's own directory for a PATH entry in the home directory", () => {
+    const home = homedir();
+    const at = (path: string) => join(home, path);
+    const readable = homeReadable({
+      PATH: [
+        at(".local/share/mise/shims"),
+        at(".local/share/mise/installs/node/24/bin"),
+        at(".local/bin"),
+        at(".bun/bin"),
+        at("Library/pnpm"),
+        at("bin"),
+        home,
+        "/usr/bin",
+        "node_modules/.bin",
+      ].join(":"),
+    });
+    for (const path of [".local/share/mise", ".local/bin", ".bun", "Library/pnpm", "bin"])
+      expect(readable).toContain(at(path));
+    expect(readable).toContain(at(".gitconfig"));
+    expect(readable).not.toContain(home);
+    expect(readable).not.toContain(at(".local"));
+    expect(readable).not.toContain("/usr/bin");
+    expect(readable.some((path) => path.includes("node_modules"))).toBe(false);
+  });
+});
+
 describe("seatbeltProfile", () => {
   test("denies by default, quotes paths and leaves out empty lists", () => {
     const profile = seatbeltProfile({ ...empty, allowWrite: ['/w/a"b\\c'], denyRead: ["/home"] });
     expect(profile).toStartWith("(version 1)\n(deny default)\n");
-    expect(profile).toContain('(deny file-read* (subpath "/home"))');
+    expect(profile).toContain('(deny file-read-data file-read-xattr (subpath "/home"))');
     expect(profile).toContain('(allow file-write* (subpath "/w/a\\"b\\\\c"))');
-    expect(profile).not.toContain("(allow file-read* (subpath");
+    expect(profile).not.toContain("(allow file-read-data");
     expect(profile).not.toContain("(allow network*)");
     expect(seatbeltProfile({ ...empty, network: "any" })).toContain("(allow network*)");
   });
@@ -137,6 +167,30 @@ describe.skipIf(!sandboxed)("this machine's sandbox", () => {
     const temp = await run('echo x > "$TMPDIR/t" && echo "$TMPDIR"');
     expect(temp.code).toBe(0);
     expect(temp.output).not.toContain(root);
+  });
+
+  test("reads nothing of a denied directory but its readable paths, and no credential in them", async () => {
+    await using dir = await tempDirectory();
+    const home = await realpath(dir.path);
+    const work = join(home, "work");
+    const tool = join(home, ".tool");
+    await mkdir(work);
+    await Bun.write(join(home, "notes.txt"), "private");
+    await Bun.write(join(tool, "bin", "version"), "1.0");
+    await Bun.write(join(tool, "credentials"), "token");
+    const sandbox = {
+      ...empty,
+      denyRead: [home],
+      allowRead: [work, tool],
+      denyReadInside: [join(tool, "credentials")],
+      allowWrite: [work],
+    };
+    const run = (command: string) => confined(work, sandbox, command);
+
+    expect((await run(`cat "${tool}/bin/version"`)).output).toBe("1.0");
+    expect((await run(`cat "${home}/notes.txt"`)).code).not.toBe(0);
+    expect((await run(`cat "${tool}/credentials"`)).code).not.toBe(0);
+    expect((await run("echo x > made && cat made")).output).toBe("x\n");
   });
 
   test("keeps each writable root in place and takes no root someone could have planted", async () => {

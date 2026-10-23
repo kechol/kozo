@@ -1,7 +1,7 @@
-import { statSync } from "node:fs";
+import { lstatSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { lstat, mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 /** What a command confined by kozo may reach beyond the system's own files. */
 export interface CommandSandbox {
@@ -9,6 +9,8 @@ export interface CommandSandbox {
   denyRead: string[];
   /** Paths inside the denied ones that it may read, such as a worktree in the factory's home. */
   allowRead: string[];
+  /** Paths inside the readable ones that it may not read, such as a credential of a tool. */
+  denyReadInside: string[];
   /** The only paths it may write, besides its own temporary directory. */
   allowWrite: string[];
   /** Paths inside the writable ones that it may not write. */
@@ -40,6 +42,8 @@ export const credentialPaths = [
   ".netrc",
   ".claude",
   "Library/Keychains",
+  ".cargo/credentials",
+  ".cargo/credentials.toml",
 ];
 
 export function deniedCredentials(env: Record<string, string | undefined>): string[] {
@@ -69,6 +73,58 @@ export const packageCaches = [
   ".cargo/registry",
   "go/pkg/mod",
 ].map((path) => join(homedir(), path));
+
+// Directories in the home directory that hold the directories of many tools rather than being
+// one tool's own.
+const homeContainers = [".local", ".local/share", ".local/state", ".config", "Library"];
+
+// What the tools read of their own configuration in the home directory.
+const toolConfiguration = [
+  ".gitconfig",
+  ".config/git/config",
+  ".config/mise",
+  ".tool-versions",
+  ".rustup",
+  "Library/Caches/mise",
+];
+
+/**
+ * Where the links directly inside the directory `path` lead, since a sandbox reads a file at the
+ * end of its links and a configuration directory is often filled with links to dotfiles.
+ */
+function linkTargets(path: string): string[] {
+  try {
+    return readdirSync(path)
+      .map((name) => join(path, name))
+      .filter((entry) => lstatSync(entry).isSymbolicLink())
+      .map((entry) => realpathSync(entry));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * What a confined command may read in the home directory, which it otherwise may not: the package
+ * caches, the tools' configuration and, for each entry of `env.PATH` in the home directory, the
+ * tool's directory that holds it, the first one below the home directory or below a directory
+ * that holds many tools, such as `.local/share/mise` for `.local/share/mise/shims`.
+ */
+export function homeReadable(env: Record<string, string | undefined>): string[] {
+  const home = homedir();
+  const tools = (env.PATH ?? "").split(":").flatMap((entry) => {
+    const parts = relative(home, entry).split("/");
+    if (!entry.startsWith("/") || parts[0] === "" || parts[0] === "..") return [];
+    let depth = 1;
+    while (depth < parts.length && homeContainers.includes(parts.slice(0, depth).join("/")))
+      depth += 1;
+    return [join(home, ...parts.slice(0, depth))];
+  });
+  const configuration = toolConfiguration.flatMap((path) => [
+    join(home, path),
+    ...linkTargets(join(home, path)),
+  ]);
+  return [...new Set([...packageCaches, ...configuration, ...tools])];
+}
 
 /**
  * The lock directories pnpm keeps in /tmp whatever TMPDIR says, which every pnpm command takes,
@@ -124,12 +180,16 @@ export function seatbeltProfile(sandbox: CommandSandbox): string {
     "(allow signal (target same-sandbox))",
     "(allow sysctl-read pseudo-tty ipc-posix-shm ipc-posix-sem)",
     "(allow file-read*)",
-    ...rule("deny file-read*", sandbox.denyRead),
-    ...rule("allow file-read*", sandbox.allowRead),
+    // A denied directory keeps the metadata of what is in it, so that a tool looking for an
+    // optional file there finds none rather than failing. Seatbelt prefers a rule that names an
+    // operation over one with a wildcard, so the read rules name the same operations throughout.
+    ...rule("deny file-read-data file-read-xattr", sandbox.denyRead),
+    ...rule("allow file-read-data file-read-xattr file-read-metadata", sandbox.allowRead),
     // Resolving a path inside a denied directory looks at each directory on the way.
     ...ancestors(sandbox.allowRead).map(
       (path) => `(allow file-read-metadata (literal ${quoted(path)}))`,
     ),
+    ...rule("deny file-read-data file-read-xattr file-read-metadata", sandbox.denyReadInside),
     ...rule("allow file-write*", sandbox.allowWrite),
     // A writable root itself may not be removed, renamed or replaced, by a link to anywhere, say,
     // which the next run would resolve and then allow.
@@ -157,7 +217,8 @@ export const seatbelt: Confine = (sandbox, argv) => [
 /**
  * The bubblewrap arguments of `sandbox` on Linux: the whole system read-only, each denied path
  * hidden under an empty directory or /dev/null, the readable and writable ones mounted again on
- * top, and the paths inside them that may not be written read-only once more, made as empty
+ * top, the paths inside them that may not be read hidden once more, and the paths inside them
+ * that may not be written read-only once more, made as empty
  * files first when they do not exist so that the command cannot make them. Later mounts cover
  * earlier ones, so the order is that of the lists; a writable root is a mount point, which the
  * command cannot remove, rename or replace. A `local` command gets a network of its own, whose
@@ -195,7 +256,9 @@ export function bubblewrapArgs(sandbox: CommandSandbox): string[] {
   const sockets = local ? ["/run", "/tmp", ...known] : known;
   const hidden = [...sockets, ...sandbox.denyRead];
   // Each empty directory is made read-only once everything is mounted on it.
-  const covered = hidden.filter((path) => kind(path) === "directory");
+  const covered = [...hidden, ...sandbox.denyReadInside].filter(
+    (path) => kind(path) === "directory",
+  );
   return [
     "--die-with-parent",
     "--new-session",
@@ -213,6 +276,7 @@ export function bubblewrapArgs(sandbox: CommandSandbox): string[] {
     ...hidden.flatMap(hide),
     ...sandbox.allowRead.flatMap((path) => mount("--ro-bind", path)),
     ...sandbox.allowWrite.flatMap((path) => mount("--bind", path)),
+    ...sandbox.denyReadInside.flatMap(hide),
     // bubblewrap makes the mount point of a missing path, an empty file, before binding on it.
     ...sandbox.denyWrite.flatMap((path) =>
       kind(path) ? ["--ro-bind", path, path] : ["--ro-bind", "/dev/null", path],
@@ -296,6 +360,7 @@ export async function platformConfine(): Promise<Confine> {
   const empty: CommandSandbox = {
     denyRead: [],
     allowRead: [],
+    denyReadInside: [],
     allowWrite: [],
     denyWrite: [],
     network: "local",
@@ -361,6 +426,7 @@ export async function withSandboxTemp<T>(
       {
         denyRead: await resolve(sandbox.denyRead),
         allowRead: await resolve(sandbox.allowRead),
+        denyReadInside: await resolve(sandbox.denyReadInside),
         allowWrite: [...(await writableRoots(sandbox.allowWrite)), temp],
         denyWrite: await resolve(sandbox.denyWrite),
         network: sandbox.network,

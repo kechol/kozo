@@ -39,6 +39,7 @@ async function suite() {
       sandbox: {
         denyRead: [],
         allowRead: [repo.path],
+        denyReadInside: [],
         allowWrite: [repo.path],
         denyWrite: [],
         network: "local",
