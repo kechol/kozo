@@ -20,7 +20,8 @@ import {
   verbsByKind,
   type WorkClass,
 } from "@kozo/core";
-import type { HTMLBundle } from "bun";
+import { git } from "@kozo/verify";
+import type { BunFile, HTMLBundle } from "bun";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { DashboardSessions } from "./dashboard-session.ts";
@@ -75,6 +76,14 @@ export interface ApiOptions {
   sessions?: DashboardSessions;
   /** The registered repositories, which the dashboard offers when it adds an item. */
   repositories?: () => string[];
+  /** A task's records for the detail view, and one evidence file of a run. */
+  records?: {
+    task(ref: string): Promise<unknown | null>;
+    evidence(
+      run: string,
+      path: string,
+    ): Promise<{ file: BunFile; type: string; inline: boolean } | null>;
+  };
   /** The work class and autonomy level an open item runs at, or nulls when they are unknown. */
   autonomy?(ref: string): Promise<{ class: WorkClass | null; level: AutonomyLevel | null }>;
 }
@@ -108,6 +117,7 @@ export function createApi({
   sessions = new DashboardSessions(),
   repositories = () => [],
   autonomy,
+  records,
 }: ApiOptions) {
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
   const origins = new Set([...hosts].map((host) => `http://${host}`));
@@ -202,6 +212,57 @@ export function createApi({
     if (!result) return error(c, 404, `${ref} does not exist`);
     const location = result.kind === "task" ? await locateTask?.(ref).catch(() => null) : null;
     return c.json(location ? { ...result, diff: location } : result);
+  });
+
+  // A diff past this many characters is cut, since the page renders all of it.
+  const diffLimit = 1_000_000;
+
+  app.get("/api/refs/:ref/diff", async (c) => {
+    const found = reference(c);
+    if (found instanceof Response) return found;
+    const [ref, parsedReference] = found;
+    if (parsedReference.kind !== "task") return error(c, 400, "only a task has a diff");
+    const location = await locateTask?.(ref).catch(() => null);
+    if (!location) return error(c, 404, `${ref} has no diff`);
+    const text = await git(location.repository, [
+      "diff",
+      `${location.base}...${location.branch}`,
+    ]).catch(() => null);
+    if (text === null) return error(c, 404, `${ref} has no branch yet`);
+    const cut = text.length > diffLimit;
+    return c.json({
+      base: location.base,
+      branch: location.branch,
+      diff: cut ? text.slice(0, diffLimit) : text,
+      cut,
+    });
+  });
+
+  app.get("/api/refs/:ref/records", async (c) => {
+    const found = reference(c);
+    if (found instanceof Response) return found;
+    const [ref, parsedReference] = found;
+    if (parsedReference.kind !== "task") return error(c, 400, "only a task has records");
+    const result = await records?.task(ref);
+    if (!result) return error(c, 404, `${ref} does not exist`);
+    return c.json(result);
+  });
+
+  // The files are an agent's, so none is ever run or rendered by the browser as a page.
+  app.get("/api/runs/:run/evidence/*", async (c) => {
+    const run = c.req.param("run");
+    if (!/^r-\d{4,}$/.test(run)) return error(c, 400, `${run} is not a run`);
+    const path = decodeURIComponent(c.req.path.slice(`/api/runs/${run}/evidence/`.length));
+    const found = await records?.evidence(run, path);
+    if (!found) return error(c, 404, "no such evidence");
+    return new Response(found.file, {
+      headers: {
+        "content-type": found.type,
+        "x-content-type-options": "nosniff",
+        "content-security-policy": "sandbox; default-src 'none'",
+        ...(found.inline ? {} : { "content-disposition": "attachment" }),
+      },
+    });
   });
 
   const exists = (ref: string) => {

@@ -65,7 +65,12 @@ export function detail(db: Database, ref: string, reference: Reference) {
         .all(ref)
         .map((row) => parsed(row, ["done_when", "scope", "depends_on", "checkpoint"]));
       const runs = db.query("select * from runs where item = ? order by started_at").all(ref);
-      return { kind: "item", item, tasks, runs };
+      const cost = db
+        .query<{ usd: number }, [string]>(
+          "select coalesce(sum(json_extract(line, '$.cost.usd')), 0) as usd from events where item = ?",
+        )
+        .get(ref);
+      return { kind: "item", item, tasks, runs, cost_usd: cost?.usd ?? 0 };
     }
     case "task": {
       const task = parsed(

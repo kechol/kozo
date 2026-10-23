@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { chmod, cp, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { kozoHome } from "@kozo/core";
 import { recordedLogs, type TempDirectory, tempDirectory } from "@kozo/testing";
 import { CommandError, type Commands, createApi } from "./api.ts";
@@ -282,5 +283,42 @@ describe("dashboard sessions", () => {
     const late = await code();
     now += 61_000;
     expect((await trade({ code: late })).status).toBe(403);
+  });
+});
+
+describe("the detail routes", () => {
+  test("evidence is never rendered as a page, and diffs and records belong to tasks", async () => {
+    await using files = await tempDirectory();
+    const page = join(files.path, "page.html");
+    await Bun.write(page, "<script>alert(1)</script>");
+    const api = createApi({
+      store,
+      token,
+      port,
+      mode: "local",
+      commands,
+      records: {
+        task: async (ref) => (ref === "K-1/t1" ? { costUsd: 0.5 } : null),
+        evidence: async (_run, path) =>
+          path === "page.html"
+            ? { file: Bun.file(page), type: "application/octet-stream", inline: false }
+            : null,
+      },
+    });
+    const get = (path: string) =>
+      api.request(`http://127.0.0.1:${port}${path}`, {
+        headers: { authorization: `Bearer ${token}`, host: `127.0.0.1:${port}` },
+      });
+    const served = await get("/api/runs/r-0001/evidence/page.html");
+    expect(served.status).toBe(200);
+    expect(served.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(served.headers.get("content-security-policy")).toBe("sandbox; default-src 'none'");
+    expect(served.headers.get("content-disposition")).toBe("attachment");
+    expect((await get("/api/runs/r-0001/evidence/missing.png")).status).toBe(404);
+    expect((await get("/api/runs/nope/evidence/page.html")).status).toBe(400);
+    expect(await (await get("/api/refs/K-1%2Ft1/records")).json()).toEqual({ costUsd: 0.5 });
+    expect((await get("/api/refs/K-1/records")).status).toBe(400);
+    expect((await get("/api/refs/K-1/diff")).status).toBe(400);
+    expect((await get("/api/refs/K-1%2Ft1/diff")).status).toBe(404);
   });
 });

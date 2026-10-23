@@ -1,6 +1,6 @@
 import { ActionButton, inboxActions } from "./actions.tsx";
 import type { Api } from "./api.ts";
-import { ago } from "./format.ts";
+import { ago, detailHash } from "./format.ts";
 import { inbox } from "./store.ts";
 
 const label: Record<string, string> = {
@@ -21,7 +21,9 @@ export function Inbox({ api }: { api: Api }) {
       {rows.map((row) => (
         <li key={`${row.ref} ${row.waiting}`} class={`card waiting-${row.waiting}`}>
           <div class="row spread">
-            <span class="ref">{row.ref}</span>
+            <a href={detailHash(row.ref)} class="ref">
+              {row.ref}
+            </a>
             <span class={`badge ${row.waiting}`}>{label[row.waiting] ?? row.waiting}</span>
           </div>
           <h3>{row.title}</h3>

@@ -18,6 +18,7 @@ import { Reconciler } from "./reconcile.ts";
 import { type CharterResult, readCharter } from "./repository.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
+import { evidenceFile, taskRecords } from "./task-records.ts";
 import { taskBranch } from "./worktrees.ts";
 
 export interface DaemonOptions {
@@ -148,6 +149,10 @@ export class Daemon {
       mode: definition.current.factory.mode,
       commands,
       repositories: () => definition.current.factory.repositories.map(({ path }) => path),
+      records: {
+        task: (ref) => taskRecords(home, store, ref),
+        evidence: (run, path) => evidenceFile(home, run, path),
+      },
       // As kozod decides it: the lower of the requested class's level and the plan's.
       async autonomy(ref) {
         const item = store.state.items[ref];

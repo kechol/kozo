@@ -15,11 +15,59 @@ export function ago(iso: string, now: Date = new Date()): string {
 
 export const usd = (amount: number) => `$${amount.toFixed(2)}`;
 
-/** The page a hash names: the inbox or the board. */
-export type Route = { page: "inbox" } | { page: "board" };
+/** The page a hash names: the inbox, the board, or one reference's detail. */
+export type Route = { page: "inbox" } | { page: "board" } | { page: "detail"; ref: string };
 
 export function routeOf(hash: string): Route {
-  return hash === "#/board" ? { page: "board" } : { page: "inbox" };
+  if (hash === "#/board") return { page: "board" };
+  const detail = /^#\/ref\/(.+)$/.exec(hash);
+  if (detail?.[1]) return { page: "detail", ref: decodeURIComponent(detail[1]) };
+  return { page: "inbox" };
+}
+
+export const detailHash = (ref: string) => `#/ref/${encodeURIComponent(ref)}`;
+
+/** The kind of a reference as kozo writes them: `r-0042`, `K-12/t1` or `app#212/t2`, else an item. */
+export function kindOf(ref: string): "item" | "task" | "run" {
+  if (/^r-\d+$/.test(ref)) return "run";
+  return /\/t\d+$/.test(ref) ? "task" : "item";
+}
+
+/** One line for an event of the timeline: what happened, without its envelope. */
+export function eventLine(event: { type: string; data: Record<string, unknown> }): string {
+  const data = event.data;
+  switch (event.type) {
+    case "stage.changed":
+      return `${data.target} ${data.from} → ${data.to}: ${data.reason}`;
+    case "hold.set":
+      return `${data.target} held for ${data.hold}: ${data.reason}`;
+    case "hold.cleared":
+      return `${data.target} ${data.hold} cleared${data.reason ? `: ${data.reason}` : ""}`;
+    case "run.started":
+      return `${data.agent} run started on ${data.model}`;
+    case "run.changed":
+      return `run ${data.from} → ${data.to}${data.reason ? `: ${data.reason}` : ""}`;
+    case "node.enter":
+      return "entered";
+    case "node.exit":
+      return `${data.ok ? "passed" : "failed"}${data.summary ? `: ${data.summary}` : ""}`;
+    case "gates.result":
+      return `${data.level} gates ${data.status}${data.failed ? ` at ${data.failed}` : ""}`;
+    case "review.verdict":
+      return `review: ${data.verdict}, ${data.summary}`;
+    case "note.added":
+      return `${data.kind}: ${data.text}`;
+    case "agent.message":
+      return String(data.text ?? "").split("\n")[0] ?? "";
+    case "tool.call":
+      return `called ${data.tool}`;
+    case "guard.denied":
+      return `the guard refused ${data.tool}: ${data.reason}`;
+    case "handoff.ready":
+      return `ready at ${String(data.head ?? "").slice(0, 12)}`;
+    default:
+      return "";
+  }
 }
 
 /** The stages in the order work moves through them, as the board's columns. */

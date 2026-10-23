@@ -1,6 +1,6 @@
 import { signal } from "@preact/signals";
 import type { Api, ItemRow, TaskRow } from "./api.ts";
-import { isClosedStage, moveTarget, stages } from "./format.ts";
+import { detailHash, isClosedStage, moveTarget, stages } from "./format.ts";
 import { items, run, tasks } from "./store.ts";
 
 /** Whether the board shows items or tasks; the viewer's choice, kept in this browser. */
@@ -98,7 +98,9 @@ function ItemCard({
   return (
     <article class="card board-card">
       <div class="row spread">
-        <span class="ref">{item.ref}</span>
+        <a href={detailHash(item.ref)} class="ref">
+          {item.ref}
+        </a>
         {item.level ? (
           <span class="level" title="autonomy level">
             {item.level}
@@ -144,7 +146,9 @@ function ItemCard({
 function TaskCard({ task }: { task: TaskRow }) {
   return (
     <article class="card board-card">
-      <span class="ref">{task.ref}</span>
+      <a href={detailHash(task.ref)} class="ref">
+        {task.ref}
+      </a>
       <p class="title">{task.goal}</p>
       <div class="row meta">
         {task.hold ? <span class={`badge ${task.hold}`}>{task.hold}</span> : null}

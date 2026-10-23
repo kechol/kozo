@@ -2,6 +2,7 @@ import { signal } from "@preact/signals";
 import { AddItem } from "./add-item.tsx";
 import type { Api } from "./api.ts";
 import { Board } from "./board.tsx";
+import { DetailView } from "./detail.tsx";
 import { routeOf } from "./format.ts";
 import { Header } from "./header.tsx";
 import { Inbox } from "./inbox.tsx";
@@ -24,7 +25,9 @@ export function App({ api }: { api: Api }) {
         </p>
       ) : null}
       <main>
-        {page === "board" ? (
+        {route.value.page === "detail" ? (
+          <DetailView api={api} refName={route.value.ref} />
+        ) : page === "board" ? (
           <>
             <h2>Board</h2>
             {status.value?.mode === "local" ? <AddItem api={api} /> : null}

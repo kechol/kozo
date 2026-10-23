@@ -129,6 +129,15 @@ export class Api {
     return this.request<T>("GET", path);
   }
 
+  /** A file the API serves, such as a piece of evidence, as a blob the page can show. */
+  async blob(path: string): Promise<Blob> {
+    const response = await this.fetcher(path, {
+      headers: { authorization: `Bearer ${this.token}` },
+    });
+    if (!response.ok) throw new ApiError(response.status, `kozod answered ${response.status}`);
+    return await response.blob();
+  }
+
   act(ref: string, verb: Verb, body: Record<string, unknown> = {}): Promise<VerbAnswer> {
     return this.request("POST", `/api/refs/${encodeURIComponent(ref)}/${verb}`, body);
   }

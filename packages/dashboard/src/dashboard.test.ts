@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { inboxActions } from "./actions.tsx";
 import { takeSession } from "./api.ts";
-import { ago, moveTarget, routeOf } from "./format.ts";
+import { detailActions } from "./detail.tsx";
+import { ago, eventLine, kindOf, moveTarget, routeOf } from "./format.ts";
 
 const code = "ab".repeat(32);
 
@@ -82,9 +83,30 @@ describe("inboxActions", () => {
 });
 
 describe("format", () => {
-  test("routes the inbox and the board", () => {
+  test("routes the inbox, the board and a reference's detail", () => {
     expect(routeOf("")).toEqual({ page: "inbox" });
     expect(routeOf("#/board")).toEqual({ page: "board" });
+    expect(routeOf("#/ref/shop%2312%2Ft1")).toEqual({ page: "detail", ref: "shop#12/t1" });
+  });
+
+  test("tells items, tasks and runs apart by their references", () => {
+    expect(kindOf("K-12")).toBe("item");
+    expect(kindOf("app#212")).toBe("item");
+    expect(kindOf("app#212/t2")).toBe("task");
+    expect(kindOf("r-0042")).toBe("run");
+  });
+
+  test("says what an event did in one line", () => {
+    expect(
+      eventLine({
+        type: "stage.changed",
+        data: { target: "task", from: "building", to: "reviewing", reason: "checks passed" },
+      }),
+    ).toBe("task building → reviewing: checks passed");
+    expect(
+      eventLine({ type: "gates.result", data: { level: "full", status: "fail", failed: "lint" } }),
+    ).toBe("full gates fail at lint");
+    expect(eventLine({ type: "cost.tick", data: {} })).toBe("");
   });
 
   test("moves a card above the one above it, or below the one below it", () => {
@@ -103,5 +125,27 @@ describe("format", () => {
     expect(ago("2026-10-23T11:59:30Z", now)).toBe("just now");
     expect(ago("2026-10-23T11:15:00Z", now)).toBe("45 min ago");
     expect(ago("2026-10-21T09:00:00Z", now)).toBe("2 d ago");
+  });
+});
+
+describe("detailActions", () => {
+  const labels = (...args: Parameters<typeof detailActions>) =>
+    detailActions(...args).map((action) => action.label);
+
+  test("offers what each kind takes in its state, never a merge", () => {
+    expect(labels("run", null, null)).toEqual(["Send", "Pause"]);
+    expect(labels("item", null, null)).toEqual(["Send", "Pause", "Cancel"]);
+    expect(labels("task", null, null)).toEqual(["Send", "Pause", "Take it over", "Cancel"]);
+    expect(labels("task", "question", "ambiguous")).toEqual([
+      "Answer",
+      "Retry",
+      "Take it over",
+      "Cancel",
+    ]);
+    expect(labels("task", "paused", "kozo pause")).toEqual(["Send", "Resume", "Cancel"]);
+    expect(labels("task", "paused", "the human took it; kozo return gives it back")).toEqual([
+      "Give it back",
+      "Cancel",
+    ]);
   });
 });
