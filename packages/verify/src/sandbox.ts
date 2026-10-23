@@ -188,9 +188,16 @@ export function bubblewrapArgs(sandbox: CommandSandbox): string[] {
   const mount = (flag: string, path: string) => (kind(path) ? [flag, path, path] : []);
   const local = sandbox.network === "local";
   const runtime = process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid?.() ?? 0}`;
-  const sockets = local
-    ? ["/run", "/tmp"]
-    : [runtime, "/run/docker.sock", "/run/dbus", "/var/run/docker.sock", "/tmp/.X11-unix"];
+  // The known sockets are hidden in either case, since the runtime directory need not be under
+  // /run, nor /var/run a link to it.
+  const known = [
+    runtime,
+    "/run/docker.sock",
+    "/run/dbus",
+    "/var/run/docker.sock",
+    "/tmp/.X11-unix",
+  ];
+  const sockets = local ? ["/run", "/tmp", ...known] : known;
   const hidden = [...sockets, ...sandbox.denyRead].flatMap(hide);
   return [
     "--die-with-parent",
