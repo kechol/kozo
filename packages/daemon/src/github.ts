@@ -413,6 +413,9 @@ export async function pushConfirmed(
   }
 }
 
+/** The hidden tag that ends each comment kozod writes and finds it again by. */
+export const commentTag = (marker: string) => `<!-- ${marker} -->`;
+
 /**
  * Posts kozod's comment marked `marker` on an Issue, or edits it when it is already there. A
  * comment whose response was lost is looked for before the error goes on, so that the next try
@@ -427,7 +430,7 @@ export async function upsertComment(
   marker: string,
   body: string,
 ): Promise<void> {
-  const tag = `<!-- ${marker} -->`;
+  const tag = commentTag(marker);
   const text = `${body}\n\n${tag}`;
   const find = async () =>
     (await github.comments(repository, issue)).find(
