@@ -51,7 +51,12 @@ const examples: Record<EventType, unknown> = {
     brief_sha: "b".repeat(64),
     instructions_sha: "c".repeat(64),
   },
-  "item.created": { repository: "~/src/app", title: "Low stock notice", source: "local" },
+  "item.created": {
+    repository: "~/src/app",
+    title: "Low stock notice",
+    source: "local",
+    class: null,
+  },
   "item.edited": {
     title: "Low stock notice for 0 units",
     request_sha: "d".repeat(64),

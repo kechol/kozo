@@ -13,7 +13,7 @@ describe("pumpSession", () => {
     await store.append({
       type: "item.created",
       item: "K-1",
-      data: { repository: "~/src/shop", title: "Low stock", source: "local" },
+      data: { repository: "~/src/shop", title: "Low stock", source: "local", class: null },
     });
     await store.append({
       ...run,

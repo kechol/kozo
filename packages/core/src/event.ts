@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { workClassSchema } from "./charter.ts";
 import { gateLevelSchema } from "./constraints.ts";
 import { type ParseResult, parseJsonDocument } from "./document.ts";
 import { planSchema } from "./plan.ts";
@@ -105,6 +106,8 @@ export const eventSchema = z
         repository: text,
         title: text,
         source: z.enum(["local", "github", "automation"]),
+        /** The class the request asked for, or null when triage drafts one. */
+        class: workClassSchema.nullable(),
       }),
     ),
     /** A human moved the item before another, or to the end when `before` is null. */

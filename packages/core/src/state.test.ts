@@ -39,7 +39,11 @@ const plan = (tasks = 1, risk: Plan["risk"] = "normal"): Plan => ({
 function planned(write = eventWriter(), accepted = plan()): Event[] {
   const item = { item: "K-1" };
   return [
-    write("item.created", { repository: "~/src/app", title: "Fix", source: "local" }, item),
+    write(
+      "item.created",
+      { repository: "~/src/app", title: "Fix", source: "local", class: null },
+      item,
+    ),
     write(
       "stage.changed",
       { target: "item", from: "intake", to: "triage", by: "kozod", reason: "test" },
@@ -56,12 +60,28 @@ function planned(write = eventWriter(), accepted = plan()): Event[] {
 }
 
 describe("replay", () => {
+  test("an item keeps the class its request asked for and who accepted its plan", () => {
+    const write = eventWriter();
+    const asked = replay([
+      write(
+        "item.created",
+        { repository: "~/src/app", title: "Docs", source: "local", class: "docs" },
+        { item: "K-1" },
+      ),
+    ]);
+    expect(asked.items["K-1"]).toMatchObject({ requestedClass: "docs", acceptedBy: null });
+    expect(replay(planned()).items["K-1"]).toMatchObject({
+      requestedClass: null,
+      acceptedBy: "human",
+    });
+  });
+
   test("items keep their arrival order until a human moves one, and their tasks follow it", () => {
     const write = eventWriter();
     const created = (ref: string) =>
       write(
         "item.created",
-        { repository: "~/src/app", title: ref, source: "local" },
+        { repository: "~/src/app", title: ref, source: "local", class: null },
         { item: ref },
       );
     const events = [
@@ -255,7 +275,11 @@ describe("replay", () => {
     const item = { item: "K-1" };
     expect(() =>
       replay([
-        write("item.created", { repository: "~/src/app", title: "Fix", source: "local" }, item),
+        write(
+          "item.created",
+          { repository: "~/src/app", title: "Fix", source: "local", class: null },
+          item,
+        ),
         write(
           "stage.changed",
           { target: "item", from: "intake", to: "planning", by: "kozod", reason: "test" },
@@ -411,7 +435,11 @@ describe("holds", () => {
     const write = eventWriter();
     const item = { item: "K-1" };
     const created = [
-      write("item.created", { repository: "~/src/app", title: "Fix", source: "local" }, item),
+      write(
+        "item.created",
+        { repository: "~/src/app", title: "Fix", source: "local", class: null },
+        item,
+      ),
     ];
     expect(() =>
       replay([
@@ -489,7 +517,11 @@ describe("holds", () => {
     const write = eventWriter("2026-10-01T00:00:00.000Z");
     const item = { item: "K-1" };
     const state = replay([
-      write("item.created", { repository: "~/src/app", title: "Fix", source: "local" }, item),
+      write(
+        "item.created",
+        { repository: "~/src/app", title: "Fix", source: "local", class: null },
+        item,
+      ),
       write(
         "hold.set",
         { target: "item", hold: "approval", by: "kozod", reason: "start approval" },

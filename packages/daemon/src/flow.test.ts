@@ -1260,12 +1260,7 @@ test("one unit is still counted", () => {
           {},
         );
       }
-      const accepted = env.store.db
-        .query<{ by: string }, []>(
-          "select json_extract(line, '$.data.by') as by from events where type = 'plan.accepted'",
-        )
-        .get();
-      expect(accepted?.by).toBe("kozod");
+      expect(env.store.state.items[ref]?.acceptedBy).toBe("kozod");
       const task = env.store.state.tasks[`${ref}/t1`];
       if (expected === null) {
         expect(task).toMatchObject({ stage: "handoff", hold: null });

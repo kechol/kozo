@@ -8,7 +8,12 @@ import { EventLogError, EventStore } from "./event-store.ts";
 const created = {
   type: "item.created",
   item: "K-1",
-  data: { repository: "~/src/shop", title: "Reject a blank quantity", source: "local" },
+  data: {
+    repository: "~/src/shop",
+    title: "Reject a blank quantity",
+    source: "local",
+    class: null,
+  },
 } as const;
 
 async function lines(path: string) {

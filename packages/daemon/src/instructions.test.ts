@@ -36,7 +36,7 @@ test("a task follows what was said about it, and about its item from its plan on
   const state = replay([
     write(
       "item.created",
-      { repository: "~/src/shop", title: "Sell in EUR", source: "local" },
+      { repository: "~/src/shop", title: "Sell in EUR", source: "local", class: null },
       item,
     ),
     write(

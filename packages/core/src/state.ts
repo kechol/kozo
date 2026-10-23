@@ -30,6 +30,10 @@ export interface ItemState {
   repository: string;
   title: string;
   source: "local" | "github" | "automation";
+  /** The class the request asked for, or null. */
+  requestedClass: WorkClass | null;
+  /** Who accepted the item's latest plan, or null before one is accepted. */
+  acceptedBy: "human" | "kozod" | null;
   /**
    * The item's own stage: Intake to Planning before it has tasks, then `building` until it
    * reaches Complete or Cancelled. `itemStage` gives the stage to show.
@@ -265,6 +269,8 @@ export function applyEvent(state: FactoryState, event: Event): void {
         repository: event.data.repository,
         title: event.data.title,
         source: event.data.source,
+        requestedClass: event.data.class,
+        acceptedBy: null,
         stage: "intake",
         hold: null,
         draft: null,
@@ -375,6 +381,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
       const reused = refs.find((ref) => state.tasks[ref]);
       if (reused) throw new StateError(`${reused} already exists; number the new tasks after it`);
       subject.plan = plan;
+      subject.acceptedBy = event.data.by;
       subject.draft = null;
       subject.rejections = 0;
       subject.stage = "building";

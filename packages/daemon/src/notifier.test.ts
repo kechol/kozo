@@ -21,7 +21,7 @@ async function setup(now: () => Date = () => new Date()) {
   await store.append({
     type: "item.created",
     item: "K-1",
-    data: { repository: "~/src/shop", title: "Low stock", source: "local" },
+    data: { repository: "~/src/shop", title: "Low stock", source: "local", class: null },
   });
   notifier.start();
   return {

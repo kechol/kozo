@@ -406,7 +406,7 @@ const verifyDeterministic: NodeStep = async (run, current) => {
     const preserve =
       current.characterize ||
       (!blueprint.reproduce &&
-        ((await chosenByHuman(run)) || (await onlyDependencyFiles(worktree, repository.base))));
+        (chosenByHuman(run) || (await onlyDependencyFiles(worktree, repository.base))));
     const prove = await runProve({
       cwd: worktree,
       base: repository.base,
@@ -453,14 +453,8 @@ const verifyDeterministic: NodeStep = async (run, current) => {
 };
 
 /** Whether a human chose the plan's work class, by asking for it or by accepting the plan. */
-async function chosenByHuman({ runner, item, plan }: BlueprintRun): Promise<boolean> {
-  if ((await readItemFile(runner.home, item.ref)).class === plan.class) return true;
-  const accepted = runner.store.db
-    .query<{ by: string }, [string]>(
-      "select json_extract(line, '$.data.by') as by from events where item = ? and type = 'plan.accepted' order by id desc limit 1",
-    )
-    .get(item.ref);
-  return accepted?.by === "human";
+function chosenByHuman({ item, plan }: BlueprintRun): boolean {
+  return item.requestedClass === plan.class || item.acceptedBy === "human";
 }
 
 const review: NodeStep = async (run, current) => {

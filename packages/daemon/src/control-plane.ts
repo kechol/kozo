@@ -136,7 +136,7 @@ export class ControlPlane {
       await this.store.append({
         type: "item.created",
         item: ref,
-        data: { repository, title, source },
+        data: { repository, title, source, class: file.class },
       });
     } catch (error) {
       await rm(itemPath(this.home, ref), { force: true });
