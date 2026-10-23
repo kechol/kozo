@@ -10,7 +10,10 @@ import {
 import { costOf, midnightOf } from "./queries.ts";
 import { readCharter } from "./repository.ts";
 
-export type ReportView = "summary" | "week" | "review" | "cost";
+export type ReportView = "summary" | "review" | "cost";
+
+/** The window a report covers when the request names none, and the longest it may cover. */
+export const reportDays = { default: 30, max: 365 } as const;
 
 const dayMs = 24 * 60 * 60 * 1000;
 
@@ -137,21 +140,22 @@ function metrics(db: Database, state: FactoryState, since: string) {
 }
 
 /**
- * What `kozo report` shows for `view`: the metrics over the last 30 days, or 7 for `week`, with
- * the promotion proposals; `review` adds each repository's levels as kozod applies them and the
- * window's cost, and `cost` is the day's and the week's cost against the daily budget.
+ * What `kozo report` shows for `view` over the last `days` days: the metrics, the failures and
+ * the promotion proposals; `review` adds each repository's levels as kozod applies them, its
+ * demotions and the window's cost, and `cost` is each day's cost and today's against the budget.
  */
 export async function buildReport(
   db: Database,
   state: FactoryState,
   factory: Factory,
   view: ReportView,
+  days: number = reportDays.default,
   now = new Date(),
 ) {
   const budget = factory.budget.daily_usd;
   if (view === "cost") {
     const today = costSince(db, midnightOf(now));
-    const days = Array.from({ length: 7 }, (_, back) => {
+    const daily = Array.from({ length: days }, (_, back) => {
       const start = midnightOf(new Date(now.getTime() - back * dayMs));
       const end = new Date(start.getTime() + dayMs);
       const usd =
@@ -162,9 +166,8 @@ export async function buildReport(
           .get(start.toISOString(), end.toISOString())?.usd ?? 0;
       return { day: start.toISOString(), usd };
     });
-    return { view, budget_usd: budget, today_usd: today, days };
+    return { view, budget_usd: budget, today_usd: today, days: daily };
   }
-  const days = view === "week" ? 7 : 30;
   const since = new Date(now.getTime() - days * dayMs).toISOString();
   const repositories = await Promise.all(
     factory.repositories.map(async ({ path }) => ({
@@ -180,9 +183,15 @@ export async function buildReport(
         }))
       : [],
   );
-  const result = { view, days, since, ...metrics(db, state, since), promotions };
+  const result = {
+    view,
+    days,
+    since,
+    ...metrics(db, state, since),
+    failures: failures(db, since),
+    promotions,
+  };
   if (view === "summary") return result;
-  if (view === "week") return { ...result, failures: failures(db, since) };
   const levels = repositories.flatMap(({ path, charter }) =>
     charter.ok
       ? workClassSchema.options.map((workClass) => ({
@@ -194,7 +203,6 @@ export async function buildReport(
   );
   return {
     ...result,
-    failures: failures(db, since),
     levels,
     demotions: Object.values(state.demotions),
     cost_usd: costSince(db, new Date(since)),

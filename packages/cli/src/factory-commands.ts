@@ -625,21 +625,24 @@ function metricLines(r: Metrics): string[] {
   ];
 }
 
-/** `kozo report`: the metrics, or with a flag the week's, the monthly review or the cost. */
+/** `kozo report`: the metrics over a window of days, or with a flag the review or the cost. */
 export async function metricsReport(args: readonly string[], out: Lines): Promise<number> {
   const { values } = parseArgs({
     args: [...args],
     options: {
-      week: { type: "boolean" },
+      days: { type: "string" },
       review: { type: "boolean" },
       cost: { type: "boolean" },
       json: { type: "boolean" },
     },
   });
-  const views = (["week", "review", "cost"] as const).filter((view) => values[view]);
-  if (views.length > 1) throw new UsageError("report takes one of --week, --review and --cost");
-  const view = views[0] ?? "summary";
-  const answer = await (await connect()).get(`/api/report?view=${view}`);
+  if (values.review && values.cost)
+    throw new UsageError("report takes --review or --cost, not both");
+  const view = values.review ? "review" : values.cost ? "cost" : "summary";
+  const days = values.days ?? "30";
+  if (!/^\d+$/.test(days) || Number(days) < 1 || Number(days) > 365)
+    throw new UsageError("report takes --days <n>, a whole number from 1 to 365");
+  const answer = await (await connect()).get(`/api/report?view=${view}&days=${days}`);
   return printAnswer(out, values.json, answer, () => {
     if (view !== "cost") return metricLines(answer.body as unknown as Metrics);
     const c = answer.body as unknown as CostReport;

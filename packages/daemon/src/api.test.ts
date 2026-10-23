@@ -220,6 +220,8 @@ describe("the local API", () => {
     expect((await prune({ older_than_days: 30, dry_run: true })).status).toBe(200);
     expect(calls.at(-1)).toEqual(["prune", { older_than_days: 30, dry_run: true }]);
     expect((await call("/api/report?view=nonsense")).status).toBe(400);
+    expect((await call("/api/report?view=week")).status).toBe(400);
+    expect((await call("/api/report?days=366")).status).toBe(400);
   });
 });
 

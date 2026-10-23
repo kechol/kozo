@@ -166,7 +166,7 @@
 | monthly review | The monthly reading of metrics, failure types, autonomy levels and cost. | `kozo report --review` | - | - |
 | post-merge defect | A merged diff that failed its DONE_WHEN check at Complete or was later tied to a revert or a fix commit. | - | regression | - |
 | prune | Removing, at a human's request, all but the event log, report, verdicts and decision log of each run whose item closed at least a given number of days ago. | `kozo admin prune`, `factory.pruned` | purge, clean up | - |
-| retrospective | The weekly human reading of unresolved failures that turns each failure type into a structural fix. | `kozo report --week` | - | - |
+| retrospective | The weekly human reading of unresolved failures that turns each failure type into a structural fix. | `kozo report --days 7` | - | - |
 | revise rate | The share of reviews that returned revise. | - | - | - |
 | time to merge | The median time from a diff's last handoff to its merge. | `hours_to_merge` | - | - |
 

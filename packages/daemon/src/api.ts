@@ -39,9 +39,9 @@ import {
   inboxCount,
   list,
 } from "./queries.ts";
-import type { ReportView } from "./report.ts";
+import { type ReportView, reportDays } from "./report.ts";
 
-const reportViews: readonly ReportView[] = ["summary", "week", "review", "cost"];
+const reportViews: readonly ReportView[] = ["summary", "review", "cost"];
 
 /** A refusal from a command, with the HTTP status that the API answers with. */
 export class CommandError extends Error {
@@ -96,7 +96,7 @@ export interface ApiOptions {
   /** The work class and autonomy level an open item runs at, or nulls when they are unknown. */
   autonomy?(ref: string): Promise<{ class: WorkClass | null; level: AutonomyLevel | null }>;
   /** What `kozo report` shows for one view. */
-  report?(view: ReportView): Promise<unknown>;
+  report?(view: ReportView, days: number): Promise<unknown>;
 }
 
 const error = (c: Context, status: number, message: string, issues?: string[]) =>
@@ -187,7 +187,10 @@ export function createApi({
     const view = c.req.query("view") ?? "summary";
     if (!reportViews.includes(view as ReportView) || !report)
       return error(c, 400, `no report view ${view}`);
-    return c.json(await report(view as ReportView));
+    const days = Number(c.req.query("days") ?? reportDays.default);
+    if (!Number.isInteger(days) || days < 1 || days > reportDays.max)
+      return error(c, 400, `days must be a whole number from 1 to ${reportDays.max}`);
+    return c.json(await report(view as ReportView, days));
   });
 
   app.get("/api/ls/:kind", async (c) => {

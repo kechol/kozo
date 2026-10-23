@@ -256,7 +256,8 @@ describe("the retrospective", () => {
       env.store.db,
       env.store.state,
       env.definition.current.factory,
-      "week",
+      "summary",
+      7,
     )) as { failures: unknown[] };
     expect(week.failures).toEqual([
       { kind: "missing-tool", ref: `${ref}/t1`, at: expect.any(String), text: question },
@@ -498,7 +499,8 @@ describe("the minimal path", () => {
       env.store.db,
       env.store.state,
       env.definition.current.factory,
-      "week",
+      "summary",
+      7,
     )) as { failures: { kind: string; ref: string }[] };
     expect(week.failures.filter((failure) => failure.kind === "revise")).toHaveLength(2);
     expect(week.failures[0]).toMatchObject({ kind: "revise", ref: `${ref}/t1` });
@@ -988,7 +990,8 @@ describe("the minimal path", () => {
       env.store.db,
       env.store.state,
       env.definition.current.factory,
-      "week",
+      "summary",
+      7,
     )) as { failures: { kind: string; ref: string }[] };
     expect(week.failures).toContainEqual(expect.objectContaining({ kind: "defect", ref: task }));
   }, 180_000);
@@ -1733,7 +1736,8 @@ test("one unit is still counted", () => {
       env.store.db,
       env.store.state,
       env.definition.current.factory,
-      "week",
+      "summary",
+      7,
     )) as { failures: { kind: string; ref: string; text: string }[] };
     expect(week.failures).toContainEqual(
       expect.objectContaining({ kind: "human-commit", ref: task, text: "taken and given back" }),

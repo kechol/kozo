@@ -107,11 +107,13 @@ describe("the daily commands", () => {
     );
     expect((await kozo("admin", "prune")).code).toBe(2);
     expect((await kozo("report")).stdout).toStartWith("over the last 30 days, 0 merged diffs");
-    const week = (await kozo("report", "--week")).stdout;
+    const week = (await kozo("report", "--days", "7")).stdout;
     expect(week).toStartWith("over the last 7 days");
     expect(week).toContain("no failures in the window");
     expect((await kozo("report", "--cost")).stdout).toStartWith("today             $0.00 of $");
-    expect((await kozo("report", "--week", "--cost")).code).toBe(2);
+    expect((await kozo("report", "--review", "--cost")).code).toBe(2);
+    expect((await kozo("report", "--days", "0")).code).toBe(2);
+    expect((await kozo("report", "--days", "2", "--cost")).stdout.split("\n")).toHaveLength(3);
     expect((await kozo("admin", "eval", "add", "r-0099")).code).toBe(4);
     expect((await kozo("admin", "eval", "add")).code).toBe(2);
     expect((await kozo("ls", "items")).stdout).toContain("K-1");

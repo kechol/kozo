@@ -78,10 +78,10 @@ Commands:
   take <task>               Take a task over and work in its worktree
   return <task> <text>      Give a taken task back once your work is committed;
       its checks run on your commits from the deterministic ones on
-  report [--week | --review | --cost] [--json]
-      The metrics over the last 30 days, or 7 with --week, and the promotion
-      proposals; --review adds each class's level and the cost, --cost the
-      day's and the week's cost against the budget
+  report [--days <n>] [--review | --cost] [--json]
+      The metrics and failures over the last <n> days (default 30) and the
+      promotion proposals; --review adds each class's level, the demotions
+      and the cost, --cost shows each day's cost against the budget
   dashboard [--url] [--json]
       Open the dashboard in the browser, or print its URL with --url; the URL
       opens a session once, within a minute
