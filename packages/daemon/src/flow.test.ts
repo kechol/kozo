@@ -13,7 +13,7 @@ import {
   testConfine,
 } from "@kozo/testing";
 import type { Judge, Verifier } from "@kozo/verify";
-import { readDefinition } from "@kozo/verify";
+import { git, readDefinition } from "@kozo/verify";
 import type { AgentRequest } from "@kozo/worker";
 import { ControlPlane } from "./control-plane.ts";
 import { EventStore } from "./event-store.ts";
@@ -21,6 +21,7 @@ import { inProcessLauncher, type Launcher } from "./launcher.ts";
 import { Reconciler } from "./reconcile.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
+import { worktreePath } from "./worktrees.ts";
 
 const plan = {
   outcome: "plan",
@@ -1364,6 +1365,79 @@ test("one unit is still counted", () => {
       }
     }
   }, 240_000);
+
+  test("a human takes a held task, commits in its worktree and gives it back to the checks", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage"
+        ? [{ answer: plan }]
+        : [
+            {
+              use: "kozo_blocked",
+              input: { reason: "ambiguous", question: "Does 0 say Sold out?" },
+            },
+            {
+              answer: {
+                ...report,
+                outcome: "blocked",
+                blocked: { reason: "ambiguous", question: "Does 0 say Sold out?" },
+              },
+            },
+          ],
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const task = `${ref}/t1`;
+    const reference = { kind: "task", item: { repo: null, number: 1 }, task: 1 } as const;
+    expect(env.store.state.tasks[task]?.hold?.kind).toBe("question");
+    await expect(env.control.act(task, reference, "return", { text: "Done" })).rejects.toThrow(
+      "is not taken",
+    );
+
+    const taken = await env.control.act(task, reference, "take", {});
+    const worktree = worktreePath(env.home, env.repo.path, task);
+    expect(taken.message).toStartWith(`${task} is yours: commit in ${worktree} on kozo/`);
+    expect(env.store.state.tasks[task]?.hold).toMatchObject({ kind: "paused" });
+    for (const [path, text] of Object.entries(goodChange))
+      if (text !== null) await Bun.write(join(worktree, path), text);
+    await expect(env.control.act(task, reference, "return", { text: "Done" })).rejects.toThrow(
+      "has uncommitted changes",
+    );
+    // The owner commits as themself, without their own signing or hooks.
+    const human = [
+      "-c",
+      "user.name=Owner",
+      "-c",
+      "user.email=owner@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      "-c",
+      "core.hooksPath=/dev/null",
+    ];
+    await git(worktree, ["add", "--all"]);
+    await git(worktree, [...human, "commit", "--quiet", "--message", "feat: only N left"]);
+    const sessions = env.agent.requests.length;
+    await env.control.act(task, reference, "return", { text: "Wrote the low-stock branch" });
+    await env.settle();
+    expect(env.store.state.tasks[task]).toMatchObject({
+      stage: "handoff",
+      hold: null,
+      returned: false,
+    });
+    expect(env.agent.requests).toHaveLength(sessions);
+    const returned = env.store.state.tasks[task]?.runs.findLast(
+      (run) => env.store.state.runs[run]?.agent === "implement",
+    );
+    const nodes = env.store.db
+      .query<{ node: string }, [string]>(
+        "select json_extract(line, '$.node') as node from events where type = 'node.enter' and run_id = ? order by id",
+      )
+      .all(returned ?? "")
+      .map((row) => row.node);
+    expect(nodes[0]).toBe("verify-deterministic");
+    expect(nodes).not.toContain("implement");
+  }, 120_000);
 
   test("kozo say reaches a running run at its next turn", async () => {
     await using env = await factoryOf((request) =>

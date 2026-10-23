@@ -152,6 +152,8 @@ export const eventSchema = z
     ),
     /** A note about the event's task, or about its item when the task is null. */
     event("note.added", z.strictObject({ kind: noteKindSchema, text })),
+    /** A human gave back a task they took; its next run starts at verify-deterministic. */
+    event("task.returned", z.strictObject({})),
     event("plan.proposed", z.strictObject({ plan: planSchema })),
     event("plan.accepted", z.strictObject({ plan: planSchema, by: actor })),
     /** kozod re-rated the event's task from its diff; a tier only ever goes up. */

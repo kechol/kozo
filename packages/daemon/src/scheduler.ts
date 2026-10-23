@@ -26,10 +26,13 @@ export function awaitingMerge(state: FactoryState, task: TaskState): boolean {
 }
 
 /**
- * Where a task's next run starts: at the checkpoint of a run that did not finish, so that a
- * lost, stopped or failed run resumes where it was, and otherwise from the claim.
+ * Where a task's next run starts: at verify-deterministic for a task a human gave back, at the
+ * checkpoint of a run that did not finish, so that a lost, stopped or failed run resumes where it
+ * was, and otherwise from the claim.
  */
 export function resumePoint(state: FactoryState, task: TaskState): Node {
+  // A task a human took and gave back goes through every check after implement.
+  if (task.returned) return "verify-deterministic";
   const last = lastBlueprintRun(state, task);
   // A task sent back to Reviewing after its run finished, by a human's commit, is reviewed again.
   if (task.stage === "reviewing" && last?.state === "succeeded") return "review";

@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   type AddItem,
@@ -14,6 +14,7 @@ import {
   type Verb,
   type verbBodySchemas,
 } from "@kozo/core";
+import { git } from "@kozo/verify";
 import type { z } from "zod";
 import { CommandError, type VerbResult } from "./api.ts";
 import type { DefinitionInUse } from "./definition.ts";
@@ -22,8 +23,12 @@ import { enqueue } from "./instructions.ts";
 import { type ItemFile, itemPath, writeItemFile } from "./item-file.ts";
 import { readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
+import { taskBranch, worktreePath } from "./worktrees.ts";
 
 type Body<V extends Verb> = z.infer<(typeof verbBodySchemas)[V]>;
+
+/** The reason of the paused hold that `kozo take` sets, which `kozo return` alone clears. */
+export const takenReason = "the human took it; kozo return gives it back";
 
 const normalTitle = (title: string) => title.trim().replace(/\s+/g, " ").toLowerCase();
 
@@ -152,8 +157,9 @@ export class ControlPlane {
       case "close":
         return await this.close(ref, reference.kind, body as Body<"close">);
       case "take":
+        return await this.take(ref);
       case "return":
-        throw new CommandError(501, `${verb} arrives with T-057`);
+        return await this.giveBack(ref, body as Body<"return">);
     }
   }
 
@@ -336,6 +342,59 @@ export class ControlPlane {
           ? `retrying ${ref} from its last checkpoint`
           : `retrying ${ref} from its plan`,
     };
+  }
+
+  /**
+   * Hands a task to the human: stops its session and holds it for the take, in place of a
+   * question or attention the human takes it to settle. Its worktree must exist, since that is
+   * where the human works.
+   */
+  private async take(ref: string): Promise<VerbResult> {
+    const { subject } = this.subject(ref, "task");
+    const task = this.store.state.tasks[ref];
+    const item = task ? this.store.state.items[task.item] : undefined;
+    if (!task || !item) throw new CommandError(404, `${ref} does not exist`);
+    if (isClosed(subject.stage)) throw new CommandError(409, `${ref} is ${subject.stage}`);
+    if (subject.hold?.kind === "paused" && subject.hold.reason === takenReason)
+      return { message: `${ref} is already yours` };
+    if (subject.hold && subject.hold.kind !== "attention" && subject.hold.kind !== "question")
+      throw new CommandError(409, `${ref} is held by ${subject.hold.kind}`);
+    const worktree = worktreePath(this.home, item.repository, ref);
+    if (
+      !(await stat(worktree).then(
+        (entry) => entry.isDirectory(),
+        () => false,
+      ))
+    )
+      throw new CommandError(409, `${ref} has no worktree yet; its first run makes one`);
+    const running = this.runner?.sessionFor(ref);
+    if (running) this.runner?.stopSession(running);
+    await this.clearHold("task", ref, "kozo take");
+    await this.setHold("task", ref, "paused", takenReason);
+    const branch = taskBranch(this.store.factoryId, ref);
+    return {
+      message: `${ref} is yours: commit in ${worktree} on ${branch}, then run kozo return ${ref} <what you changed and checked>`,
+    };
+  }
+
+  /**
+   * Gives a taken task back once the human's work is committed: the task goes to Building, and
+   * its next run starts at verify-deterministic, so every check after implement sees the commits.
+   */
+  private async giveBack(ref: string, body: Body<"return">): Promise<VerbResult> {
+    const { subject, item } = this.subject(ref, "task");
+    if (subject.hold?.kind !== "paused" || subject.hold.reason !== takenReason)
+      throw new CommandError(409, `${ref} is not taken; kozo take hands it to you`);
+    const repository = this.store.state.items[item]?.repository ?? "";
+    const worktree = worktreePath(this.home, repository, ref);
+    const dirty = (await git(worktree, ["status", "--porcelain"])).trim();
+    if (dirty !== "")
+      throw new CommandError(409, `${worktree} has uncommitted changes; commit them first`);
+    await this.note(item, ref, "instruction", body.text);
+    await this.store.append({ type: "task.returned", item, task: ref, data: {} });
+    await this.clearHold("task", ref, body.text);
+    await this.move("task", ref, "building", "kozo return");
+    return { message: `gave ${ref} back; its checks run on your commits` };
   }
 
   private async close(

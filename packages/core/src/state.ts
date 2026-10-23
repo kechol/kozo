@@ -65,6 +65,8 @@ export interface TaskState {
   characterize: boolean;
   /** The command kozod runs in the worktree before the task's first implement session. */
   codemod: string | null;
+  /** Whether a human gave the task back after taking it, until its next blueprint run starts. */
+  returned: boolean;
   /** The plan's tier, or the higher one kozod rated the task's diff at. */
   risk: RiskTier;
   stage: Stage;
@@ -373,6 +375,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
           depends_on: planned.depends_on.map((id) => `${plan.item}/${id}`),
           characterize: planned.characterize ?? false,
           codemod: planned.codemod ?? null,
+          returned: false,
           risk: plan.risk,
           stage: "building",
           hold: null,
@@ -392,7 +395,11 @@ export function applyEvent(state: FactoryState, event: Event): void {
       const ref = event.run_id ?? "";
       if (state.runs[ref]) throw new StateError(`run ${ref} already exists`);
       const owner = required(item, `item ${event.item}`);
-      if (event.task !== null) required(task, `task ${event.task}`).runs.push(ref);
+      if (event.task !== null) {
+        const subject = required(task, `task ${event.task}`);
+        subject.runs.push(ref);
+        if (event.data.agent === "implement") subject.returned = false;
+      }
       state.runs[ref] = {
         ref,
         item: owner.ref,
@@ -444,6 +451,12 @@ export function applyEvent(state: FactoryState, event: Event): void {
         );
       }
       subject.risk = event.data.to;
+      subject.updatedAt = event.ts;
+      return;
+    }
+    case "task.returned": {
+      const subject = required(task, `task ${event.task}`);
+      subject.returned = true;
       subject.updatedAt = event.ts;
       return;
     }

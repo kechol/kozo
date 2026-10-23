@@ -68,6 +68,9 @@ Commands:
   retry <ref> [text]        Retry a task from its checkpoint or an item
   close <ref> --done | --cancel <reason>
       Complete an item or task that needed no change, or cancel it
+  take <task>               Take a task over and work in its worktree
+  return <task> <text>      Give a taken task back once your work is committed;
+      its checks run on your commits from the deterministic ones on
   check [path] [--json]
       Check the factory definition, each repository's Charter, claude and the
       sandbox; with a path, only the definition or .kozo/ in that directory
@@ -132,7 +135,17 @@ export async function run(
     if (command === "show") return await show(rest, out);
     if (command === "admin") return await admin(rest, out);
     if (command === "check") return await check(rest, out);
-    const verbs = ["say", "approve", "reject", "pause", "resume", "retry", "close"] as const;
+    const verbs = [
+      "say",
+      "approve",
+      "reject",
+      "pause",
+      "resume",
+      "retry",
+      "close",
+      "take",
+      "return",
+    ] as const;
     const named = verbs.find((name) => name === command);
     if (named) return await verb(named, rest, out);
   } catch (error) {

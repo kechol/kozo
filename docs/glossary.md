@@ -143,6 +143,7 @@
 | handoff report | The report that kozod writes at Handoff with five sections: why, what changed, out of scope, why it is safe, and verification. | pull request body | - | - |
 | inbox | The oldest-first list of what waits for a human: approval, question and attention holds, and tasks awaiting merge. | `kozo ls inbox` | queue, todo list | - |
 | status comment | The single Issue comment that kozod keeps rewriting with the stage, holds, tasks, pull requests and cost. | - | - | - |
+| take | Handing a task to the human, who commits in its worktree until giving it back with `kozo return` to the checks after implement. | `kozo take`, `kozo return`, `task.returned` | hijack, takeover | - |
 
 ## Records and improvement
 
