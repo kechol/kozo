@@ -27,6 +27,9 @@ describe("parseBlueprint", () => {
       ok: true,
       value: { reproduce: false, gates: "deep" },
     });
+    const feature = parseBlueprint(factoryTemplate["blueprints/feature.yml"]);
+    expect(feature).toMatchObject({ ok: true, value: { reproduce: true } });
+    expect(feature.ok && feature.value.nodes).toContain("verify-app");
   });
 
   test("refuses nodes out of order or a required node left out, and allows leaving out verify-app", () => {

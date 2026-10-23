@@ -335,8 +335,9 @@ export class Runner implements RunnerOps {
   }
 
   /**
-   * Planning after a rejection: the plan agent drafts the plan again from the current draft and
-   * the owner's notes, and the new draft waits for approval like the first.
+   * Planning without a hold: the plan agent drafts the plan again from the current draft and the
+   * owner's notes, after a rejection, an answer, or triage's draft of a feature, whose acceptance
+   * criteria it works out with the owner, and the new draft waits for approval.
    */
   async replan(itemRef: string): Promise<void> {
     const item = this.store.state.items[itemRef];
@@ -520,6 +521,7 @@ export class Runner implements RunnerOps {
   ) {
     const level = itemLevel(charter, requested, plan.class);
     const approvals = this.store.state.items[itemRef]?.approvals ?? "always";
+    const feature = plan.class === "feature";
     if (!planNeeded(approvals, level, plan)) {
       await this.store.append({
         type: "plan.accepted",
@@ -528,6 +530,10 @@ export class Runner implements RunnerOps {
       });
       return;
     }
+    const why =
+      approvals === "always"
+        ? "the request has no trusted requester, so its plan always needs an approval"
+        : `the plan needs an approval at ${level}`;
     await this.store.append({
       type: "stage.changed",
       item: itemRef,
@@ -536,13 +542,13 @@ export class Runner implements RunnerOps {
         from: "triage",
         to: "planning",
         by: "kozod",
-        reason:
-          approvals === "always"
-            ? "the request has no trusted requester, so its plan always needs an approval"
-            : `the plan needs an approval at ${level}`,
+        reason: feature
+          ? `${why}; the plan agent first works out its acceptance criteria with the owner`
+          : why,
       },
     });
-    await this.hold(itemRef, null, "approval", planApprovalReason);
+    // A feature's plan agent runs from Planning without a hold, and its plan then waits.
+    if (!feature) await this.hold(itemRef, null, "approval", planApprovalReason);
   }
 
   /** Holds the task, or the item when `task` is null, unless it is held already. */

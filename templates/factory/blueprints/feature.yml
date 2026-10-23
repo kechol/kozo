@@ -1,0 +1,14 @@
+# How a feature task goes from Building to Handoff: it adds behaviour, so it starts from a test
+# of that behaviour, which fails without the change and which prove checks.
+version: 1
+nodes:
+  - claim
+  - prepare
+  - brief
+  - implement
+  - verify-deterministic
+  - review
+  - verify-app
+  - handoff
+  - final-verify
+reproduce: true

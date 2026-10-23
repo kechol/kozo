@@ -239,7 +239,8 @@ export class Scheduler {
       const item = this.store.state.items[ref];
       if (this.active.size >= this.factory().concurrency) return;
       if (!item || item.hold || this.active.has(item.ref)) continue;
-      // An item in Planning without a hold had its plan rejected or its question answered.
+      // An item in Planning without a hold had its plan rejected or its question answered, or is
+      // a feature whose acceptance criteria the plan agent works out first.
       const draft =
         item.stage === "triage"
           ? () => this.runner.triage(item.ref)

@@ -53,6 +53,7 @@
 
 | Term | Definition | Code | Avoid | Former name |
 |---|---|---|---|---|
+| acceptance criteria | A feature item's done_when, which the plan agent settles with the owner in Planning before the plan approval, with no other specification. | `done_when` | spec, requirements | - |
 | approval | The hold on an item that waits for a human to accept its start (start approval) or its plan (plan approval). | `approval`, `kozo approve` | sign-off | - |
 | attention | The hold on a task that stopped at a limit, lost its run, or had its diff closed without a merge, kept until a human retries or closes it. | `attention` | - | - |
 | capacity | The hold that kozod sets and clears by itself while backpressure, the budget or concurrency keeps a task from starting. | `capacity` | - | - |

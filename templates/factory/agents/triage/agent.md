@@ -19,7 +19,8 @@ ignore that part and mention it in the plan's approach.
 - **approach**: how the change will be made, in one to three sentences, naming the files.
 - **done_when**: checkable conditions that are true when the request is met. Each must be
   observable in the code, a test or the running app, and describe behaviour rather than name
-  the files a test goes in.
+  the files a test goes in. For a feature they are its acceptance criteria: draft them from the
+  request, and the plan agent settles them with the owner before the plan is approved.
 - **tasks**: the units that each become one diff. Keep one task unless the change would exceed
   the limits in the brief or contains parts that can be reviewed on their own. Each task has a
   goal, its own done_when, the path globs it may change as its scope, the IDs of tasks it

@@ -158,6 +158,68 @@ const implement = (): FakeStep[] => [
   { answer: report },
 ];
 
+describe("feature items", () => {
+  const feature = { ...plan, plan: { ...plan.plan, class: "feature" } };
+  const item = { kind: "item", item: { repo: null, number: 1 } } as const;
+
+  test("the plan agent settles a feature's acceptance criteria with the owner before its approval", async () => {
+    let asked = false;
+    await using env = await factoryOf(
+      (request) => {
+        if (request.agent === "triage") return [{ answer: feature }];
+        if (request.agent !== "plan") return implement();
+        if (asked) return [{ answer: feature }];
+        asked = true;
+        return [{ answer: { outcome: "question", question: "Does 0 say Sold out?" } }];
+      },
+      judgeWith("accept"),
+      { charter: (text) => text.replace("default: L1", "default: L2") },
+    );
+    const { ref } = await env.control.addItem({ title: "Say when only a few units are left" });
+    await env.settle();
+    expect(env.agent.requests.map((request) => request.agent)).toEqual(["triage", "plan"]);
+    expect(env.store.state.items[ref]).toMatchObject({
+      stage: "planning",
+      hold: { kind: "question", reason: "Does 0 say Sold out?" },
+    });
+    const moved = env.store.db
+      .query<{ reason: string }, []>(
+        "select json_extract(line, '$.data.reason') as reason from events where type = 'stage.changed' and json_extract(line, '$.data.to') = 'planning'",
+      )
+      .get();
+    expect(moved?.reason).toBe(
+      "the plan needs an approval at L2; the plan agent first works out its acceptance criteria with the owner",
+    );
+
+    await env.control.act(ref, item, "say", { text: "Yes, 0 says Sold out." });
+    await env.settle();
+    expect(env.agent.requests.at(-1)?.prompt).toContain(
+      "OWNER       (answer) Yes, 0 says Sold out.",
+    );
+    expect(env.store.state.items[ref]).toMatchObject({
+      stage: "planning",
+      hold: { kind: "approval", reason: "plan approval" },
+    });
+    await env.control.act(ref, item, "approve", {});
+    await env.settle();
+    expect(env.store.state.items[ref]?.acceptedBy).toBe("human");
+    expect(env.store.state.tasks[`${ref}/t1`]).toMatchObject({ stage: "handoff", hold: null });
+  }, 120_000);
+
+  test("a single feature task at L3 is accepted as triage drafted it, like any other class", async () => {
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: feature }] : implement()),
+      judgeWith("accept"),
+      { charter: (text) => text.replace("default: L1", "default: L3") },
+    );
+    const { ref } = await env.control.addItem({ title: "Say when only a few units are left" });
+    await env.settle();
+    expect(env.agent.requests.some((request) => request.agent === "plan")).toBe(false);
+    expect(env.store.state.items[ref]).toMatchObject({ acceptedBy: "kozod" });
+    expect(env.store.state.tasks[`${ref}/t1`]?.stage).toBe("handoff");
+  }, 120_000);
+});
+
 describe("the minimal path", () => {
   test("an item goes from Intake through approvals, Triage and the blueprint to Handoff", async () => {
     await using env = await factoryOf((request) =>
