@@ -17,8 +17,16 @@ export const planTaskSchema = z.strictObject({
   estimate: z.strictObject({ lines: z.int().positive(), files: z.int().positive() }),
   /** The task adds tests that pin behaviour the item keeps, and changes nothing else. */
   characterize: z.boolean().optional(),
-  /** A command that kozod runs in the worktree before the implement session, never the agent. */
-  codemod: text.optional(),
+  /**
+   * A command that kozod runs in the worktree before the implement session, never the agent. It
+   * is one line without control characters, so the plan a human approves shows all of it.
+   */
+  codemod: text
+    .regex(
+      /^[^\u0000-\u001f\u007f-\u009f]+$/,
+      "Write the codemod as one line without control characters",
+    )
+    .optional(),
 });
 export type PlanTask = z.infer<typeof planTaskSchema>;
 
