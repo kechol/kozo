@@ -1,6 +1,6 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { apiPort, autonomyLevel, type KozoHome, kozoHome } from "@kozo/core";
+import { apiPort, itemLevel, type KozoHome, kozoHome, type WorkClass } from "@kozo/core";
 import dashboard from "@kozo/dashboard/index.html";
 import { baseOf, type Confine, claudeJudge, claudeVerifier, platformConfine } from "@kozo/verify";
 import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
@@ -142,6 +142,15 @@ export class Daemon {
       charters.set(repository, { at: Date.now(), result });
       return result;
     };
+    // Each item's requested class, read again at most once a minute like the Charters.
+    const requested = new Map<string, { at: number; result: Promise<WorkClass | null> }>();
+    const requestedClass = (ref: string) => {
+      const cached = requested.get(ref);
+      if (cached && Date.now() - cached.at < 60_000) return cached.result;
+      const result = readItemFile(home, ref).then((file) => file.class);
+      requested.set(ref, { at: Date.now(), result });
+      return result;
+    };
     const app = createApi({
       store,
       token: await apiToken(home),
@@ -153,19 +162,16 @@ export class Daemon {
         task: (ref) => taskRecords(home, store, ref),
         evidence: (run, path) => evidenceFile(home, run, path),
       },
-      // As kozod decides it: the lower of the requested class's level and the plan's.
       async autonomy(ref) {
         const item = store.state.items[ref];
         if (!item) return { class: null, level: null };
-        const requested = (await readItemFile(home, ref)).class;
-        const planned = item.plan?.class ?? item.draft?.class ?? null;
+        const requested = await requestedClass(ref);
+        const drafted = item.plan?.class ?? item.draft?.class ?? null;
         const charter = await charterOf(item.repository);
-        if (!charter.ok) return { class: planned ?? requested, level: null };
-        const levels = [requested, planned]
-          .filter((workClass) => workClass !== null)
-          .map((workClass) => autonomyLevel(charter.charter, workClass));
-        const level = levels.sort()[0] ?? autonomyLevel(charter.charter, null);
-        return { class: planned ?? requested, level };
+        return {
+          class: drafted ?? requested,
+          level: charter.ok ? itemLevel(charter.charter, requested, drafted) : null,
+        };
       },
       async locateTask(ref) {
         const repository = store.state.items[store.state.tasks[ref]?.item ?? ""]?.repository;
@@ -218,9 +224,8 @@ export class Daemon {
           .then(() => scheduler.tick());
       }
       if (every(3_600_000)) void notifier.remind();
-      reconciling = reconciling
-        .then(() => automations.run(new Date()))
-        .then(() => scheduler.tick());
+      // An item an automation adds is started by the next tick.
+      reconciling = reconciling.then(() => automations.run(new Date()));
       scheduler.tick();
     }, tickMs);
     scheduler.tick();

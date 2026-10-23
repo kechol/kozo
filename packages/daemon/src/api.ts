@@ -28,7 +28,7 @@ import { DashboardSessions } from "./dashboard-session.ts";
 import type { EventStore } from "./event-store.ts";
 import {
   activeRuns,
-  costSince,
+  costToday,
   detail,
   eventColumn,
   eventsAfter,
@@ -160,15 +160,13 @@ export function createApi({
   });
 
   app.get("/api/status", (c) => {
-    const today = now();
-    today.setHours(0, 0, 0, 0);
     return c.json({
       mode,
       paused: store.state.paused,
       pausedReason: store.state.pausedReason,
       activeRuns: activeRuns(store.db),
       waiting: inboxCount(store.db),
-      costTodayUsd: costSince(store.db, today),
+      costTodayUsd: costToday(store.db, now()),
       repositories: repositories(),
     });
   });
@@ -251,7 +249,7 @@ export function createApi({
   // The files are an agent's, so none is ever run or rendered by the browser as a page.
   app.get("/api/runs/:run/evidence/*", async (c) => {
     const run = c.req.param("run");
-    if (!/^r-\d{4,}$/.test(run)) return error(c, 400, `${run} is not a run`);
+    if (parseReference(run)?.kind !== "run") return error(c, 400, `${run} is not a run`);
     const path = decodeURIComponent(c.req.path.slice(`/api/runs/${run}/evidence/`.length));
     const found = await records?.evidence(run, path);
     if (!found) return error(c, 404, "no such evidence");

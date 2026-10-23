@@ -1,19 +1,58 @@
 import { lstat, realpath } from "node:fs/promises";
-import { extname, join, relative, sep } from "node:path";
+import { extname, join } from "node:path";
 import {
   blueprintNodes,
+  type FactoryState,
   type KozoHome,
   type RunReport,
   runFiles,
+  type TaskState,
   type VerdictFile,
 } from "@kozo/core";
+import { isInside } from "@kozo/verify";
 import type { EventStore } from "./event-store.ts";
+import { costOf } from "./queries.ts";
 
 /** A blueprint node of a task's latest run, as far as the run got. */
 export interface NodeProgress {
   node: string;
   state: "done" | "failed" | "running" | "pending";
   summary: string | null;
+}
+
+/** What one implement run of a task left in its directory; each part is null when absent. */
+export interface RunRecord {
+  run: string;
+  report: RunReport | null;
+  verdict: Partial<VerdictFile>;
+  decisions: string;
+}
+
+/** The records of every implement run of a task, oldest first, read at once. */
+export async function runRecords(
+  home: KozoHome,
+  state: FactoryState,
+  task: TaskState,
+): Promise<RunRecord[]> {
+  const runs = task.runs.filter((ref) => state.runs[ref]?.agent === "implement");
+  return await Promise.all(
+    runs.map(async (run) => {
+      const files = runFiles(home, run);
+      const [report, verdict, decisions] = await Promise.all([
+        Bun.file(files.report)
+          .json()
+          .catch(() => null) as Promise<RunReport | null>,
+        Bun.file(files.verdict)
+          .json()
+          .catch(() => ({})) as Promise<Partial<VerdictFile>>,
+        Bun.file(files.decisions)
+          .text()
+          .then((text) => text.trim())
+          .catch(() => ""),
+      ]);
+      return { run, report, verdict, decisions };
+    }),
+  );
 }
 
 /**
@@ -25,28 +64,23 @@ export async function taskRecords(home: KozoHome, store: EventStore, taskRef: st
   const state = store.state;
   const task = state.tasks[taskRef];
   if (!task) return null;
-  const runs = task.runs.filter((ref) => state.runs[ref]?.agent === "implement");
-  let report: { run: string; report: RunReport } | null = null;
-  let review: { run: string; verdict: NonNullable<VerdictFile["review"]> } | null = null;
-  let verify: { run: string; verdict: NonNullable<VerdictFile["verify"]> } | null = null;
-  const decisions: { run: string; text: string }[] = [];
-  for (const run of runs) {
-    const files = runFiles(home, run);
-    const written = await Bun.file(files.report)
-      .json()
-      .catch(() => null);
-    if (written) report = { run, report: written as RunReport };
-    const verdict = (await Bun.file(files.verdict)
-      .json()
-      .catch(() => ({}))) as Partial<VerdictFile>;
-    if (verdict.review) review = { run, verdict: verdict.review };
-    if (verdict.verify) verify = { run, verdict: verdict.verify };
-    const text = await Bun.file(files.decisions)
-      .text()
-      .catch(() => "");
-    if (text.trim()) decisions.push({ run, text: text.trim() });
-  }
-  const latest = runs.at(-1) ?? null;
+  const records = await runRecords(home, state, task);
+  // Each part comes from the latest run that has one.
+  const latestWith = <T>(pick: (record: RunRecord) => T | null | undefined) => {
+    const found = records.findLast((record) => pick(record));
+    const value = found ? pick(found) : null;
+    return found && value ? { run: found.run, value } : null;
+  };
+  const written = latestWith((record) => record.report);
+  const reviewed = latestWith((record) => record.verdict.review);
+  const verified = latestWith((record) => record.verdict.verify);
+  const report = written && { run: written.run, report: written.value };
+  const review = reviewed && { run: reviewed.run, verdict: reviewed.value };
+  const verify = verified && { run: verified.run, verdict: verified.value };
+  const decisions = records
+    .filter((record) => record.decisions)
+    .map((record) => ({ run: record.run, text: record.decisions }));
+  const latest = records.at(-1)?.run ?? null;
   const steps = latest
     ? store.db
         .query<{ type: string; node: string; ok: number | null; summary: string | null }, [string]>(
@@ -69,13 +103,15 @@ export async function taskRecords(home: KozoHome, store: EventStore, taskRef: st
     // A node entered in a run that has ended did not finish.
     return found.state === "running" && ended ? { ...found, state: "failed" } : found;
   });
-  const cost =
-    store.db
-      .query<{ usd: number }, [string]>(
-        "select coalesce(sum(json_extract(line, '$.cost.usd')), 0) as usd from events where task = ?",
-      )
-      .get(taskRef)?.usd ?? 0;
-  return { report, review, verify, decisions, latest, nodes, costUsd: cost };
+  return {
+    report,
+    review,
+    verify,
+    decisions,
+    latest,
+    nodes,
+    costUsd: costOf(store.db, "task", taskRef),
+  };
 }
 
 // Evidence that the dashboard shows in place; anything else is sent as a download, since an
@@ -103,12 +139,7 @@ export async function evidenceFile(
   if (root === null) return null;
   const target = join(root, path);
   const resolved = await realpath(target).catch(() => null);
-  if (
-    resolved === null ||
-    relative(root, resolved).startsWith("..") ||
-    !resolved.startsWith(root + sep)
-  )
-    return null;
+  if (resolved === null || resolved === root || !isInside(root, resolved)) return null;
   const entry = await lstat(resolved);
   if (!entry.isFile()) return null;
   const type = inline[extname(resolved).toLowerCase()];

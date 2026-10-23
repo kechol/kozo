@@ -1,26 +1,33 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import type {
-  Blueprint,
-  BlueprintNode,
-  Charter,
-  Constraints,
-  GateLevel,
-  ItemState,
-  KozoHome,
-  Plan,
+import {
+  type Blueprint,
+  type BlueprintNode,
+  type Charter,
+  type Constraints,
+  type GateLevel,
+  type ItemState,
+  type KozoHome,
+  type Plan,
   runFiles,
-  Stage,
-  TaskState,
+  type Stage,
+  type TaskState,
 } from "@kozo/core";
-import { type Base, type Confined, type Definition, type GatesResult, git } from "@kozo/verify";
+import {
+  type Base,
+  blueprintFor,
+  type Confined,
+  type Definition,
+  type GatesResult,
+  git,
+} from "@kozo/verify";
 import type { WorkerSpec } from "@kozo/worker";
 import type { EventStore } from "./event-store.ts";
 import { taskOwnerNotes } from "./instructions.ts";
 import { atLeast, layersFor } from "./risk.ts";
 import type { RunnerDeps } from "./runner.ts";
 import type { Envelope, SessionResult } from "./session-pump.ts";
-import { worktreeEnvironment } from "./worktree-ports.ts";
+import { taskBranch, worktreePath } from "./worktrees.ts";
 
 export type Node = BlueprintNode;
 
@@ -42,8 +49,8 @@ export interface RunnerOps {
   readonly home: KozoHome;
   readonly store: EventStore;
   readonly deps: RunnerDeps;
-  readonly commandEnv: Record<string, string>;
-  readonly stopping: boolean;
+  /** The environment of a worktree's commands: no credentials, and the worktree's ID and ports. */
+  envFor(worktree: string): Promise<Record<string, string>>;
   confined(worktree: string, prepare?: boolean): Confined;
   session(spec: WorkerSpec, envelope: Envelope, maxMinutes: number): Promise<SessionResult>;
   startRun(
@@ -84,7 +91,8 @@ export interface RunnerOps {
 interface Halt {
   hold: "attention" | "question";
   reason: string;
-  summary: string;
+  /** What the node's exit says, the reason when unset. */
+  summary?: string;
   end: "succeeded" | "failed" | "lost";
   why?: string;
   ok?: boolean;
@@ -98,31 +106,59 @@ interface Halt {
 export class BlueprintRun {
   /** The brief, written at the brief node or read back for a run that resumes at implement. */
   prompt = "";
+  /** The verification layers of the task's risk tier, which a re-rated tier replaces. */
   layers: Layers;
-  level: GateLevel;
+  readonly task: TaskState;
+  readonly item: ItemState;
+  readonly plan: Plan;
+  readonly repository: Repository;
+  readonly definition: Definition;
+  readonly blueprint: Blueprint;
+  readonly run: string;
+  readonly worktree: string;
+  readonly branch: string;
+  readonly files: ReturnType<typeof runFiles>;
   readonly envelope: Envelope;
+  /** The files at the base tip; the guard and the sandbox protect the existing tests among them. */
+  readonly listed: string[];
+  readonly existingTests: string[];
+  /** Why the run before this one did not pass, which the brief carries. */
+  readonly failure: string | null;
 
   constructor(
     readonly runner: RunnerOps,
-    readonly task: TaskState,
-    readonly item: ItemState,
-    readonly plan: Plan,
-    readonly repository: Repository,
-    readonly worktree: string,
-    readonly branch: string,
-    readonly definition: Definition,
-    readonly blueprint: Blueprint,
-    readonly run: string,
-    readonly files: ReturnType<typeof runFiles>,
-    /** The files at the base tip; the guard and the sandbox protect the existing tests among them. */
-    readonly listed: string[],
-    readonly existingTests: string[],
-    /** Why the run before this one did not pass, which the brief carries. */
-    readonly failure: string | null,
+    start: {
+      task: TaskState;
+      item: ItemState & { plan: Plan };
+      repository: Repository;
+      definition: Definition;
+      run: string;
+      listed: string[];
+      existingTests: string[];
+      failure: string | null;
+    },
   ) {
+    const { task, item, repository, definition, run } = start;
+    this.task = task;
+    this.item = item;
+    this.plan = item.plan;
+    this.repository = repository;
+    this.definition = definition;
+    this.blueprint = blueprintFor(definition, item.plan.class);
+    this.run = run;
+    this.worktree = worktreePath(runner.home, repository.path, task.ref);
+    this.branch = taskBranch(runner.store.factoryId, task.ref);
+    this.files = runFiles(runner.home, run);
     this.envelope = { run_id: run, item: item.ref, task: task.ref };
+    this.listed = start.listed;
+    this.existingTests = start.existingTests;
+    this.failure = start.failure;
     this.layers = layersFor[task.risk];
-    this.level = atLeast(this.layers.gates, blueprint.gates);
+  }
+
+  /** The gate level the run checks at: its layers', or the blueprint's when that is deeper. */
+  get level(): GateLevel {
+    return atLeast(this.layers.gates, this.blueprint.gates);
   }
 
   get charter(): Charter {
@@ -133,15 +169,9 @@ export class BlueprintRun {
     return this.repository.constraints;
   }
 
-  /** Takes the verification layers of a raised risk tier, and its gates with them. */
-  raise(layers: Layers) {
-    this.layers = layers;
-    this.level = atLeast(layers.gates, this.blueprint.gates);
-  }
-
-  /** The environment of the worktree's commands: the base one, its ID and its ports. */
-  async env(): Promise<Record<string, string>> {
-    return { ...this.runner.commandEnv, ...(await worktreeEnvironment(this.worktree)) };
+  /** The environment of the worktree's commands. */
+  env(): Promise<Record<string, string>> {
+    return this.runner.envFor(this.worktree);
   }
 
   async log(text: string) {
@@ -182,7 +212,7 @@ export class BlueprintRun {
 
   /** Ends the run at `node` with the task held for a human. */
   async halt(node: Node, held: Halt): Promise<RunEnd> {
-    await this.exit(node, held.ok ?? false, held.summary);
+    await this.exit(node, held.ok ?? false, held.summary ?? held.reason);
     await this.runner.hold(this.item.ref, this.task.ref, held.hold, held.reason, this.run);
     return await this.stopHere(held.end, held.why);
   }

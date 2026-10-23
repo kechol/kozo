@@ -174,14 +174,9 @@ export function bubblewrapArgs(sandbox: CommandSandbox): string[] {
       return null;
     }
   };
-  // Each empty directory is made read-only once everything is mounted on it.
-  const covered: string[] = [];
   const hide = (path: string) => {
     const found = kind(path);
-    if (found === "directory") {
-      covered.push(path);
-      return ["--tmpfs", path];
-    }
+    if (found === "directory") return ["--tmpfs", path];
     if (found === "file") return ["--ro-bind", "/dev/null", path];
     return [];
   };
@@ -198,7 +193,9 @@ export function bubblewrapArgs(sandbox: CommandSandbox): string[] {
     "/tmp/.X11-unix",
   ];
   const sockets = local ? ["/run", "/tmp", ...known] : known;
-  const hidden = [...sockets, ...sandbox.denyRead].flatMap(hide);
+  const hidden = [...sockets, ...sandbox.denyRead];
+  // Each empty directory is made read-only once everything is mounted on it.
+  const covered = hidden.filter((path) => kind(path) === "directory");
   return [
     "--die-with-parent",
     "--new-session",
@@ -213,7 +210,7 @@ export function bubblewrapArgs(sandbox: CommandSandbox): string[] {
     "/dev",
     "--proc",
     "/proc",
-    ...hidden,
+    ...hidden.flatMap(hide),
     ...sandbox.allowRead.flatMap((path) => mount("--ro-bind", path)),
     ...sandbox.allowWrite.flatMap((path) => mount("--bind", path)),
     // bubblewrap makes the mount point of a missing path, an empty file, before binding on it.

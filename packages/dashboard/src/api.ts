@@ -105,14 +105,20 @@ export class Api {
     ) => fetch(input, init),
   ) {}
 
+  /** A request to the API with the tab's session. */
+  private send(path: string, init: RequestInit = {}): Promise<Response> {
+    return this.fetcher(path, {
+      ...init,
+      headers: { authorization: `Bearer ${this.token}`, ...init.headers },
+    });
+  }
+
   private async request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
-    const response = await this.fetcher(path, {
+    const response = await this.send(path, {
       method,
-      headers: {
-        authorization: `Bearer ${this.token}`,
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(body === undefined
+        ? {}
+        : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
     });
     const answer = (await response.json().catch(() => ({}))) as T & Partial<ApiErrorBody>;
     if (!response.ok) {
@@ -131,9 +137,7 @@ export class Api {
 
   /** A file the API serves, such as a piece of evidence, as a blob the page can show. */
   async blob(path: string): Promise<Blob> {
-    const response = await this.fetcher(path, {
-      headers: { authorization: `Bearer ${this.token}` },
-    });
+    const response = await this.send(path);
     if (!response.ok) throw new ApiError(response.status, `kozod answered ${response.status}`);
     return await response.blob();
   }
@@ -151,10 +155,7 @@ export class Api {
    * read with fetch, since EventSource cannot send the token.
    */
   async follow(ref: string, onEvent: (event: Event) => void, signal: AbortSignal) {
-    const response = await this.fetcher(`/api/refs/${encodeURIComponent(ref)}/events`, {
-      headers: { authorization: `Bearer ${this.token}` },
-      signal,
-    });
+    const response = await this.send(`/api/refs/${encodeURIComponent(ref)}/events`, { signal });
     if (!response.ok || !response.body) throw new ApiError(response.status, "no event stream");
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
     let buffer = "";

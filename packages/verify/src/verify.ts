@@ -223,7 +223,8 @@ async function resolveEvidence(cwd: string, path: string) {
 }
 
 /** Whether `path` is `root` or lies under it, compared by path components, not by prefix. */
-function isInside(root: string, path: string) {
+/** Whether `path` is `root` or a path under it, both resolved alike. */
+export function isInside(root: string, path: string) {
   const rest = relative(root, path);
   return rest === "" || (!isAbsolute(rest) && rest.split(sep)[0] !== "..");
 }

@@ -10,7 +10,7 @@ import {
 } from "@kozo/core";
 import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
-import { costSince } from "./queries.ts";
+import { costToday } from "./queries.ts";
 import { type CharterResult, readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
 import type { Node } from "./task-run.ts";
@@ -121,9 +121,7 @@ export class Scheduler {
   private capacity(repository: string, result: CharterResult): string | null {
     if (!result.ok) return `the Charter keeps the repository from running: ${result.reason}`;
     const { charter } = result;
-    const midnight = this.now();
-    midnight.setHours(0, 0, 0, 0);
-    const spent = costSince(this.store.db, midnight);
+    const spent = costToday(this.store.db, this.now());
     if (spent >= this.factory().budget.daily_usd) {
       return `the daily budget of ${this.factory().budget.daily_usd} USD is spent`;
     }

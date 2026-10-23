@@ -1,7 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import {
-  autonomyLevel,
   blueprintNodes,
   type Charter,
   explorerAnswerJsonSchema,
@@ -11,6 +10,7 @@ import {
   isClosed,
   isRunOver,
   issueText,
+  itemLevel,
   type KozoHome,
   numberAfter,
   type Plan,
@@ -30,7 +30,6 @@ import {
 } from "@kozo/core";
 import {
   baseOf,
-  blueprintFor,
   type Confine,
   type Confined,
   commandEnvironmentFrom,
@@ -125,7 +124,11 @@ export class Runner implements RunnerOps {
   private apiFailures = 0;
 
   /** The environment of the diff's own code in prepare, the gates and prove: no credentials. */
-  readonly commandEnv = commandEnvironmentFrom(process.env);
+  private readonly commandEnv = commandEnvironmentFrom(process.env);
+
+  async envFor(worktree: string): Promise<Record<string, string>> {
+    return { ...this.commandEnv, ...(await worktreeEnvironment(worktree)) };
+  }
 
   /**
    * The sandbox of the commands run in `worktree`: they read neither the factory's home, which
@@ -169,7 +172,7 @@ export class Runner implements RunnerOps {
   }
 
   /** Set once kozod shuts down: no session keeps running, and attempts stop at their next node. */
-  stopping = false;
+  private stopping = false;
 
   /** Stops every session for shutting down; each attempt stops where it can resume. */
   stop() {
@@ -495,10 +498,7 @@ export class Runner implements RunnerOps {
     charter: Charter,
     requested: WorkClass | null,
   ) {
-    // The draft comes from a session that read the request, so its work class may lower the
-    // autonomy level but never raise it above the level of the class the human asked for.
-    const levels = [autonomyLevel(charter, requested), autonomyLevel(charter, plan.class)].sort();
-    const level = levels[0] ?? "L1";
+    const level = itemLevel(charter, requested, plan.class);
     // An automation adds work while nobody watches, so a human approves each of its plans.
     const automated = this.store.state.items[itemRef]?.source === "automation";
     if (!automated && !planNeeded(level, plan)) {
@@ -613,22 +613,16 @@ export class Runner implements RunnerOps {
     const existingTests = charter.existing_tests_protected
       ? listed.filter(globMatcher(constraints.tests))
       : [];
-    const blueprintRun = new BlueprintRun(
-      this,
+    const blueprintRun = new BlueprintRun(this, {
       task,
-      item,
-      item.plan,
+      item: { ...item, plan: item.plan },
       repository,
-      worktreePath(this.home, repository.path, taskRef),
-      taskBranch(this.store.factoryId, taskRef),
       definition,
-      blueprintFor(definition, item.plan.class),
       run,
-      runFiles(this.home, run),
       listed,
       existingTests,
       failure,
-    );
+    });
 
     // Every node runs: verify-app decides from the risk tier, which a blueprint never lowers.
     for (const node of blueprintNodes.slice(blueprintNodes.indexOf(start))) {
@@ -665,7 +659,7 @@ export class Runner implements RunnerOps {
       cwd,
       level,
       base,
-      env: { ...this.commandEnv, ...(await worktreeEnvironment(cwd)) },
+      env: await this.envFor(cwd),
       confined: this.confined(cwd),
       log: (text) => {
         output += text;

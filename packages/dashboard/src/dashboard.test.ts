@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { isClosed, stageSchema } from "@kozo/core";
 import { inboxActions } from "./actions.tsx";
 import { takeSession } from "./api.ts";
 import { detailActions } from "./detail.tsx";
-import { ago, eventLine, kindOf, moveTarget, routeOf } from "./format.ts";
+import { ago, eventLine, isClosedStage, kindOf, moveTarget, routeOf, stages } from "./format.ts";
 
 const code = "ab".repeat(32);
 
@@ -83,6 +84,13 @@ describe("inboxActions", () => {
 });
 
 describe("format", () => {
+  test("lists the stages as kozo defines them, closed ones as closed", () => {
+    const listed: string[] = [...stages];
+    const closed: string[] = stageSchema.options.filter((stage) => isClosed(stage));
+    expect(listed).toEqual(stageSchema.options);
+    expect<string[]>(listed.filter(isClosedStage)).toEqual(closed);
+  });
+
   test("routes the inbox, the board and a reference's detail", () => {
     expect(routeOf("")).toEqual({ page: "inbox" });
     expect(routeOf("#/board")).toEqual({ page: "board" });

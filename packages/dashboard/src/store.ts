@@ -29,10 +29,20 @@ export async function refresh(api: Api): Promise<void> {
   }
 }
 
-/** Refreshes now and every `ms` milliseconds until the returned function is called. */
+/**
+ * Refreshes now and every `ms` milliseconds until the returned function is called; a refresh
+ * waits for the one before it, and a hidden tab skips its turn.
+ */
 export function poll(api: Api, ms = 3000): () => void {
-  void refresh(api);
-  const timer = setInterval(() => void refresh(api), ms);
+  let pending: Promise<void> | null = null;
+  const turn = () => {
+    if (pending || document.hidden) return;
+    pending = refresh(api).finally(() => {
+      pending = null;
+    });
+  };
+  turn();
+  const timer = setInterval(turn, ms);
   return () => clearInterval(timer);
 }
 

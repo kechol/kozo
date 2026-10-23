@@ -52,7 +52,6 @@ const claim: NodeStep = async (run, current) => {
     return await run.halt("claim", {
       hold: "attention",
       reason: claimed.reason,
-      summary: claimed.reason,
       end: "failed",
       why: claimed.reason,
     });
@@ -80,11 +79,9 @@ const prepare: NodeStep = async (run) => {
   // merged code: a worktree made again from a task branch carries the agent's changes to
   // the files they read, such as package.json or a compose file.
   if (constraints.services.length > 0 && !(await atMergedCommit(worktree, repository.tip))) {
-    const reason = `services run only on a worktree at a commit of ${repository.branch}, and this one carries the task's changes`;
     return await run.halt("prepare", {
       hold: "attention",
-      reason,
-      summary: reason,
+      reason: `services run only on a worktree at a commit of ${repository.branch}, and this one carries the task's changes`,
       end: "failed",
       why: "services refused",
     });
@@ -362,7 +359,7 @@ const verifyDeterministic: NodeStep = async (run, current) => {
           reason: `the diff changes ${code}, which is not documentation`,
         },
       });
-      run.raise(layersFor.normal);
+      run.layers = layersFor.normal;
     }
   }
   if (current.characterize) {

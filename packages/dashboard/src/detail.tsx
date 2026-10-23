@@ -1,6 +1,6 @@
 import type { Event } from "@kozo/core";
 import { useEffect, useState } from "preact/hooks";
-import { type Action, ActionButton } from "./actions.tsx";
+import { type Action, ActionButton, cancelAction, retryAction, takeAction } from "./actions.tsx";
 import type { Api } from "./api.ts";
 import { ago, detailHash, eventLine, kindOf, usd } from "./format.ts";
 
@@ -72,17 +72,6 @@ export function detailActions(
       : { verb: "pause", label: "Pause", body: { now: true } };
   if (kind === "run") return [say, pause];
   const taken = hold === "paused" && reason === takenReason;
-  const cancel: Action = {
-    verb: "close",
-    label: "Cancel",
-    text: { field: "cancel", required: true, placeholder: "Why it is cancelled" },
-    danger: true,
-  };
-  const retry: Action = {
-    verb: "retry",
-    label: "Retry",
-    text: { field: "text", required: false, placeholder: "What to do differently" },
-  };
   if (kind === "task" && taken) {
     return [
       {
@@ -90,17 +79,17 @@ export function detailActions(
         label: "Give it back",
         text: { field: "text", required: true, placeholder: "What you changed and checked" },
       },
-      cancel,
+      cancelAction,
     ];
   }
   return [
     say,
-    ...(hold === "attention" || hold === "question" ? [retry] : []),
+    ...(hold === "attention" || hold === "question" ? [retryAction] : []),
     ...(hold === null || hold === "paused" ? [pause] : []),
     ...(kind === "task" && (hold === null || hold === "attention" || hold === "question")
-      ? [{ verb: "take", label: "Take it over" } as Action]
+      ? [takeAction]
       : []),
-    cancel,
+    cancelAction,
   ];
 }
 

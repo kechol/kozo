@@ -1,9 +1,9 @@
-import { stat } from "node:fs/promises";
-import { itemStage, type KozoHome, runFiles } from "@kozo/core";
+import { itemStage, type KozoHome } from "@kozo/core";
 import { baseOf, defuseSections, git } from "@kozo/verify";
 import type { EventStore } from "./event-store.ts";
 import { readItemFile, requestText } from "./item-file.ts";
-import { worktreePath } from "./worktrees.ts";
+import { runRecords } from "./task-records.ts";
+import { hasWorktree, worktreePath } from "./worktrees.ts";
 
 // The records are a summary for one question, not an archive: each part keeps its newest end.
 const recentEvents = 60;
@@ -67,24 +67,12 @@ export async function explorerRecords(
   ];
   const task = taskRef ? state.tasks[taskRef] : undefined;
   if (task) {
-    for (const run of task.runs.filter((ref) => state.runs[ref]?.agent === "implement")) {
-      const files = runFiles(home, run);
-      const report = await Bun.file(files.report)
-        .text()
-        .catch(() => "");
-      const decisions = await Bun.file(files.decisions)
-        .text()
-        .catch(() => "");
-      if (report) parts.push("", `RUN REPORT OF ${run}`, newest(report));
+    for (const { run, report, decisions } of await runRecords(home, state, task)) {
+      if (report) parts.push("", `RUN REPORT OF ${run}`, newest(JSON.stringify(report, null, 2)));
       if (decisions) parts.push("", `DECISION LOG OF ${run}`, newest(decisions));
     }
     const worktree = worktreePath(home, item.repository, task.ref);
-    if (
-      await stat(worktree).then(
-        (entry) => entry.isDirectory(),
-        () => false,
-      )
-    ) {
+    if (await hasWorktree(worktree)) {
       const { ref: base } = await baseOf(item.repository, mode);
       const diff = await git(worktree, ["diff", "--stat", `${base}...HEAD`]).catch(() => "");
       parts.push(

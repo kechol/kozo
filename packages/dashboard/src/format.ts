@@ -7,10 +7,8 @@ export function ago(iso: string, now: Date = new Date()): string {
     [3600, "h"],
     [60, "min"],
   ];
-  for (const [size, name] of units) {
-    if (seconds >= size) return `${Math.floor(seconds / size)} ${name} ago`;
-  }
-  return "just now";
+  const [size, name] = units.find(([unitSize]) => seconds >= unitSize) ?? [60, "min"];
+  return `${Math.floor(seconds / size)} ${name} ago`;
 }
 
 export const usd = (amount: number) => `$${amount.toFixed(2)}`;
@@ -70,7 +68,10 @@ export function eventLine(event: { type: string; data: Record<string, unknown> }
   }
 }
 
-/** The stages in the order work moves through them, as the board's columns. */
+/**
+ * The stages in the order work moves through them, as the board's columns. They are listed here
+ * rather than taken from @kozo/core, which would bring zod into the page; a test keeps them equal.
+ */
 export const stages = [
   "intake",
   "triage",

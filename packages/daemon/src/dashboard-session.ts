@@ -36,7 +36,8 @@ export class DashboardSessions {
     return token;
   }
 
+  // A session token is 256 random bits, so looking it up by value tells a guesser nothing.
   accepts(token: string): boolean {
-    return [...this.tokens].some((known) => secretMatches(token, known));
+    return this.tokens.has(token);
   }
 }

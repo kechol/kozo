@@ -1,4 +1,4 @@
-import { rm, stat } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   type AddItem,
@@ -22,10 +22,10 @@ import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
 import { enqueue } from "./instructions.ts";
 import { type ItemFile, itemPath, writeItemFile } from "./item-file.ts";
-import { costSince } from "./queries.ts";
+import { costToday } from "./queries.ts";
 import { readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
-import { taskBranch, worktreePath } from "./worktrees.ts";
+import { hasWorktree, taskBranch, worktreePath } from "./worktrees.ts";
 
 type Body<V extends Verb> = z.infer<(typeof verbBodySchemas)[V]>;
 
@@ -298,10 +298,8 @@ export class ControlPlane {
     const { subject, item, task } = this.subject(ref, kind);
     if (body.ask) {
       if (!this.runner) throw new CommandError(409, "kozod answers questions only while it runs");
-      const midnight = new Date();
-      midnight.setHours(0, 0, 0, 0);
       const budget = this.definition.current.factory.budget.daily_usd;
-      if (costSince(this.store.db, midnight) >= budget)
+      if (costToday(this.store.db, new Date()) >= budget)
         throw new CommandError(409, `the daily budget of ${budget} USD is spent; ask tomorrow`);
       return { message: await this.runner.ask(item, task, body.text) };
     }
@@ -400,12 +398,7 @@ export class ControlPlane {
     if (subject.hold && subject.hold.kind !== "attention" && subject.hold.kind !== "question")
       throw new CommandError(409, `${ref} is held by ${subject.hold.kind}`);
     const worktree = worktreePath(this.home, item.repository, ref);
-    if (
-      !(await stat(worktree).then(
-        (entry) => entry.isDirectory(),
-        () => false,
-      ))
-    )
+    if (!(await hasWorktree(worktree)))
       throw new CommandError(409, `${ref} has no worktree yet; its first run makes one`);
     const running = this.runner?.sessionFor(ref);
     if (running) this.runner?.stopSession(running);

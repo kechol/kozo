@@ -1,6 +1,6 @@
 import type { Event, Factory, FactoryState, Hold } from "@kozo/core";
 import type { EventStore } from "./event-store.ts";
-import { costSince } from "./queries.ts";
+import { costToday, midnightOf } from "./queries.ts";
 
 /** Shows one notification; it never throws, since a missed notification stops nothing. */
 export type Notify = (title: string, body: string) => Promise<void>;
@@ -50,8 +50,11 @@ const reminders = 3;
  * its own and a refused factory definition. `remind` adds the approvals that have waited.
  */
 export class Notifier {
-  /** The day the spending was last read for and the highest share of the budget it crossed. */
-  private budget = { day: "", share: 0 };
+  /**
+   * Today's spending, from the index once and then from each event's cost, with the local
+   * midnight it counts from and the highest share of the budget told so far.
+   */
+  private budget = { since: 0, spent: 0, told: 0 };
   /** How many reminders each waiting approval has had, by its reference and hold time. */
   private readonly reminded = new Map<string, number>();
   private unsubscribe: (() => void) | null = null;
@@ -65,23 +68,17 @@ export class Notifier {
 
   /** Starts following new events; spending before now counts as told. */
   start() {
-    this.budget = { day: this.today(), share: this.shareSpent() };
+    const spent = costToday(this.store.db, this.now());
+    this.budget = {
+      since: midnightOf(this.now()).getTime(),
+      spent,
+      told: spent / this.factory().budget.daily_usd,
+    };
     this.unsubscribe = this.store.subscribe((event) => void this.follow(event));
   }
 
   stop() {
     this.unsubscribe?.();
-  }
-
-  private today() {
-    const now = this.now();
-    return `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-  }
-
-  private shareSpent(): number {
-    const midnight = this.now();
-    midnight.setHours(0, 0, 0, 0);
-    return costSince(this.store.db, midnight) / this.factory().budget.daily_usd;
   }
 
   private async follow(event: Event) {
@@ -104,17 +101,19 @@ export class Notifier {
         await send(`kozod refused the factory definition: ${event.data.issues.join("; ")}`);
         break;
     }
-    if ((event.cost?.usd ?? 0) > 0) await this.followSpending(send);
+    const usd = event.cost?.usd ?? 0;
+    if (usd > 0) await this.followSpending(usd, send);
   }
 
-  private async followSpending(send: (body: string) => Promise<void>) {
-    const day = this.today();
-    if (day !== this.budget.day) this.budget = { day, share: 0 };
-    const share = this.shareSpent();
-    const crossed = budgetShares.filter((step) => step > this.budget.share && share >= step).at(-1);
-    this.budget.share = Math.max(this.budget.share, share);
-    if (crossed === undefined) return;
+  private async followSpending(usd: number, send: (body: string) => Promise<void>) {
+    const since = midnightOf(this.now()).getTime();
+    if (since !== this.budget.since) this.budget = { since, spent: 0, told: 0 };
+    this.budget.spent += usd;
     const budget = this.factory().budget.daily_usd;
+    const share = this.budget.spent / budget;
+    const crossed = budgetShares.filter((step) => step > this.budget.told && share >= step).at(-1);
+    this.budget.told = Math.max(this.budget.told, share);
+    if (crossed === undefined) return;
     await send(
       crossed === 1
         ? `the daily budget of ${budget} USD is spent; nothing new starts until midnight`

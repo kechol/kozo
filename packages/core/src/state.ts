@@ -526,6 +526,21 @@ export function autonomyLevel(charter: Charter, workClass: WorkClass | null): Au
 }
 
 /**
+ * The level an item runs at: its requested class's, and once triage drafts a class, the lower
+ * of the two, since that class comes from a session that read the request and may lower the
+ * level but never raise it.
+ */
+export function itemLevel(
+  charter: Charter,
+  requested: WorkClass | null,
+  drafted: WorkClass | null,
+): AutonomyLevel {
+  const levels = [autonomyLevel(charter, requested)];
+  if (drafted !== null) levels.push(autonomyLevel(charter, drafted));
+  return levels.sort()[0] ?? charter.levels.default;
+}
+
+/**
  * Plan needed?: whether an item goes from Triage to Planning for a plan approval or has its
  * draft accepted as it is. L3 skips Planning only for a single task below the high risk tier
  * without a codemod, a command that a human reads before kozod runs it.

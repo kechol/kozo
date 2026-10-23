@@ -15,6 +15,22 @@ export interface Action {
   danger?: boolean;
 }
 
+/** Cancelling an item or a task, which asks why. */
+export const cancelAction: Action = {
+  verb: "close",
+  label: "Cancel",
+  text: { field: "cancel", required: true, placeholder: "Why it is cancelled" },
+  danger: true,
+};
+
+export const retryAction: Action = {
+  verb: "retry",
+  label: "Retry",
+  text: { field: "text", required: false, placeholder: "What to do differently" },
+};
+
+export const takeAction: Action = { verb: "take", label: "Take it over" };
+
 /**
  * The verbs a row of the inbox offers for what it waits on. There is never a merge, and each
  * action acts on one reference only.
@@ -24,12 +40,6 @@ export function inboxActions(
   waiting: string,
   reason: string | null,
 ): Action[] {
-  const cancel: Action = {
-    verb: "close",
-    label: "Cancel",
-    text: { field: "cancel", required: true, placeholder: "Why it is cancelled" },
-    danger: true,
-  };
   switch (waiting) {
     case "approval":
       return reason === "plan approval"
@@ -55,7 +65,7 @@ export function inboxActions(
               label: "Approve start",
               text: { field: "text", required: false, placeholder: "Anything triage should know" },
             },
-            cancel,
+            cancelAction,
           ];
     case "question":
       return [
@@ -64,18 +74,14 @@ export function inboxActions(
           label: "Answer",
           text: { field: "text", required: true, placeholder: "Your answer" },
         },
-        ...(kind === "task" ? [{ verb: "take", label: "Take it over" } as Action] : []),
+        ...(kind === "task" ? [takeAction] : []),
       ];
     case "attention":
       return [
-        {
-          verb: "retry",
-          label: "Retry",
-          text: { field: "text", required: false, placeholder: "What to do differently" },
-        },
-        ...(kind === "task" ? [{ verb: "take", label: "Take it over" } as Action] : []),
+        retryAction,
+        ...(kind === "task" ? [takeAction] : []),
         { verb: "close", label: "Close as done", body: { done: true } },
-        cancel,
+        cancelAction,
       ];
     default:
       return [];

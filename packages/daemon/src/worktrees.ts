@@ -47,6 +47,14 @@ async function exists(path: string) {
   );
 }
 
+/** Whether a task's worktree has been made, which its first run's claim does. */
+export async function hasWorktree(worktree: string): Promise<boolean> {
+  return stat(worktree).then(
+    (entry) => entry.isDirectory(),
+    () => false,
+  );
+}
+
 /**
  * Claims a task by creating its branch at `base`, the tip of the repository's base, and checks
  * it out in the task's worktree. A branch that already exists belongs to whoever created it, so

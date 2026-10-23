@@ -65,12 +65,7 @@ export function detail(db: Database, ref: string, reference: Reference) {
         .all(ref)
         .map((row) => parsed(row, ["done_when", "scope", "depends_on", "checkpoint"]));
       const runs = db.query("select * from runs where item = ? order by started_at").all(ref);
-      const cost = db
-        .query<{ usd: number }, [string]>(
-          "select coalesce(sum(json_extract(line, '$.cost.usd')), 0) as usd from events where item = ?",
-        )
-        .get(ref);
-      return { kind: "item", item, tasks, runs, cost_usd: cost?.usd ?? 0 };
+      return { kind: "item", item, tasks, runs, cost_usd: costOf(db, "item", ref) };
     }
     case "task": {
       const task = parsed(
@@ -84,12 +79,10 @@ export function detail(db: Database, ref: string, reference: Reference) {
     case "run": {
       const run = db.query("select * from runs where ref = ?").get(ref);
       if (!run) return null;
-      const totals = db
-        .query(
-          "select count(*) as events, coalesce(sum(json_extract(line, '$.cost.usd')), 0) as cost_usd from events where run_id = ?",
-        )
+      const events = db
+        .query<{ n: number }, [string]>("select count(*) as n from events where run_id = ?")
         .get(ref);
-      return { kind: "run", run, ...(totals as object) };
+      return { kind: "run", run, events: events?.n ?? 0, cost_usd: costOf(db, "run_id", ref) };
     }
   }
 }
@@ -109,14 +102,32 @@ export function eventsAfter(db: Database, reference: Reference, ref: string, aft
     .all(ref, after);
 }
 
+/** What the events of an item, a task or a run have cost. */
+export function costOf(db: Database, column: "item" | "task" | "run_id", ref: string): number {
+  return (
+    db
+      .query<{ usd: number }, [string]>(
+        `select coalesce(sum(json_extract(line, '$.cost.usd')), 0) as usd from events where ${column} = ?`,
+      )
+      .get(ref)?.usd ?? 0
+  );
+}
+
+/** Local midnight on the day of `now`, where the daily budget starts again. */
+export function midnightOf(now: Date): Date {
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+  return midnight;
+}
+
 /** What the day's events added to the cost, from local midnight at `now`. */
-export function costSince(db: Database, since: Date): number {
+export function costToday(db: Database, now: Date): number {
   return (
     db
       .query<{ usd: number }, [string]>(
         "select coalesce(sum(json_extract(line, '$.cost.usd')), 0) as usd from events where ts >= ?",
       )
-      .get(since.toISOString())?.usd ?? 0
+      .get(midnightOf(now).toISOString())?.usd ?? 0
   );
 }
 
