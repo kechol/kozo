@@ -108,6 +108,8 @@ export interface RunnerDeps {
    * of the default branch, which only a human merges into.
    */
   trustedBase?: string;
+  /** The port of kozod's egress proxy, prepare's only way out; without it prepare reaches any host. */
+  egress?: number;
 }
 
 /** A plan as the triage and plan agents write it, without the fields kozod adds. */
@@ -136,6 +138,20 @@ export class Runner implements RunnerOps {
   /** The environment of the diff's own code in prepare, the gates and prove: no credentials. */
   private readonly commandEnv = commandEnvironmentFrom(process.env);
 
+  /** What prepare's commands add to their environment: the egress proxy, when kozod runs one. */
+  proxyEnvironment(): Record<string, string> {
+    const { egress } = this.deps;
+    if (egress === undefined) return {};
+    const url = `http://127.0.0.1:${egress}`;
+    return {
+      HTTPS_PROXY: url,
+      HTTP_PROXY: url,
+      https_proxy: url,
+      http_proxy: url,
+      KOZO_EGRESS_PORT: String(egress),
+    };
+  }
+
   async envFor(worktree: string): Promise<Record<string, string>> {
     return { ...this.commandEnv, ...(await worktreeEnvironment(worktree)) };
   }
@@ -160,7 +176,7 @@ export class Runner implements RunnerOps {
         denyReadInside: deniedCredentials(process.env),
         allowWrite: [worktree, ...packageLocks, ...(prepare ? packageCaches : [])],
         denyWrite: [join(worktree, ".git")],
-        network: prepare ? "any" : "local",
+        network: prepare && this.deps.egress === undefined ? "any" : "local",
       },
     };
   }

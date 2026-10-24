@@ -12,3 +12,6 @@ agent_defaults:
 concurrency: 1
 budget:
   daily_usd: 15
+# prepare reaches other hosts only through kozod's proxy, which lets through the package
+# registries; list any other host it needs, such as a registry mirror, or a *. suffix:
+#   prepare_hosts: [npm.example.com]

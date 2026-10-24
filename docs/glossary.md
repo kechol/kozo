@@ -106,6 +106,7 @@
 |---|---|---|---|---|
 | bad-change suite | The set of deliberately bad changes that the verification layers must all reject. | - | - | - |
 | diff-guard | The V2 check that inspects a diff for size, scope, protected paths, edits to existing tests and disabled tests. | `kozo diff-guard` | - | - |
+| egress proxy | kozod's proxy on 127.0.0.1 that is prepare's only way to other hosts, tunnelling only to the package registries and `prepare_hosts`. | `EgressProxy`, `prepare_hosts` | firewall | - |
 | evidence | The verification verdicts and the artifacts, such as screenshots and logs, that a run keeps as proof. | `verdict.json`, `evidence/` | proof | - |
 | finding | One problem that review reports against one of its four criteria: instructions, scope, tests or conventions. | `findings` | issue, comment | - |
 | gate | One command defined in the constraints, such as typecheck, lint, unit tests or build. | - | check | - |

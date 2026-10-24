@@ -116,6 +116,8 @@ export interface EvalDeps {
   judge: Judge;
   verifier: Verifier;
   confine: Confine;
+  /** The port of kozod's egress proxy for prepare; without it prepare reaches any host. */
+  egress?: number;
   /** The body of an upstream issue, for a case that names one instead of copying it. */
   issueBody?: (url: string) => Promise<string>;
 }
@@ -232,6 +234,7 @@ export async function runEvalCase(
       definition: inUse,
       confine: deps.confine,
       trustedBase,
+      ...(deps.egress === undefined ? {} : { egress: deps.egress }),
     });
     const control = new ControlPlane(home, store, inUse, runner);
     const scheduler = new Scheduler(store, runner, inUse, log);
@@ -276,13 +279,18 @@ export async function runEvalCase(
         await layHiddenTests(evalCase, dirname(file), clone);
         const prepare = expected.prepare ? [expected.prepare] : constraints.prepare;
         const steps = [
-          ...prepare.map((command) => ({ command, confined: runner.confined(clone, true) })),
+          ...prepare.map((command) => ({
+            command,
+            confined: runner.confined(clone, true),
+            env: { ...env, ...runner.proxyEnvironment() },
+          })),
           ...(expected.checks ?? []).map((command) => ({
             command,
             confined: runner.confined(clone),
+            env,
           })),
         ];
-        for (const { command, confined } of steps) {
+        for (const { command, confined, env } of steps) {
           const code = await runCommand(command, clone, () => {}, env, confined);
           checks.push({ command, code });
           if (code !== 0) break;

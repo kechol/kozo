@@ -53,6 +53,8 @@ export interface RunnerOps {
   /** The environment of a worktree's commands: no credentials, and the worktree's ID and ports. */
   envFor(worktree: string): Promise<Record<string, string>>;
   confined(worktree: string, prepare?: boolean): Confined;
+  /** What prepare's commands add to their environment to reach other hosts. */
+  proxyEnvironment(): Record<string, string>;
   session(spec: WorkerSpec, envelope: Envelope, maxMinutes: number): Promise<SessionResult>;
   startRun(
     envelope: Omit<Envelope, "run_id">,

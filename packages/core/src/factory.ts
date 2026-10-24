@@ -29,6 +29,8 @@ export const factorySchema = z
     agents: z.partialRecord(agentNameSchema, agentSettings).optional(),
     concurrency: z.int().positive(),
     budget: z.strictObject({ daily_usd: z.number().positive() }),
+    /** Hosts prepare may reach besides the built-in registries: a name or a `*.` suffix. */
+    prepare_hosts: z.array(z.string().regex(/^(\*\.)?[a-z0-9.-]+$/)).optional(),
   })
   .superRefine((factory, context) => {
     if (factory.mode !== "github") return;

@@ -363,7 +363,7 @@ export function bubblewrapArgs(sandbox: CommandSandbox): string[] {
 const relayOutside = (path: string) => `original=$PATH
 PATH='${path.replaceAll("'", `'\\''`)}'
 ports=
-for port in $KOZO_PORTS; do
+for port in $KOZO_PORTS $KOZO_EGRESS_PORT; do
   hex=$(printf %04X "$port")
   if grep -qs ":$hex [0-9A-F]*:0000 0A" /proc/net/tcp /proc/net/tcp6; then ports="$ports $port"; fi
 done
@@ -407,7 +407,8 @@ exec "$@"`;
 
 /**
  * Confines a command with bubblewrap, found on PATH, Linux's sandbox without privileges. A
- * `local` command reaches the ports of `KOZO_PORTS` that this machine listens on when it
+ * `local` command reaches the ports of `KOZO_PORTS`, and kozod's egress proxy at
+ * `KOZO_EGRESS_PORT`, that this machine listens on when it
  * starts, such as a database its services started, through socat.
  */
 export function bubblewrap(bwrap: string): Confine {

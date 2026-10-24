@@ -95,13 +95,14 @@ const prepare: NodeStep = async (run) => {
   if (constraints.ports > 0) await takePorts(worktree, constraints.ports);
   const env = await run.env();
   const steps = [
-    ...constraints.services.map((command) => ({ command, confined: undefined })),
+    ...constraints.services.map((command) => ({ command, confined: undefined, env })),
     ...constraints.prepare.map((command) => ({
       command,
       confined: runner.confined(worktree, true),
+      env: { ...env, ...runner.proxyEnvironment() },
     })),
   ];
-  for (const { command, confined } of steps) {
+  for (const { command, confined, env } of steps) {
     const code = await runCommand(command, worktree, (text) => void run.log(text), env, confined);
     if (code !== 0) {
       return await run.halt("prepare", {

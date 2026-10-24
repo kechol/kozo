@@ -11,6 +11,7 @@ import {
 import { workerMain } from "@kozo/worker";
 import pkg from "../package.json" with { type: "json" };
 import { Daemon, kozodCommand } from "./daemon.ts";
+import { EgressProxy, hostAllowed } from "./egress.ts";
 import { type EvalResult, runEvalCase } from "./eval.ts";
 import { processLauncher } from "./launcher.ts";
 
@@ -87,7 +88,12 @@ async function evaluate(names: readonly string[], out: Output): Promise<number> 
           .sort()
           .map((name) => join(dir, name));
   const claude = process.env.KOZO_CLAUDE ?? Bun.which("claude") ?? "claude";
+  const egress = EgressProxy.start(
+    (host) => hostAllowed(host, loaded.definition.factory.prepare_hosts ?? []),
+    (line) => out.stderr(line),
+  );
   const deps = {
+    egress: egress.port,
     launcher: processLauncher(kozodCommand()),
     judge: claudeJudge(claude),
     verifier: claudeVerifier(claude),
@@ -103,6 +109,7 @@ async function evaluate(names: readonly string[], out: Output): Promise<number> 
     );
     cases.push(result);
   }
+  egress.stop();
   const passed = cases.filter((result) => result.passed).length;
   out.stdout(
     JSON.stringify({

@@ -8,6 +8,7 @@ import { apiToken } from "./api-token.ts";
 import { Automations } from "./automations.ts";
 import { ControlPlane } from "./control-plane.ts";
 import { type DefinitionInUse, refreshDefinition, startingDefinition } from "./definition.ts";
+import { EgressProxy, hostAllowed } from "./egress.ts";
 import { evalCaseOf } from "./eval.ts";
 import { EventStore } from "./event-store.ts";
 import { ghGitHub } from "./github.ts";
@@ -95,6 +96,7 @@ export class Daemon {
     private readonly notifier: Notifier,
     private readonly timer: ReturnType<typeof setInterval>,
     private readonly reconciling: () => Promise<void>,
+    private readonly egress: EgressProxy,
   ) {}
 
   static async start({
@@ -120,12 +122,18 @@ export class Daemon {
       throw error;
     }
     const claude = process.env.KOZO_CLAUDE ?? Bun.which("claude") ?? "claude";
+    // prepare reaches other hosts only through this proxy, which reads the allowlist each time.
+    const egress = EgressProxy.start(
+      (host) => hostAllowed(host, definition.current.factory.prepare_hosts ?? []),
+      report,
+    );
     const runner = new Runner(home, store, {
       launcher,
       judge: claudeJudge(claude),
       verifier: claudeVerifier(claude),
       definition,
       confine: confined,
+      egress: egress.port,
     });
     const control = new ControlPlane(home, store, definition, runner);
     const scheduler = new Scheduler(store, runner, definition, report);
@@ -260,6 +268,7 @@ export class Daemon {
       notifier,
       timer,
       () => reconciling,
+      egress,
     );
   }
 
@@ -275,6 +284,7 @@ export class Daemon {
     const stopped = this.scheduler.stop();
     await this.reconciling();
     await stopped;
+    this.egress.stop();
     this.store.close();
     await rm(this.home.pidFile, { force: true });
   }
