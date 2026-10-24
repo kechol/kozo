@@ -45,6 +45,22 @@ async function forward(stream: ReadableStream<Uint8Array>, log: (text: string) =
   if (rest) log(rest);
 }
 
+/** The lines a stream ends with a newline, trimmed, leaving out empty ones. */
+export async function* lines(stream: AsyncIterable<Uint8Array>): AsyncGenerator<string> {
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for await (const chunk of stream) {
+    buffer += decoder.decode(chunk, { stream: true });
+    let end = buffer.indexOf("\n");
+    while (end >= 0) {
+      const line = buffer.slice(0, end).trim();
+      buffer = buffer.slice(end + 1);
+      if (line) yield line;
+      end = buffer.indexOf("\n");
+    }
+  }
+}
+
 /** `text` as one word of a `sh` command line. */
 export function shellQuote(text: string) {
   return `'${text.replaceAll("'", `'\\''`)}'`;

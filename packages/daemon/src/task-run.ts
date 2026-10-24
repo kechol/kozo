@@ -53,8 +53,13 @@ export interface RunnerOps {
   /** The environment of a worktree's commands: no credentials, and the worktree's ID and ports. */
   envFor(worktree: string): Promise<Record<string, string>>;
   confined(worktree: string, prepare?: boolean): Confined;
-  /** What one prepare command adds to its environment to reach other hosts, until revoked. */
-  egressFor(): { env: Record<string, string>; revoke: () => void };
+  /** Runs one prepare command, which alone reaches other hosts; resolves to its exit code. */
+  prepare(
+    command: string,
+    worktree: string,
+    log: (text: string) => void,
+    env: Record<string, string>,
+  ): Promise<number>;
   session(spec: WorkerSpec, envelope: Envelope, maxMinutes: number): Promise<SessionResult>;
   startRun(
     envelope: Omit<Envelope, "run_id">,

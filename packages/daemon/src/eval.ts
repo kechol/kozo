@@ -282,24 +282,15 @@ export async function runEvalCase(
         const steps = [
           ...prepare.map((command) => ({
             command,
-            confined: runner.confined(clone, true),
-            prepare: true,
+            start: () => runner.prepare(command, clone, () => {}, env),
           })),
           ...(expected.checks ?? []).map((command) => ({
             command,
-            confined: runner.confined(clone),
-            prepare: false,
+            start: () => runCommand(command, clone, () => {}, env, runner.confined(clone)),
           })),
         ];
-        for (const { command, confined, prepare } of steps) {
-          const egress = prepare ? runner.egressFor() : { env: {}, revoke: () => {} };
-          const code = await runCommand(
-            command,
-            clone,
-            () => {},
-            { ...env, ...egress.env },
-            confined,
-          ).finally(egress.revoke);
+        for (const { command, start } of steps) {
+          const code = await start();
           checks.push({ command, code });
           if (code !== 0) break;
         }

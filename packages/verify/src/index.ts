@@ -1,7 +1,13 @@
 export * from "./agent-definition.ts";
 export * from "./base-documents.ts";
 export { globMatcher, isNewTestCase, protectedPathMatcher } from "./changes.ts";
-export { type Confined, commandEnvironmentFrom, runCommand, shellQuote } from "./command.ts";
+export {
+  type Confined,
+  commandEnvironmentFrom,
+  lines,
+  runCommand,
+  shellQuote,
+} from "./command.ts";
 export * from "./diff-guard.ts";
 export * from "./factory-definition.ts";
 export * from "./gates.ts";

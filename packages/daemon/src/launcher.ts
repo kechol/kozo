@@ -1,4 +1,4 @@
-import { type Confine, sessionEnvironmentFrom } from "@kozo/verify";
+import { type Confine, lines, sessionEnvironmentFrom } from "@kozo/verify";
 import { type CodingAgent, runSession, type WorkerMessage, type WorkerSpec } from "@kozo/worker";
 
 /** One agent session that kozod started, whose messages it reads until the outcome. */
@@ -31,17 +31,8 @@ export function processLauncher(command: readonly string[]): Launcher {
         },
       });
       async function* messages(): AsyncGenerator<WorkerMessage> {
-        const decoder = new TextDecoder();
-        let buffer = "";
-        for await (const chunk of child.stdout) {
-          buffer += decoder.decode(chunk, { stream: true });
-          let end = buffer.indexOf("\n");
-          while (end >= 0) {
-            const line = buffer.slice(0, end).trim();
-            buffer = buffer.slice(end + 1);
-            if (line.startsWith("{")) yield JSON.parse(line) as WorkerMessage;
-            end = buffer.indexOf("\n");
-          }
+        for await (const line of lines(child.stdout)) {
+          if (line.startsWith("{")) yield JSON.parse(line) as WorkerMessage;
         }
         await child.exited;
       }

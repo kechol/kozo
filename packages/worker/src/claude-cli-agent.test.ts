@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod } from "node:fs/promises";
 import { join } from "node:path";
+import { tempDirectory } from "@kozo/testing";
 import { z } from "zod";
 import { claudeCliAgent } from "./claude-cli-agent.ts";
 import { listenBridge, mcpMain } from "./cli-bridge.ts";
@@ -71,57 +71,54 @@ function request(cwd: string, records: AgentRecord[]): AgentRequest {
 
 describe("claudeCliAgent", () => {
   test("runs claude -p with the SDK's options and answers its hooks with the guard", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "kozo-cli-test-"));
-    try {
-      await Bun.write(join(dir, "claude"), fakeClaude(process.execPath));
-      await chmod(join(dir, "claude"), 0o755);
-      await Bun.write(join(dir, "helper.ts"), helperScript);
-      const records: AgentRecord[] = [];
-      const helper = [process.execPath, join(dir, "helper.ts")];
-      const outcome = await claudeCliAgent(join(dir, "claude"), helper).run(request(dir, records));
-      expect(outcome).toMatchObject({ status: "answered", costUsd: 0.01, turns: 1 });
-      const output = (outcome as { output: Record<string, unknown> }).output;
-      expect(output.decision).toEqual({
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason: "no Bash here",
-        },
-      });
-      expect(output.prompt).toBe("GOAL x");
-      const args = output.args as string[];
-      const sandbox = output.sandbox as { denyRead: string[]; denyWrite: string[] };
-      expect(sandbox.denyRead).toContain("/x/.kozo");
-      // The directory of the socket and the token's files is hidden from the shell.
-      const settingsDir =
-        args[args.indexOf("--settings") + 1]?.replace(/\/settings\.json$/, "") ?? "";
-      expect(sandbox.denyRead).toContain(settingsDir);
-      expect(sandbox.denyWrite).toContain(settingsDir);
-      expect(output.tokenInCommand).toBe(false);
-      expect(output.mcp).toMatchObject({
-        mcpServers: { kozo: { type: "stdio", command: process.execPath } },
-      });
-      for (const flag of ["--strict-mcp-config", "--no-session-persistence", "--verbose"]) {
-        expect(args).toContain(flag);
-      }
-      expect(args[args.indexOf("--setting-sources") + 1]).toBe("");
-      expect(args[args.indexOf("--allowedTools") + 1]).toContain("mcp__kozo__kozo_note");
-      expect(records.map((record) => record.type)).toEqual([
-        "tool.call",
-        "guard.denied",
-        "session.started",
-        "cost.tick",
-      ]);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
+    await using temp = await tempDirectory();
+    const dir = temp.path;
+    await Bun.write(join(dir, "claude"), fakeClaude(process.execPath));
+    await chmod(join(dir, "claude"), 0o755);
+    await Bun.write(join(dir, "helper.ts"), helperScript);
+    const records: AgentRecord[] = [];
+    const helper = [process.execPath, join(dir, "helper.ts")];
+    const outcome = await claudeCliAgent(join(dir, "claude"), helper).run(request(dir, records));
+    expect(outcome).toMatchObject({ status: "answered", costUsd: 0.01, turns: 1 });
+    const output = (outcome as { output: Record<string, unknown> }).output;
+    expect(output.decision).toEqual({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: "no Bash here",
+      },
+    });
+    expect(output.prompt).toBe("GOAL x");
+    const args = output.args as string[];
+    const sandbox = output.sandbox as { denyRead: string[]; denyWrite: string[] };
+    expect(sandbox.denyRead).toContain("/x/.kozo");
+    // The directory of the socket and the token's files is hidden from the shell.
+    const settingsDir =
+      args[args.indexOf("--settings") + 1]?.replace(/\/settings\.json$/, "") ?? "";
+    expect(sandbox.denyRead).toContain(settingsDir);
+    expect(sandbox.denyWrite).toContain(settingsDir);
+    expect(output.tokenInCommand).toBe(false);
+    expect(output.mcp).toMatchObject({
+      mcpServers: { kozo: { type: "stdio", command: process.execPath } },
+    });
+    for (const flag of ["--strict-mcp-config", "--no-session-persistence", "--verbose"]) {
+      expect(args).toContain(flag);
     }
+    expect(args[args.indexOf("--setting-sources") + 1]).toBe("");
+    expect(args[args.indexOf("--allowedTools") + 1]).toContain("mcp__kozo__kozo_note");
+    expect(records.map((record) => record.type)).toEqual([
+      "tool.call",
+      "guard.denied",
+      "session.started",
+      "cost.tick",
+    ]);
   });
 });
 
 describe("the CLI bridge", () => {
   test("serves the worker's tools over MCP and runs each call in the worker", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "kozo-bridge-test-"));
-    const socket = join(dir, "bridge.sock");
+    await using dir = await tempDirectory();
+    const socket = join(dir.path, "bridge.sock");
     const calls: unknown[] = [];
     const bridge = listenBridge(socket, "t0ken", {
       hook: async () => ({}),
@@ -171,7 +168,6 @@ describe("the CLI bridge", () => {
       expect(calls).toHaveLength(2);
     } finally {
       bridge.stop(true);
-      await rm(dir, { recursive: true, force: true });
     }
   });
 });

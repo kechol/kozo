@@ -48,6 +48,7 @@ import {
   packageCaches,
   packageLocks,
   readBaseDocuments,
+  runCommand,
   runGates,
   SessionError,
   type Verifier,
@@ -140,23 +141,27 @@ export class Runner implements RunnerOps {
   private readonly commandEnv = commandEnvironmentFrom(process.env);
 
   /**
-   * What one prepare command adds to its environment, the egress proxy with a token of its own
-   * when kozod runs one, and the call that withdraws the token once the command ends.
+   * Runs one prepare command in `worktree`'s prepare sandbox, through the egress proxy with a
+   * token of its own when kozod runs one, and withdraws the token once the command ends.
    */
-  egressFor(): { env: Record<string, string>; revoke: () => void } {
+  async prepare(
+    command: string,
+    worktree: string,
+    log: (text: string) => void,
+    env: Record<string, string>,
+  ): Promise<number> {
     const { egress } = this.deps;
-    if (egress === undefined) return { env: {}, revoke: () => {} };
+    const confined = this.confined(worktree, true);
+    if (egress === undefined) return await runCommand(command, worktree, log, env, confined);
     const { url, revoke } = egress.issue();
-    return {
-      env: {
-        HTTPS_PROXY: url,
-        HTTP_PROXY: url,
-        https_proxy: url,
-        http_proxy: url,
-        KOZO_EGRESS_PORT: String(egress.port),
-      },
-      revoke,
+    const proxy = {
+      HTTPS_PROXY: url,
+      HTTP_PROXY: url,
+      https_proxy: url,
+      http_proxy: url,
+      KOZO_EGRESS_PORT: String(egress.port),
     };
+    return await runCommand(command, worktree, log, { ...env, ...proxy }, confined).finally(revoke);
   }
 
   async envFor(worktree: string): Promise<Record<string, string>> {
@@ -172,15 +177,13 @@ export class Runner implements RunnerOps {
    * writes the package caches.
    */
   confined(worktree: string, prepare = false): Confined {
+    const credentials = deniedCredentials(process.env);
     return {
       confine: this.deps.confine,
       sandbox: {
         denyRead: [this.home.root, homedir()],
-        allowRead: worktreeReadable(worktree, process.env, [
-          this.home.root,
-          ...deniedCredentials(process.env),
-        ]),
-        denyReadInside: deniedCredentials(process.env),
+        allowRead: worktreeReadable(worktree, process.env, [this.home.root, ...credentials]),
+        denyReadInside: credentials,
         allowWrite: [worktree, ...packageLocks, ...(prepare ? packageCaches : [])],
         denyWrite: [join(worktree, ".git")],
         network: prepare && this.deps.egress === undefined ? "any" : "local",
@@ -871,7 +874,24 @@ export class Runner implements RunnerOps {
       repository.base,
       join(itemDirectory(this.home, item.ref), `check-${taskRef.split("/").at(-1)}.log`),
     );
-    const failed = `After the merge, the ${level} gates on ${repository.branch} failed, so DONE_WHEN is not met:\n${tail(output)}`;
+    const defect = `the ${level} gates failed on ${repository.branch} after the merge`;
+    const recordDefect = async () => {
+      await this.store.append({
+        type: "note.added",
+        item: item.ref,
+        task: taskRef,
+        data: {
+          kind: "check",
+          text: `After the merge, the ${level} gates on ${repository.branch} failed, so DONE_WHEN is not met:\n${tail(output)}`,
+        },
+      });
+      await this.store.append({
+        type: "task.defect",
+        item: item.ref,
+        task: taskRef,
+        data: { reason: defect },
+      });
+    };
     // A task cancelled when the item was split again, or by a human, waits for nothing.
     const last = item.tasks.every(
       (ref) => ref === taskRef || isClosed(this.store.state.tasks[ref]?.stage ?? "cancelled"),
@@ -879,24 +899,8 @@ export class Runner implements RunnerOps {
     // Before the item's last task the item cannot go back to Triage, so the task waits, and
     // with it every task that depends on it, until a human retries the check or closes it.
     if (result.status !== "pass" && !last) {
-      await this.store.append({
-        type: "note.added",
-        item: item.ref,
-        task: taskRef,
-        data: { kind: "check", text: failed },
-      });
-      await this.store.append({
-        type: "task.defect",
-        item: item.ref,
-        task: taskRef,
-        data: { reason: `the ${level} gates failed on ${repository.branch} after the merge` },
-      });
-      await this.hold(
-        item.ref,
-        taskRef,
-        "attention",
-        `the ${level} gates failed on ${repository.branch} after the merge; kozo retry checks again`,
-      );
+      await recordDefect();
+      await this.hold(item.ref, taskRef, "attention", `${defect}; kozo retry checks again`);
       return;
     }
     await this.moveTask(
@@ -927,21 +931,7 @@ export class Runner implements RunnerOps {
       },
     });
     if (result.status !== "pass") {
-      await this.store.append({
-        type: "note.added",
-        item: item.ref,
-        task: taskRef,
-        data: {
-          kind: "check",
-          text: failed,
-        },
-      });
-      await this.store.append({
-        type: "task.defect",
-        item: item.ref,
-        task: taskRef,
-        data: { reason: `the ${level} gates failed on ${repository.branch} after the merge` },
-      });
+      await recordDefect();
       await this.store.append({
         type: "stage.changed",
         item: item.ref,

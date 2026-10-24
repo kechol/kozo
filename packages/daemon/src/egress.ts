@@ -4,7 +4,7 @@ import type { Socket, TCPSocketListener } from "bun";
  * The hosts prepare reaches without a setting: the package registries and the downloads their
  * packages and tools point at.
  */
-export const registryHosts = [
+const registryHosts = [
   "registry.npmjs.org",
   "registry.yarnpkg.com",
   "repo.yarnpkg.com",
@@ -38,12 +38,8 @@ class Outbox {
   constructor(private readonly socket: Socket<unknown>) {}
 
   write(bytes: Uint8Array) {
-    if (this.queue.length > 0) {
-      this.queue.push(bytes);
-      return;
-    }
-    const written = this.socket.write(bytes);
-    if (written < bytes.length) this.queue.push(bytes.subarray(Math.max(written, 0)));
+    this.queue.push(bytes);
+    this.drain();
   }
 
   drain() {
@@ -89,6 +85,7 @@ function indexOf(bytes: Uint8Array, needle: Uint8Array): number {
 
 /** The most refused hosts kozod keeps and reports, so a stream of requests cannot grow it. */
 const refusedLimit = 100;
+const decoder = new TextDecoder();
 const hostname = /^[a-z0-9.-]{1,253}$/;
 
 /**
@@ -136,6 +133,10 @@ export class EgressProxy {
   ) {
     const refused = new Set<string>();
     const tokens = new Map<string, Set<Socket<Client>>>();
+    const deny = (client: Socket<Client>) => {
+      client.write(forbidden);
+      client.end();
+    };
     const refuse = (client: Socket<Client>, host: string) => {
       // Only a host name is kept and reported; anything else a request said is not repeated.
       const name = hostname.test(host) ? host : "a malformed request";
@@ -143,8 +144,7 @@ export class EgressProxy {
         refused.add(name);
         report(`kozod: prepare may not reach ${name}; add it to prepare_hosts in factory.yml`);
       }
-      client.write(forbidden);
-      client.end();
+      deny(client);
     };
     /** The issued token a request carries, or null. */
     const tokenOf = (head: string) => {
@@ -185,18 +185,14 @@ export class EgressProxy {
             else state.head = head;
             return;
           }
-          const request = new TextDecoder().decode(head.subarray(0, end));
+          const request = decoder.decode(head.subarray(0, end));
           const line = request.split("\r\n")[0] ?? "";
           const match = line.match(/^CONNECT ([A-Za-z0-9.-]+):(\d+) HTTP\/1\.[01]$/);
           const host = match?.[1]?.toLowerCase() ?? "";
           if (!match || match[2] !== String(tunnelPort)) return refuse(client, "");
           // Without a token kozod issued, the request is not prepare's, so nothing is reported.
           const token = tokenOf(request);
-          if (token === null) {
-            client.write(forbidden);
-            client.end();
-            return;
-          }
+          if (token === null) return deny(client);
           state.token = token;
           tokens.get(token)?.add(client);
           if (!allowed(host)) return refuse(client, host);

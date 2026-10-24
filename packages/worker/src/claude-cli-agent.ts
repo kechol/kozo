@@ -3,6 +3,7 @@ import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { lines, shellQuote } from "@kozo/verify";
 import { z } from "zod";
 import {
   allowedTools,
@@ -15,8 +16,6 @@ import {
 } from "./claude-session.ts";
 import { bridgeTokenPath, listenBridge } from "./cli-bridge.ts";
 import type { CodingAgent } from "./coding-agent.ts";
-
-const quoted = (word: string) => `'${word.replaceAll("'", "'\\''")}'`;
 
 /** How long a session has to end after SIGINT before it gets SIGTERM. */
 const interruptGraceMs = 10_000;
@@ -65,7 +64,7 @@ export function claudeCliAgent(executable: string, helper: readonly string[]): C
           hooks: [
             {
               type: "command",
-              command: [...helper, "--hook", socket].map(quoted).join(" "),
+              command: [...helper, "--hook", socket].map(shellQuote).join(" "),
               timeout: 86_400,
             },
           ],
@@ -77,15 +76,7 @@ export function claudeCliAgent(executable: string, helper: readonly string[]): C
       await Bun.write(
         settings,
         JSON.stringify({
-          sandbox: sessionSandbox({
-            ...request,
-            sandbox: {
-              denyRead: [...(request.sandbox?.denyRead ?? []), ...hidden],
-              allowRead: request.sandbox?.allowRead ?? [],
-              allowWrite: request.sandbox?.allowWrite ?? [],
-              denyWrite: [...(request.sandbox?.denyWrite ?? []), ...hidden],
-            },
-          }),
+          sandbox: sessionSandbox(request, hidden),
           hooks: { PreToolUse: hook, PostToolUse: hook, PostToolUseFailure: hook, Stop: hook },
         }),
       );
@@ -157,20 +148,11 @@ export function claudeCliAgent(executable: string, helper: readonly string[]): C
       if (request.signal.aborted) onAbort();
 
       try {
-        const decoder = new TextDecoder();
-        let buffer = "";
-        for await (const chunk of child.stdout) {
-          buffer += decoder.decode(chunk, { stream: true });
-          let end = buffer.indexOf("\n");
-          while (end >= 0) {
-            const line = buffer.slice(0, end).trim();
-            buffer = buffer.slice(end + 1);
-            end = buffer.indexOf("\n");
-            if (!line.startsWith("{")) continue;
-            const outcome = reader.read(JSON.parse(line) as SDKMessage);
-            if (outcome && request.signal.aborted) return { status: "stopped", ...reader.spent };
-            if (outcome) return outcome;
-          }
+        for await (const line of lines(child.stdout)) {
+          if (!line.startsWith("{")) continue;
+          const outcome = reader.read(JSON.parse(line) as SDKMessage);
+          if (outcome && request.signal.aborted) return { status: "stopped", ...reader.spent };
+          if (outcome) return outcome;
         }
         if (request.signal.aborted) return { status: "stopped", ...reader.spent };
         const code = await child.exited;

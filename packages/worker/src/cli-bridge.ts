@@ -1,6 +1,7 @@
-import { timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
+import { secretMatches } from "@kozo/core";
+import { lines } from "@kozo/verify";
 import type { UnixSocketListener } from "bun";
 
 /**
@@ -38,11 +39,6 @@ export interface BridgeHandlers {
 
 type BridgeReply = { ok: true; value: unknown } | { ok: false; error: string };
 
-const sameToken = (given: unknown, token: string) =>
-  typeof given === "string" &&
-  given.length === token.length &&
-  timingSafeEqual(Buffer.from(given), Buffer.from(token));
-
 /**
  * The worker's end of the bridge: a Unix socket at `path` that answers one JSON line with one
  * JSON line per connection, and only a request that carries `token`. The socket's directory
@@ -73,7 +69,8 @@ export function listenBridge(
         (async (): Promise<BridgeReply> => {
           try {
             const message = JSON.parse(line) as { token?: unknown; request: BridgeRequest };
-            if (!sameToken(message.token, token)) return { ok: false, error: "not authorized" };
+            if (typeof message.token !== "string" || !secretMatches(message.token, token))
+              return { ok: false, error: "not authorized" };
             return { ok: true, value: await answer(message.request) };
           } catch (error) {
             return { ok: false, error: (error as Error).message };
@@ -202,19 +199,8 @@ export async function mcpMain(
       fail(message.id, -32603, (error as Error).message);
     }
   };
-  const decoder = new TextDecoder();
-  let buffer = "";
   const pending: Promise<void>[] = [];
-  for await (const chunk of input) {
-    buffer += decoder.decode(chunk, { stream: true });
-    let end = buffer.indexOf("\n");
-    while (end >= 0) {
-      const line = buffer.slice(0, end).trim();
-      buffer = buffer.slice(end + 1);
-      if (line) pending.push(handle(line));
-      end = buffer.indexOf("\n");
-    }
-  }
+  for await (const line of lines(input)) pending.push(handle(line));
   await Promise.all(pending);
   return 0;
 }

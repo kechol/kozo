@@ -27,13 +27,13 @@ export function sessionEnvironment(request: AgentRequest): Record<string, string
   return { ...sessionEnvironmentFrom(process.env), ...request.env, ...scrubbedShell };
 }
 
-/** Claude Code's sandbox for the session's shell. */
-export function sessionSandbox(request: AgentRequest) {
+/** Claude Code's sandbox for the session's shell, which neither reads nor writes `hidden`. */
+export function sessionSandbox(request: AgentRequest, hidden: string[] = []) {
   return localSandbox({
-    denyRead: [...deniedCredentials(process.env), ...(request.sandbox?.denyRead ?? [])],
+    denyRead: [...deniedCredentials(process.env), ...(request.sandbox?.denyRead ?? []), ...hidden],
     allowRead: request.sandbox?.allowRead ?? [],
     allowWrite: request.sandbox?.allowWrite ?? [],
-    denyWrite: request.sandbox?.denyWrite ?? [],
+    denyWrite: [...(request.sandbox?.denyWrite ?? []), ...hidden],
   });
 }
 
