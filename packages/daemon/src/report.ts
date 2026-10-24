@@ -63,7 +63,7 @@ export interface Failure {
  * escalate, failed checks after a merge, human commits and blocks for a missing tool, oldest
  * first.
  */
-function failures(db: Database, since: string): Failure[] {
+function failures(db: Database, state: FactoryState, since: string): Failure[] {
   const rows = db
     .query<
       {
@@ -72,7 +72,6 @@ function failures(db: Database, since: string): Failure[] {
         ref: string;
         verdict: string | null;
         text: string | null;
-        kind: string | null;
         from: string | null;
         to: string | null;
       },
@@ -82,20 +81,26 @@ function failures(db: Database, since: string): Failure[] {
               json_extract(line, '$.data.verdict') as verdict,
               coalesce(json_extract(line, '$.data.summary'), json_extract(line, '$.data.text'),
                        json_extract(line, '$.data.reason')) as text,
-              json_extract(line, '$.data.kind') as kind,
               json_extract(line, '$.data.from') as "from", json_extract(line, '$.data.to') as "to"
          from events
-        where ts >= ? and type in ('review.verdict', 'note.added', 'task.returned', 'stage.changed', 'hold.set')
+        where ts >= ? and type in ('review.verdict', 'task.returned', 'stage.changed', 'hold.set')
         order by ts, id`,
     )
     .all(since);
-  return rows.flatMap((row): Failure[] => {
+  // A defect is the state's, so that the list and the defect rate count the same ones.
+  const defects = Object.values(state.tasks).flatMap((task): Failure[] => {
+    if (task.defectAt === null || task.defectAt < since) return [];
+    const note = state.items[task.item]?.notes.find(
+      (candidate) => candidate.target === task.ref && candidate.ts === task.defectAt,
+    );
+    return [{ kind: "defect", ref: task.ref, at: task.defectAt, text: note?.text ?? "" }];
+  });
+  const found = rows.flatMap((row): Failure[] => {
     const failure = (kind: Failure["kind"], text = row.text ?? "") => [
       { kind, ref: row.ref, at: row.ts, text },
     ];
     if (row.type === "review.verdict" && (row.verdict === "revise" || row.verdict === "escalate"))
       return failure(row.verdict);
-    if (row.type === "note.added" && row.kind === "check") return failure("defect");
     if (row.type === "task.returned") return failure("human-commit", "taken and given back");
     // Only a human's commit moves a task from Handoff to Reviewing.
     if (row.type === "stage.changed" && row.from === "handoff" && row.to === "reviewing")
@@ -104,6 +109,7 @@ function failures(db: Database, since: string): Failure[] {
       return failure("missing-tool", row.text.slice("missing-tool: ".length));
     return [];
   });
+  return [...found, ...defects].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 }
 
 /** The metrics over the diffs merged since `since`, and what waits now. */
@@ -188,7 +194,7 @@ export async function buildReport(
     days,
     since,
     ...metrics(db, state, since),
-    failures: failures(db, since),
+    failures: failures(db, state, since),
     promotions,
   };
   if (view === "summary") return result;

@@ -61,6 +61,34 @@ function planned(write = eventWriter(), accepted = plan()): Event[] {
 }
 
 describe("replay", () => {
+  test("a failed check is a defect only once the task is merged", () => {
+    const task = { item: "K-1", task: "K-1/t1" };
+    const run = (merge: boolean) => {
+      const write = eventWriter();
+      return replay([
+        ...planned(write),
+        ...(merge
+          ? [
+              write(
+                "branch.merged",
+                {
+                  branch: "kozo/k3x9q2/K-1-t1",
+                  head: "a1b2c3d",
+                  into: "main",
+                  commit: null,
+                  committer: null,
+                },
+                task,
+              ),
+            ]
+          : []),
+        write("note.added", { kind: "check", text: "the checks failed" }, task),
+      ]).tasks["K-1/t1"]?.defectAt;
+    };
+    expect(run(false)).toBeNull();
+    expect(run(true)).not.toBeNull();
+  });
+
   test("an item keeps the class its request asked for and who accepted its plan", () => {
     const write = eventWriter();
     const asked = replay([

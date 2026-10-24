@@ -407,7 +407,8 @@ export function applyEvent(state: FactoryState, event: Event): void {
         text: event.data.text,
       });
       if (event.data.kind === "rejection" && event.task === null) subject.rejections += 1;
-      if (event.data.kind === "check" && task) task.defectAt = event.ts;
+      // A failed check before the merge, such as CI's, is not a defect of merged code.
+      if (event.data.kind === "check" && task?.merged) task.defectAt = event.ts;
       return;
     }
     case "plan.proposed": {
