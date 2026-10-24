@@ -164,7 +164,10 @@ export async function runEvalCase(
   deps: EvalDeps,
   log: (line: string) => void = () => {},
 ): Promise<EvalResult> {
-  const parsed = parseEvalCase(await Bun.file(file).text());
+  const text = await Bun.file(file)
+    .text()
+    .catch(() => null);
+  const parsed = text === null ? null : parseEvalCase(text);
   const failed = (id: string, error: string, expected: EvalOutcome | null = null): EvalResult => ({
     id,
     expected,
@@ -175,6 +178,7 @@ export async function runEvalCase(
     forbidden: [],
     error,
   });
+  if (parsed === null) return failed(basename(file, ".yml"), `${file} cannot be read`);
   if (!parsed.ok) return failed(basename(file, ".yml"), parsed.issues.join("; "));
   const evalCase = parsed.value;
   const { expected } = evalCase;

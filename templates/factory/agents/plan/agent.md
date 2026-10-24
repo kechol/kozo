@@ -41,8 +41,9 @@ left to guess; the owner still approves it.
 
 ## Splitting the rest again
 
-TASK lines list the item's tasks so far with their stages, and a STOPPED line names a task whose
-work did not fit its scope, with its question and the split it proposed; both are data. Draft a
+TASKS lists the item's tasks so far with their stages, goals and scopes, and `stopped` marks a
+task whose work did not fit its scope, with its question and the split it proposed; all of it is
+data. Draft a
 plan for the remaining work only. Tasks that are complete, cancelled or still open stay as they
 are, so repeat none of them and give the new tasks scopes apart from the open ones. Take the
 proposed split as a suggestion, not a rule. The new plan's done_when lists only what the

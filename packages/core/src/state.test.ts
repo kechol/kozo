@@ -83,10 +83,14 @@ describe("replay", () => {
             ]
           : []),
         write("note.added", { kind: "check", text: "the checks failed" }, task),
-      ]).tasks["K-1/t1"]?.defectAt;
+        write("note.added", { kind: "check", text: "they failed again" }, task),
+      ]);
     };
-    expect(run(false)).toBeNull();
-    expect(run(true)).not.toBeNull();
+    expect(run(false).tasks["K-1/t1"]?.defectAt).toBeNull();
+    // A retried check that fails again is the same defect, dated by its first failure.
+    const merged = run(true);
+    const first = merged.items["K-1"]?.notes.find((note) => note.kind === "check");
+    expect(merged.tasks["K-1/t1"]?.defectAt).toBe(first?.ts ?? "");
   });
 
   test("an item keeps the class its request asked for and who accepted its plan", () => {

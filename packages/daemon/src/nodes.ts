@@ -84,7 +84,10 @@ const prepare: NodeStep = async (run) => {
   if (constraints.services.length > 0 && !(await atMergedCommit(worktree, trusted))) {
     return await run.halt("prepare", {
       hold: "attention",
-      reason: `services run only on a worktree at a commit of ${repository.branch}, and this one carries the task's changes`,
+      reason:
+        trusted === repository.tip
+          ? `services run only on a worktree at a commit of ${repository.branch}, and this one carries the task's changes`
+          : `services run only on a worktree at the eval case's start, and this one is past a merge nobody read`,
       end: "failed",
       why: "services refused",
     });

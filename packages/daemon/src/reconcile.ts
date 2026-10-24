@@ -1,6 +1,7 @@
 import {
   autonomyLevel,
   demotionDue,
+  demotionKey,
   type Factory,
   isRunOver,
   lowerLevel,
@@ -89,6 +90,9 @@ async function mergingCommit(repository: string, head: string, target: string) {
  * and sent back to Reviewing when a human committed to it.
  */
 export class Reconciler {
+  /** The evidence each class already at L1 was last found due on, by `demotionKey`. */
+  private readonly atBottom = new Map<string, string>();
+
   constructor(
     private readonly store: EventStore,
     private readonly runner: Runner,
@@ -215,16 +219,20 @@ export class Reconciler {
     for (const task of Object.values(state.tasks)) {
       const repository = state.items[task.item]?.repository;
       if (task.merged && repository)
-        pairs.set(`${task.class}@${repository}`, { repository, workClass: task.class });
+        pairs.set(demotionKey(repository, task.class), { repository, workClass: task.class });
     }
-    for (const { repository, workClass } of pairs.values()) {
+    for (const [key, { repository, workClass }] of pairs) {
       const reason = demotionDue(this.store.state, repository, workClass);
-      if (reason === null) continue;
+      if (reason === null || this.atBottom.get(key) === reason) continue;
       const charter = await readCharter(repository, this.mode(), this.store.state);
       if (!charter.ok) continue;
       const from = autonomyLevel(charter.charter, workClass);
       const to = lowerLevel(from);
-      if (to === null) continue;
+      // A class at L1 has nowhere to go, so the same evidence is not read again each minute.
+      if (to === null) {
+        this.atBottom.set(key, reason);
+        continue;
+      }
       await this.store.append({
         type: "factory.demoted",
         data: { repository, class: workClass, from, to, charter_sha: charter.sha, reason },

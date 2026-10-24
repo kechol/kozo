@@ -151,10 +151,13 @@ export async function buildReport(
   const budget = factory.budget.daily_usd;
   if (view === "cost") {
     const today = costToday(db, now);
+    // Calendar days in local time, so a day of a daylight saving change keeps its own hours.
     const daily = Array.from({ length: days }, (_, back) => {
-      const start = midnightOf(new Date(now.getTime() - back * dayMs));
-      const usd = costBetween(db, start, new Date(start.getTime() + dayMs));
-      return { day: start.toISOString(), usd };
+      const start = midnightOf(now);
+      start.setDate(start.getDate() - back);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      return { day: start.toISOString(), usd: costBetween(db, start, end) };
     });
     return { view, budget_usd: budget, today_usd: today, days: daily };
   }

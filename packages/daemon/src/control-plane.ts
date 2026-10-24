@@ -509,16 +509,19 @@ export class ControlPlane {
       await this.move("task", task, to, reason);
       if (to === "cancelled") await this.runner?.release(task, true);
     }
-    if (
-      kind === "item" ||
-      tasks.every((task) => isClosed(this.store.state.tasks[task]?.stage ?? "cancelled"))
-    ) {
-      const owner = this.store.state.items[item];
-      if (owner && !isClosed(owner.stage)) {
-        await this.clearHold("item", item);
-        await this.move("item", item, to, reason);
-      }
-    }
+    // Closing a task closes its item only once every task of the item is closed, as Complete
+    // when any of them was.
+    const owner = this.store.state.items[item];
+    if (!owner || isClosed(owner.stage)) return;
+    const stages = owner.tasks.map((task) => this.store.state.tasks[task]?.stage ?? "cancelled");
+    if (kind === "task" && !stages.every(isClosed)) return;
+    await this.clearHold("item", item);
+    await this.move(
+      "item",
+      item,
+      kind === "task" && stages.includes("complete") ? "complete" : to,
+      reason,
+    );
   }
 
   async pauseFactory(): Promise<VerbResult> {

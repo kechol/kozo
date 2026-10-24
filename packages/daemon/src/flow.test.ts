@@ -313,12 +313,21 @@ describe("splitting again", () => {
       hold: { kind: "approval", reason: "plan approval" },
     });
     const prompt = env.agent.requests.findLast((request) => request.agent === "plan")?.prompt ?? "";
-    expect(prompt).toContain(`TASK        ${ref}/t1 handoff: `);
-    expect(prompt).toContain(`TASK        ${ref}/t3 cancelled: Link it (scope site/**)`);
-    expect(prompt).toContain(
-      `STOPPED     ${ref}/t2 could not be done within its scope: <request trust="untrusted">`,
+    expect(prompt).toContain('TASKS       <request trust="untrusted">');
+    const tasks = JSON.parse(
+      prompt
+        .slice(prompt.indexOf('TASKS       <request trust="untrusted">') + 39)
+        .split("\n</request>")[0] ?? "",
     );
-    expect(prompt).toContain("README.md");
+    expect(tasks).toEqual([
+      expect.objectContaining({ ref: `${ref}/t1`, stage: "handoff" }),
+      expect.objectContaining({
+        ref: `${ref}/t2`,
+        stage: "cancelled",
+        stopped: { question, split: proposed },
+      }),
+      { ref: `${ref}/t3`, stage: "cancelled", goal: "Link it", scope: ["site/**"] },
+    ]);
     expect(await env.repo.git("branch", "--list", `kozo/${env.store.factoryId}/K-1-t2`)).toBe("");
 
     await env.control.pauseFactory();
@@ -893,6 +902,59 @@ describe("the minimal path", () => {
       text: expect.stringContaining("DONE_WHEN is not met"),
     });
     expect(env.store.state.tasks[task]?.defectAt).not.toBeNull();
+  }, 180_000);
+
+  test("an item whose other task was cancelled completes once its last task merges", async () => {
+    const docs = "The docs mention the low-stock notice";
+    const both = {
+      ...plan,
+      plan: {
+        ...plan.plan,
+        done_when: [...suiteTask.doneWhen, docs],
+        tasks: [
+          plan.plan.tasks[0],
+          {
+            id: "t2",
+            goal: "Mention it in the docs",
+            done_when: [docs],
+            scope: ["docs/**"],
+            depends_on: [],
+            estimate: { lines: 5, files: 1 },
+          },
+        ],
+      },
+    };
+    const question = "Which page of the docs?";
+    await using env = await factoryOf((request) => {
+      if (request.agent === "triage") return [{ answer: both }];
+      if (!request.prompt.includes("docs/**")) return implement();
+      return [
+        { use: "kozo_blocked", input: { reason: "ambiguous", question } },
+        { answer: { ...report, outcome: "blocked", blocked: { reason: "ambiguous", question } } },
+      ];
+    });
+    const item = { kind: "item", item: { repo: null, number: 1 } } as const;
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, item, "approve", {});
+    await env.settle();
+    await env.control.act(ref, item, "approve", {});
+    await env.settle();
+    const t2 = { kind: "task", item: { repo: null, number: 1 }, task: 2 } as const;
+    await env.control.act(`${ref}/t2`, t2, "close", { cancel: "not needed" });
+    expect(env.store.state.tasks[`${ref}/t1`]?.stage).toBe("handoff");
+    await env.repo.git(
+      "merge",
+      "--no-ff",
+      "--quiet",
+      "-m",
+      "merge",
+      `kozo/${env.store.factoryId}/K-1-t1`,
+    );
+    await env.reconciler.reconcile();
+    await env.scheduler.idle();
+    expect(env.store.state.tasks[`${ref}/t1`]?.stage).toBe("complete");
+    expect(env.store.state.items[ref]?.stage).toBe("complete");
   }, 180_000);
 
   test("a post-merge defect lowers its class one level until the Charter changes", async () => {

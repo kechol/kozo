@@ -642,14 +642,16 @@ export async function metricsReport(args: readonly string[], out: Lines): Promis
   const days = values.days ?? "30";
   if (!/^\d+$/.test(days) || Number(days) < 1 || Number(days) > 365)
     throw new UsageError("report takes --days <n>, a whole number from 1 to 365");
-  const answer = await (await connect()).get(`/api/report?view=${view}&days=${days}`);
-  return printAnswer(out, values.json, answer, () => {
-    if (view !== "cost") return metricLines(answer.body as unknown as Metrics);
-    const c = answer.body as unknown as CostReport;
-    return [
-      `today             ${dollars(c.today_usd)} of ${dollars(c.budget_usd)}`,
-      ...c.days.map((d) => `  ${d.day.slice(0, 10)}  ${dollars(d.usd)}`),
-    ];
+  return await withClient(out, async (client) => {
+    const answer = await client.get(`/api/report?view=${view}&days=${days}`);
+    return printAnswer(out, values.json, answer, () => {
+      if (view !== "cost") return metricLines(answer.body as unknown as Metrics);
+      const c = answer.body as unknown as CostReport;
+      return [
+        `today             ${dollars(c.today_usd)} of ${dollars(c.budget_usd)}`,
+        ...c.days.map((d) => `  ${d.day.slice(0, 10)}  ${dollars(d.usd)}`),
+      ];
+    });
   });
 }
 
@@ -680,19 +682,20 @@ async function evalCommand(args: string[], json: boolean | undefined, out: Lines
   if (action === "add") {
     const [run] = rest;
     if (!run || rest.length > 1) throw new UsageError("admin eval add takes one run, r-<nnnn>");
-    const client = await connect();
-    const answer = await client.post("/api/admin/eval-case", { run });
-    if (answer.status >= 300) return printAnswer(out, json, answer, () => []);
-    const { id, text } = answer.body as { id: string; text: string };
-    const path = join(client.home.factory, "evals", `${id}.yml`);
-    if (await Bun.file(path).exists()) {
-      out.stderr(`kozo: ${path} exists already; remove it to draft it again`);
-      return ExitCode.failure;
-    }
-    await Bun.write(path, text);
-    return printAnswer(out, json, { ...answer, body: { ...answer.body, path } }, () => [
-      `wrote ${path}; add the hidden tests and checks it needs, then commit it`,
-    ]);
+    return await withClient(out, async (client) => {
+      const answer = await client.post("/api/admin/eval-case", { run });
+      if (answer.status >= 300) return printAnswer(out, json, answer, () => []);
+      const { id, text } = answer.body as { id: string; text: string };
+      const path = join(client.home.factory, "evals", `${id}.yml`);
+      if (await Bun.file(path).exists()) {
+        out.stderr(`kozo: ${path} exists already; remove it to draft it again`);
+        return ExitCode.failure;
+      }
+      await Bun.write(path, text);
+      return printAnswer(out, json, { ...answer, body: { ...answer.body, path } }, () => [
+        `wrote ${path}; add the hidden tests and checks it needs, then commit it`,
+      ]);
+    });
   }
   if (action !== "run") throw new UsageError("admin eval takes add or run");
   const child = Bun.spawn([...kozodCommand(), "--eval", ...rest], {

@@ -157,13 +157,16 @@ describe("runEvalCase", () => {
     expect(await runEvalCase(file, env.definition, env.deps)).toMatchObject({
       outcome: "attention",
       passed: false,
-      reason: expect.stringContaining("services run only on a worktree at a commit of main"),
+      reason: expect.stringContaining("services run only on a worktree at the eval case's start"),
     });
   }, 180_000);
 
   test("a case on a repository that is not registered is an error", async () => {
     await using env = await setup(() => []);
     expect(resolveRepository(env.definition.factory, "honojs/hono")).toBeNull();
+    expect(
+      await runEvalCase(join(env.dir.path, "evals", "missing.yml"), env.definition, env.deps),
+    ).toMatchObject({ id: "missing", outcome: "error" });
     const file = join(env.dir.path, "evals", "elsewhere.yml");
     await Bun.write(
       file,

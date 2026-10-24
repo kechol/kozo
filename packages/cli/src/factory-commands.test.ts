@@ -59,6 +59,10 @@ describe("the daily commands", () => {
       stderr: expect.stringContaining("kozo up"),
     });
     expect(await kozo("status", "--line")).toMatchObject({ code: 1, stdout: "kozo: down" });
+    expect(await kozo("report")).toMatchObject({
+      code: 1,
+      stderr: expect.stringContaining("kozo: "),
+    });
   });
 
   test("up starts kozod once, and the commands reach it", async () => {

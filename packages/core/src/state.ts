@@ -413,7 +413,8 @@ export function applyEvent(state: FactoryState, event: Event): void {
       });
       if (event.data.kind === "rejection" && event.task === null) subject.rejections += 1;
       // A failed check before the merge, such as CI's, is not a defect of merged code.
-      if (event.data.kind === "check" && task?.merged) task.defectAt = event.ts;
+      // A retried check that fails again is the same defect, so the first failure stands.
+      if (event.data.kind === "check" && task?.merged) task.defectAt ??= event.ts;
       return;
     }
     case "plan.proposed": {

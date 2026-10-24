@@ -858,8 +858,9 @@ export class Runner implements RunnerOps {
       join(itemDirectory(this.home, item.ref), `check-${taskRef.split("/").at(-1)}.log`),
     );
     const failed = `After the merge, the ${level} gates on ${repository.branch} failed, so DONE_WHEN is not met:\n${tail(output)}`;
+    // A task cancelled when the item was split again, or by a human, waits for nothing.
     const last = item.tasks.every(
-      (ref) => ref === taskRef || this.store.state.tasks[ref]?.stage === "complete",
+      (ref) => ref === taskRef || isClosed(this.store.state.tasks[ref]?.stage ?? "cancelled"),
     );
     // Before the item's last task the item cannot go back to Triage, so the task waits, and
     // with it every task that depends on it, until a human retries the check or closes it.
@@ -889,7 +890,10 @@ export class Runner implements RunnerOps {
       deleteBranch: false,
     });
     const owner = this.store.state.items[item.ref];
-    if (!owner || owner.tasks.some((ref) => this.store.state.tasks[ref]?.stage !== "complete"))
+    if (
+      !owner ||
+      owner.tasks.some((ref) => !isClosed(this.store.state.tasks[ref]?.stage ?? "cancelled"))
+    )
       return;
     await this.store.append({
       type: "stage.changed",
@@ -964,34 +968,39 @@ export class Runner implements RunnerOps {
   }
 
   /**
-   * What the plan agent learns of an item that already has tasks: each task with its stage, and,
-   * for a task its implement session stopped for its scope, the question and the split it
-   * proposed, which an agent wrote and so are data.
+   * What the plan agent learns of an item that already has tasks: each task with its stage,
+   * goal and scope, and, for a task its implement session stopped for its scope, the question
+   * and the split it proposed, all as data.
    */
   private async tasksSoFar(itemRef: string): Promise<string[]> {
     const state = this.store.state;
-    const lines: string[] = [];
-    for (const ref of state.items[itemRef]?.tasks ?? []) {
-      const task = state.tasks[ref];
-      if (!task) continue;
-      lines.push(`TASK        ${ref} ${task.stage}: ${task.goal} (scope ${task.scope.join(", ")})`);
-      const last = task.runs.findLast((run) => state.runs[run]?.agent === "implement");
-      if (task.stage !== "cancelled" || !last) continue;
-      const report = runReportSchema.safeParse(
-        await Bun.file(runFiles(this.home, last).report)
-          .json()
-          .catch(() => null),
-      );
-      if (
-        report.success &&
-        report.data.outcome === "blocked" &&
-        report.data.blocked.reason === "scope"
-      )
-        lines.push(
-          `STOPPED     ${ref} could not be done within its scope: ${wrapRequest(JSON.stringify({ question: report.data.blocked.question, split: report.data.blocked.split ?? [] }, null, 2))}`,
+    const tasks = (state.items[itemRef]?.tasks ?? []).flatMap((ref) => state.tasks[ref] ?? []);
+    const entries = await Promise.all(
+      tasks.map(async (task) => {
+        const { ref, stage, goal, scope } = task;
+        const last = task.runs.findLast((run) => state.runs[run]?.agent === "implement");
+        if (stage !== "cancelled" || !last) return { ref, stage, goal, scope };
+        const report = runReportSchema.safeParse(
+          await Bun.file(runFiles(this.home, last).report)
+            .json()
+            .catch(() => null),
         );
-    }
-    return lines;
+        const blocked = report.success && report.data.outcome === "blocked" && report.data.blocked;
+        return blocked && blocked.reason === "scope"
+          ? {
+              ref,
+              stage,
+              goal,
+              scope,
+              stopped: { question: blocked.question, split: blocked.split ?? [] },
+            }
+          : { ref, stage, goal, scope };
+      }),
+    );
+    // Goals and scopes come from plans drafted from the request, so they are data like it.
+    return entries.length === 0
+      ? []
+      : [`TASKS       ${wrapRequest(JSON.stringify(entries, null, 2))}`];
   }
 
   /**
@@ -1033,6 +1042,9 @@ export class Runner implements RunnerOps {
       await this.moveTask(task, "cancelled", null, reason);
       await this.release(ref, true);
     }
+    // A second block while the item is already back in Planning only cancels its own tasks;
+    // the plan agent sees them among the tasks so far.
+    if (this.store.state.items[item.ref]?.stage !== "building") return;
     await this.store.append({ type: "plan.proposed", item: item.ref, data: { plan: item.plan } });
     await this.store.append({
       type: "stage.changed",
