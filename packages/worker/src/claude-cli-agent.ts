@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
@@ -12,7 +13,7 @@ import {
   sessionSandbox,
   toolServer,
 } from "./claude-session.ts";
-import { listenBridge } from "./cli-bridge.ts";
+import { bridgeTokenVariable, listenBridge } from "./cli-bridge.ts";
 import type { CodingAgent } from "./coding-agent.ts";
 
 const quoted = (word: string) => `'${word.replaceAll("'", "'\\''")}'`;
@@ -32,10 +33,13 @@ export function claudeCliAgent(executable: string, helper: readonly string[]): C
       const hooks = sessionHooks(request);
       const reader = sessionReader(request);
       const tools = request.tools ?? [];
-      // mkdtemp makes the directory only this user may open, which keeps the socket the worker's.
       const dir = await mkdtemp(join(tmpdir(), "kozo-cli-"));
       const socket = join(dir, "bridge.sock");
-      const bridge = listenBridge(socket, {
+      // Only the helpers get the token, from files the session's shell may not read, so that a
+      // shell which reaches the socket all the same can neither forge a record nor call a tool.
+      const token = randomBytes(32).toString("hex");
+      const hidden = [...new Set([dir, await realpath(dir)])];
+      const bridge = listenBridge(socket, token, {
         hook: (input) =>
           input.hook_event_name === "PreToolUse"
             ? hooks.preToolUse(input)
@@ -60,7 +64,7 @@ export function claudeCliAgent(executable: string, helper: readonly string[]): C
           hooks: [
             {
               type: "command",
-              command: [...helper, "--hook", socket].map(quoted).join(" "),
+              command: `${bridgeTokenVariable}=${token} ${[...helper, "--hook", socket].map(quoted).join(" ")}`,
               timeout: 86_400,
             },
           ],
@@ -72,7 +76,15 @@ export function claudeCliAgent(executable: string, helper: readonly string[]): C
       await Bun.write(
         settings,
         JSON.stringify({
-          sandbox: sessionSandbox(request),
+          sandbox: sessionSandbox({
+            ...request,
+            sandbox: {
+              denyRead: [...(request.sandbox?.denyRead ?? []), ...hidden],
+              allowRead: request.sandbox?.allowRead ?? [],
+              allowWrite: request.sandbox?.allowWrite ?? [],
+              denyWrite: [...(request.sandbox?.denyWrite ?? []), ...hidden],
+            },
+          }),
           hooks: { PreToolUse: hook, PostToolUse: hook, PostToolUseFailure: hook, Stop: hook },
         }),
       );
@@ -86,6 +98,7 @@ export function claudeCliAgent(executable: string, helper: readonly string[]): C
                     type: "stdio",
                     command: helper[0],
                     args: [...helper.slice(1), "--mcp", socket],
+                    env: { [bridgeTokenVariable]: token },
                   },
                 }
               : {},

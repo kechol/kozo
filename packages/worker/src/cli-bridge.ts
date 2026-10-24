@@ -1,5 +1,9 @@
+import { timingSafeEqual } from "node:crypto";
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import type { UnixSocketListener } from "bun";
+
+/** The variable that gives the helpers, and nothing else in the session, the bridge's token. */
+export const bridgeTokenVariable = "KOZO_BRIDGE_TOKEN";
 
 /** One request a hook command or the MCP server sends to the worker. */
 export type BridgeRequest =
@@ -21,11 +25,21 @@ export interface BridgeHandlers {
 
 type BridgeReply = { ok: true; value: unknown } | { ok: false; error: string };
 
+const sameToken = (given: unknown, token: string) =>
+  typeof given === "string" &&
+  given.length === token.length &&
+  timingSafeEqual(Buffer.from(given), Buffer.from(token));
+
 /**
  * The worker's end of the bridge: a Unix socket at `path` that answers one JSON line with one
- * JSON line per connection. The socket's directory must be one only the worker's user opens.
+ * JSON line per connection, and only a request that carries `token`. The socket's directory
+ * must be one the session's shell may neither read nor write.
  */
-export function listenBridge(path: string, handlers: BridgeHandlers): UnixSocketListener<string> {
+export function listenBridge(
+  path: string,
+  token: string,
+  handlers: BridgeHandlers,
+): UnixSocketListener<string> {
   const answer = async (request: BridgeRequest): Promise<unknown> => {
     if (request.kind === "hook") return await handlers.hook(request.input);
     if (request.kind === "tools") return handlers.tools();
@@ -45,7 +59,9 @@ export function listenBridge(path: string, handlers: BridgeHandlers): UnixSocket
         socket.data = "";
         (async (): Promise<BridgeReply> => {
           try {
-            return { ok: true, value: await answer(JSON.parse(line) as BridgeRequest) };
+            const message = JSON.parse(line) as { token?: unknown; request: BridgeRequest };
+            if (!sameToken(message.token, token)) return { ok: false, error: "not authorized" };
+            return { ok: true, value: await answer(message.request) };
           } catch (error) {
             return { ok: false, error: (error as Error).message };
           }
@@ -59,7 +75,7 @@ export function listenBridge(path: string, handlers: BridgeHandlers): UnixSocket
 }
 
 /** Sends one request to the worker's bridge and returns its value. */
-async function ask(path: string, request: BridgeRequest): Promise<unknown> {
+async function ask(path: string, token: string, request: BridgeRequest): Promise<unknown> {
   let received = "";
   const { promise, resolve, reject } = Promise.withResolvers<unknown>();
   const settle = () => {
@@ -81,7 +97,7 @@ async function ask(path: string, request: BridgeRequest): Promise<unknown> {
       error: settle,
     },
   });
-  socket.write(`${JSON.stringify(request)}\n`);
+  socket.write(`${JSON.stringify({ token, request })}\n`);
   return await promise;
 }
 
@@ -92,13 +108,14 @@ async function ask(path: string, request: BridgeRequest): Promise<unknown> {
  */
 export async function hookMain(
   path: string,
+  token: string,
   input: string,
   out: (text: string) => void,
   err: (text: string) => void,
 ): Promise<number> {
   const hook = JSON.parse(input) as HookInput;
   try {
-    out(JSON.stringify(await ask(path, { kind: "hook", input: hook })));
+    out(JSON.stringify(await ask(path, token, { kind: "hook", input: hook })));
     return 0;
   } catch (error) {
     err(`kozod: the worker did not answer the hook: ${(error as Error).message}`);
@@ -120,6 +137,7 @@ interface RpcMessage {
  */
 export async function mcpMain(
   path: string,
+  token: string,
   input: AsyncIterable<Uint8Array>,
   out: (line: string) => void,
 ): Promise<number> {
@@ -138,10 +156,10 @@ export async function mcpMain(
       case "ping":
         return reply(message.id, {});
       case "tools/list":
-        return reply(message.id, { tools: await ask(path, { kind: "tools" }) });
+        return reply(message.id, { tools: await ask(path, token, { kind: "tools" }) });
       case "tools/call":
         try {
-          const text = await ask(path, {
+          const text = await ask(path, token, {
             kind: "call",
             name: String(message.params?.name),
             arguments: (message.params?.arguments ?? {}) as Record<string, unknown>,

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { claudeCliAgent } from "./claude-cli-agent.ts";
-import { listenBridge, mcpMain } from "./cli-bridge.ts";
+import { bridgeTokenVariable, listenBridge, mcpMain } from "./cli-bridge.ts";
 import type { AgentRecord, AgentRequest } from "./coding-agent.ts";
 
 /**
@@ -32,6 +32,7 @@ say({
     decision,
     prompt: await Bun.stdin.text(),
     sandbox: settings.sandbox.filesystem,
+    shellEnv: process.env.${bridgeTokenVariable} ?? null,
     mcp: JSON.parse(await Bun.file(after("--mcp-config")).text()),
     args,
   },
@@ -42,7 +43,7 @@ say({
 const helperScript = `import { hookMain } from ${JSON.stringify(join(import.meta.dir, "cli-bridge.ts"))};
 const [, , mode, socket] = process.argv;
 if (mode !== "--hook") process.exit(64);
-process.exitCode = await hookMain(socket, await Bun.stdin.text(), (text) => console.log(text), (text) => console.error(text));
+process.exitCode = await hookMain(socket, process.env.${bridgeTokenVariable} ?? "", await Bun.stdin.text(), (text) => console.log(text), (text) => console.error(text));
 `;
 
 function request(cwd: string, records: AgentRecord[]): AgentRequest {
@@ -86,11 +87,18 @@ describe("claudeCliAgent", () => {
         },
       });
       expect(output.prompt).toBe("GOAL x");
-      expect((output.sandbox as { denyRead: string[] }).denyRead).toContain("/x/.kozo");
+      const args = output.args as string[];
+      const sandbox = output.sandbox as { denyRead: string[]; denyWrite: string[] };
+      expect(sandbox.denyRead).toContain("/x/.kozo");
+      // The directory of the socket and the token's files is hidden from the shell.
+      const settingsDir =
+        args[args.indexOf("--settings") + 1]?.replace(/\/settings\.json$/, "") ?? "";
+      expect(sandbox.denyRead).toContain(settingsDir);
+      expect(sandbox.denyWrite).toContain(settingsDir);
+      expect(output.shellEnv).toBeNull();
       expect(output.mcp).toMatchObject({
         mcpServers: { kozo: { type: "stdio", command: process.execPath } },
       });
-      const args = output.args as string[];
       for (const flag of ["--strict-mcp-config", "--no-session-persistence", "--verbose"]) {
         expect(args).toContain(flag);
       }
@@ -113,7 +121,7 @@ describe("the CLI bridge", () => {
     const dir = await mkdtemp(join(tmpdir(), "kozo-bridge-test-"));
     const socket = join(dir, "bridge.sock");
     const calls: unknown[] = [];
-    const bridge = listenBridge(socket, {
+    const bridge = listenBridge(socket, "t0ken", {
       hook: async () => ({}),
       tools: () => [{ name: "kozo_note", description: "Note.", inputSchema: { type: "object" } }],
       call: async (name, input) => {
@@ -139,7 +147,7 @@ describe("the CLI bridge", () => {
         `${messages.map((message) => JSON.stringify(message)).join("\n")}\nnot json\n`,
       ]).stream();
       const out: Record<string, unknown>[] = [];
-      await mcpMain(socket, input, (line) => out.push(JSON.parse(line)));
+      await mcpMain(socket, "t0ken", input, (line) => out.push(JSON.parse(line)));
       const byId = (id: unknown) => out.find((message) => message.id === id);
       expect(byId(1)).toMatchObject({ result: { capabilities: { tools: {} } } });
       expect(byId(2)).toMatchObject({ result: { tools: [{ name: "kozo_note" }] } });
@@ -148,6 +156,17 @@ describe("the CLI bridge", () => {
       expect(byId(null)).toMatchObject({ error: { code: -32700 } });
       expect(out).toHaveLength(5);
       expect(calls).toEqual([{ text: "hi" }, {}]);
+
+      // Without the token, the worker answers nothing and runs nothing.
+      const forged: Record<string, unknown>[] = [];
+      const call = JSON.stringify(messages[3]);
+      await mcpMain(socket, "wrong", new Blob([`${call}\n`]).stream(), (line) =>
+        forged.push(JSON.parse(line)),
+      );
+      expect(forged).toMatchObject([
+        { result: { isError: true, content: [{ text: "not authorized" }] } },
+      ]);
+      expect(calls).toHaveLength(2);
     } finally {
       bridge.stop(true);
       await rm(dir, { recursive: true, force: true });
