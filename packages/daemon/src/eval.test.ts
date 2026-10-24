@@ -124,6 +124,31 @@ describe("runEvalCase", () => {
     expect(await runEvalCase(file, env.definition, env.deps)).toMatchObject({ passed: true });
   }, 120_000);
 
+  test("tears down the services in the clone and the task worktree, back at the case's start", async () => {
+    const dir = await tempDirectory();
+    const marks = join(dir.path, "torn");
+    await using env = await setup(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : suiteImplement()),
+      (text) =>
+        `${text}\nservices:\n  - "true"\nteardown:\n  - "test ! -e src/stock-low.test.ts && pwd >> ${marks}"\n`,
+    );
+    const file = join(env.dir.path, "evals", "torn.yml");
+    await Bun.write(
+      file,
+      `version: 1\nid: torn\nrepository: ${env.repo.path}\nstart: ${env.start}\nrequest:\n  title: Low stock\n  body: Say Only N left.\nexpected:\n  outcome: complete\n  prepare: "true"\n`,
+    );
+    const logged: string[] = [];
+    expect(
+      await runEvalCase(file, env.definition, env.deps, (line) => logged.push(line)),
+    ).toMatchObject({ passed: true });
+    expect(logged.filter((line) => line.includes("teardown"))).toEqual([]);
+    // Both the clone and the task's worktree went back to the start, without the agent's test.
+    const torn = (await Bun.file(marks).text()).trim().split("\n");
+    expect(torn).toHaveLength(2);
+    expect(torn.some((path) => path.includes("K-1-t1"))).toBe(true);
+    await dir[Symbol.asyncDispose]();
+  }, 180_000);
+
   test("never runs services on what the eval merged, which nobody read", async () => {
     const readme = "The docs mention the low-stock notice";
     const split = {

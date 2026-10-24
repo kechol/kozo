@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import {
@@ -16,6 +16,7 @@ import {
   waitsOnOwner,
 } from "@kozo/core";
 import {
+  baseOf,
   type Confine,
   charterPath,
   type Definition,
@@ -37,7 +38,7 @@ import { Reconciler } from "./reconcile.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
 import { takePorts } from "./worktree-ports.ts";
-import { taskBranch } from "./worktrees.ts";
+import { taskBranch, worktreePath } from "./worktrees.ts";
 
 /**
  * The registered repository an eval case names: by its path, its `github` name, or the end of
@@ -234,6 +235,7 @@ export async function runEvalCase(
     const reconciler = new Reconciler(store, runner, log, (ref, work) =>
       scheduler.startWork(ref, work),
     );
+    let item: string | null = null;
     try {
       const documents = await readBaseDocuments(clone, "HEAD");
       if (!documents.ok)
@@ -256,6 +258,7 @@ export async function runEvalCase(
         body,
         repository: clone,
       });
+      item = ref;
       const { outcome, reason } = await drive(
         store,
         control,
@@ -295,12 +298,59 @@ export async function runEvalCase(
       };
     } finally {
       await scheduler.idle();
+      const tasks = item ? (store.state.items[item]?.tasks ?? []) : [];
+      const dirs = [clone, ...tasks.map((task) => worktreePath(home, clone, task))];
+      await tearDown(source, definition.factory.mode, clone, dirs, trustedBase, runner, log);
       store.close();
     }
   } catch (error) {
     return failed(evalCase.id, (error as Error).message, expected.outcome);
   } finally {
     await rm(temp, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Stops what a case's services started, in the clone and in each of its task worktrees: each
+ * goes back to the case's start without its untracked and ignored files, the agent's installed
+ * dependencies among them, since the teardown runs outside the sandbox, and the teardown
+ * commands come from the registered repository's base, which a human merged. A worktree kozod
+ * removed is made again at the same path, as a container project is named after its directory.
+ */
+async function tearDown(
+  source: string,
+  mode: Factory["mode"],
+  clone: string,
+  dirs: readonly string[],
+  start: string,
+  runner: Runner,
+  log: (line: string) => void,
+) {
+  const { ref } = await baseOf(source, mode);
+  const documents = await readBaseDocuments(source, (await git(source, ["rev-parse", ref])).trim());
+  const commands = documents.ok ? documents.constraints.teardown : [];
+  if (commands.length === 0) return;
+  for (const dir of dirs) {
+    try {
+      const present = await stat(dir).then(
+        () => true,
+        () => false,
+      );
+      if (present) {
+        await git(dir, ["checkout", "--quiet", "--force", "--detach", start]);
+        await git(dir, ["clean", "-fdxq"]);
+      } else if (dir !== clone) {
+        await git(clone, ["worktree", "prune"]);
+        await git(clone, ["worktree", "add", "--quiet", "--force", "--detach", dir, start]);
+      }
+      const env = await runner.envFor(dir);
+      for (const command of commands) {
+        const code = await runCommand(command, dir, () => {}, env);
+        if (code !== 0) log(`kozod: eval teardown ${command} exited with ${code} in ${dir}`);
+      }
+    } catch (error) {
+      log(`kozod: eval teardown in ${dir}: ${(error as Error).message}`);
+    }
   }
 }
 
