@@ -52,7 +52,8 @@ const stopped = (signal: AbortSignal) =>
  * A CodingAgent that plays a script instead of calling a model. Each step is one turn; the
  * session ends at the first answer or failure, or as stopped once kozod aborts it. Built-in
  * tool calls go through the request's guard and an answer through its stop-check, as with a
- * real session, but a script cannot react: a stop-check objection fails the session.
+ * real session: an objection sends the script on to its next step, and fails the session when
+ * no step is left.
  */
 export function fakeAgent(script: FakeScript): FakeAgent {
   const requests: AgentRequest[] = [];
@@ -73,7 +74,7 @@ export function fakeAgent(script: FakeScript): FakeAgent {
       let costUsd = 0;
       let turns = 0;
       let calls = 0;
-      for (const step of steps) {
+      for (const [index, step] of steps.entries()) {
         if (request.signal.aborted) return { status: "stopped", costUsd, turns };
         turns += 1;
         if ("say" in step) {
@@ -148,6 +149,7 @@ export function fakeAgent(script: FakeScript): FakeAgent {
           return { status: "stopped", costUsd, turns };
         } else if ("answer" in step) {
           const objection = (await request.beforeStop?.()) ?? null;
+          if (objection !== null && index < steps.length - 1) continue;
           if (objection !== null) {
             return { status: "failed", reason: `stop-check: ${objection}`, costUsd, turns };
           }

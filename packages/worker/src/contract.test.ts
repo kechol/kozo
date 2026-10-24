@@ -2,13 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { sha256 } from "@kozo/core";
 import { fakeAgent, gitRepository } from "@kozo/testing";
+import { z } from "zod";
 import { claudeAgent } from "./claude-agent.ts";
 import { claudeCliAgent } from "./claude-cli-agent.ts";
 import type { AgentRecord, AgentRequest, CodingAgent, Instruction } from "./coding-agent.ts";
 import { factoryGitEnvironment } from "./git-environment.ts";
 import { guardToolCall } from "./guard.ts";
 
-type Scenario = "answer" | "instruction" | "stop";
+type Scenario = "answer" | "instruction" | "stop" | "objection";
 
 const answerSchema = {
   type: "object",
@@ -23,6 +24,7 @@ const prompts: Record<Scenario, string> = {
   instruction:
     'Run `sleep 1` with Bash once. Then answer with the single word that an instruction from the owner gives you, or "none" if no instruction arrived.',
   stop: "Run `sleep 60` with Bash, then answer with the word done.",
+  objection: 'Answer with the word "cherry".',
 };
 
 const scripts: Record<Scenario, Parameters<typeof fakeAgent>[0]> = {
@@ -38,6 +40,11 @@ const scripts: Record<Scenario, Parameters<typeof fakeAgent>[0]> = {
     { answer: { word: "pineapple" } },
   ],
   stop: [{ tool: "Bash", input: { command: "sleep 60" }, output: "" }, { hang: true }],
+  objection: [
+    { answer: { word: "cherry" } },
+    { use: "kozo_word", input: { color: "blue" } },
+    { answer: { word: "ocean" } },
+  ],
 };
 
 interface Implementation {
@@ -120,6 +127,28 @@ for (const implementation of implementations) {
         data: { queue_seq: 0, text: "The word is pineapple." },
       });
       expect(outcome).toMatchObject({ status: "answered", output: { word: "pineapple" } });
+    }, 180_000);
+
+    test("sends the agent back when the stop-check objects to its answer", async () => {
+      await using repo = await gitRepository();
+      const { value } = request(repo.path, "objection", implementation.model);
+      const calls: unknown[] = [];
+      value.tools = [
+        {
+          name: "kozo_word",
+          description: "Returns the word for a color.",
+          input: { color: z.string() },
+          run: async (input) => {
+            calls.push(input);
+            return "ocean";
+          },
+        },
+      ];
+      value.beforeStop = async () =>
+        calls.length === 0 ? "Call kozo_word with the color blue before you finish." : null;
+      const outcome = await implementation.agent("objection").run(value);
+      expect(outcome).toMatchObject({ status: "answered" });
+      expect(calls).toContainEqual({ color: "blue" });
     }, 180_000);
 
     test("stops when the signal aborts", async () => {

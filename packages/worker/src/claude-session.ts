@@ -46,7 +46,8 @@ function deliveredContext(instructions: Instruction[]) {
 /**
  * The session's hooks, each taking a hook's input and returning its output, whether Claude Code
  * calls them in the worker through the Agent SDK or as commands. The guard decides every tool
- * call, the calls are recorded, and queued instructions arrive after a tool or at a stop.
+ * call, the calls are recorded, and queued instructions arrive after a tool, at the agent's
+ * answer or at a stop.
  */
 export function sessionHooks(request: AgentRequest) {
   const deliver = async () => {
@@ -60,6 +61,21 @@ export function sessionHooks(request: AgentRequest) {
     return instructions;
   };
 
+  /** Why the agent may not finish yet: instructions that arrived, or the stop-check's message. */
+  const objection = async (): Promise<string | null> => {
+    const instructions = await deliver();
+    if (instructions.length > 0) return deliveredContext(instructions);
+    return (await request.beforeStop?.()) ?? null;
+  };
+
+  const deny = (reason: string): HookJSONOutput => ({
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: reason,
+    },
+  });
+
   const recordCall = (input: { tool_use_id: string; tool_name: string; tool_input: unknown }) =>
     request.record({
       type: "tool.call",
@@ -70,19 +86,18 @@ export function sessionHooks(request: AgentRequest) {
     async preToolUse(input: HookInput): Promise<HookJSONOutput> {
       if (input.hook_event_name !== "PreToolUse") return {};
       const decision = await request.guard(input.tool_name, input.tool_input);
-      if (decision.allow) return {};
+      if (decision.allow) {
+        // Claude Code ends a session at its structured answer whatever the Stop hook says, so
+        // the answer itself is where the agent can still be sent back.
+        const reason = input.tool_name === "StructuredOutput" ? await objection() : null;
+        return reason === null ? {} : deny(reason);
+      }
       recordCall(input);
       request.record({
         type: "guard.denied",
         data: { call_id: input.tool_use_id, tool: input.tool_name, reason: decision.reason },
       });
-      return {
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason: decision.reason,
-        },
-      };
+      return deny(decision.reason);
     },
 
     async afterTool(input: HookInput): Promise<HookJSONOutput> {
@@ -116,12 +131,8 @@ export function sessionHooks(request: AgentRequest) {
     },
 
     async stop(): Promise<HookJSONOutput> {
-      const instructions = await deliver();
-      if (instructions.length > 0) {
-        return { decision: "block", reason: deliveredContext(instructions) };
-      }
-      const objection = (await request.beforeStop?.()) ?? null;
-      return objection === null ? {} : { decision: "block", reason: objection };
+      const reason = await objection();
+      return reason === null ? {} : { decision: "block", reason };
     },
   };
 }
