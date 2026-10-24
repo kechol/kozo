@@ -201,7 +201,10 @@ export async function runEvalCase(
   }
   const temp = await realpath(await mkdtemp(join(tmpdir(), "kozo-eval-")));
   try {
-    const clone = join(temp, basename(source));
+    // A container project is named after its directory, so the clone's name is the eval's own,
+    // never that of the owner's working copy, whose database the services and the teardown
+    // would otherwise reuse and remove.
+    const clone = join(temp, `${basename(source)}-${basename(temp)}`);
     await git(temp, ["clone", "--quiet", "--no-checkout", source, clone]);
     await git(clone, ["checkout", "--quiet", "-B", "main", evalCase.start]);
     await git(clone, ["remote", "remove", "origin"]);

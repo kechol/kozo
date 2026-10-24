@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { kozoHome } from "@kozo/core";
 import {
   type FakeStep,
@@ -146,6 +146,8 @@ describe("runEvalCase", () => {
     const torn = (await Bun.file(marks).text()).trim().split("\n");
     expect(torn).toHaveLength(2);
     expect(torn.some((path) => path.includes("K-1-t1"))).toBe(true);
+    // No directory the teardown ran in has the name of the registered repository's own.
+    expect(torn.some((path) => basename(path) === basename(env.repo.path))).toBe(false);
     await dir[Symbol.asyncDispose]();
   }, 180_000);
 
