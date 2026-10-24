@@ -61,36 +61,35 @@ function planned(write = eventWriter(), accepted = plan()): Event[] {
 }
 
 describe("replay", () => {
-  test("a failed check is a defect only once the task is merged", () => {
+  test("a defect is a task.defect on a merged task, dated by the first", () => {
+    const write = eventWriter();
     const task = { item: "K-1", task: "K-1/t1" };
-    const run = (merge: boolean) => {
-      const write = eventWriter();
-      return replay([
-        ...planned(write),
-        ...(merge
-          ? [
-              write(
-                "branch.merged",
-                {
-                  branch: "kozo/k3x9q2/K-1-t1",
-                  head: "a1b2c3d",
-                  into: "main",
-                  commit: null,
-                  committer: null,
-                },
-                task,
-              ),
-            ]
-          : []),
-        write("note.added", { kind: "check", text: "the checks failed" }, task),
-        write("note.added", { kind: "check", text: "they failed again" }, task),
-      ]);
-    };
-    expect(run(false).tasks["K-1/t1"]?.defectAt).toBeNull();
-    // A retried check that fails again is the same defect, dated by its first failure.
-    const merged = run(true);
-    const first = merged.items["K-1"]?.notes.find((note) => note.kind === "check");
-    expect(merged.tasks["K-1/t1"]?.defectAt).toBe(first?.ts ?? "");
+    const events = [
+      ...planned(write),
+      write("note.added", { kind: "check", text: "CI failed before the merge" }, task),
+    ];
+    expect(replay(events).tasks["K-1/t1"]?.defectAt).toBeNull();
+    expect(() => replay([...events, write("task.defect", { reason: "too early" }, task)])).toThrow(
+      "is not merged",
+    );
+    const after = eventWriter();
+    const merged = [
+      ...planned(after),
+      after(
+        "branch.merged",
+        {
+          branch: "kozo/k3x9q2/K-1-t1",
+          head: "a1b2c3d",
+          into: "main",
+          commit: null,
+          committer: null,
+        },
+        task,
+      ),
+    ];
+    const first = after("task.defect", { reason: "the gates failed" }, task);
+    const state = replay([...merged, first, after("task.defect", { reason: "again" }, task)]);
+    expect(state.tasks["K-1/t1"]?.defectAt).toBe(first.ts);
   });
 
   test("an item keeps the class its request asked for and who accepted its plan", () => {

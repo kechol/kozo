@@ -82,8 +82,10 @@ function failures(db: Database, state: FactoryState, since: string): Failure[] {
   // A defect is the state's, so that the list and the defect rate count the same ones.
   const defects = Object.values(state.tasks).flatMap((task): Failure[] => {
     if (task.defectAt === null || task.defectAt < since) return [];
-    const note = state.items[task.item]?.notes.find(
-      (candidate) => candidate.target === task.ref && candidate.ts === task.defectAt,
+    const at = task.defectAt;
+    const note = state.items[task.item]?.notes.findLast(
+      (candidate) =>
+        candidate.target === task.ref && candidate.kind === "check" && candidate.ts <= at,
     );
     return [{ kind: "defect", ref: task.ref, at: task.defectAt, text: note?.text ?? "" }];
   });

@@ -78,6 +78,7 @@ const examples: Record<EventType, unknown> = {
   "hold.cleared": { target: "item", hold: "approval", by: "human" },
   "note.added": { kind: "answer", text: "Show Sold out for zero." },
   "task.returned": {},
+  "task.defect": { reason: "the full gates failed on main after the merge" },
   "item.reordered": { before: null },
   "plan.proposed": { plan },
   "plan.accepted": { plan, by: "kozod" },

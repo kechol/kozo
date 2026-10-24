@@ -83,7 +83,7 @@ export interface TaskState {
   sentBack: boolean;
   /** When the task last reached Handoff, or null before it did. */
   handedOffAt: string | null;
-  /** When a check after the task's merge failed, a post-merge defect, or null. */
+  /** When a check after the task's merge first failed, from `task.defect`, or null. */
   defectAt: string | null;
   /** The plan's tier, or the higher one kozod rated the task's diff at. */
   risk: RiskTier;
@@ -413,8 +413,6 @@ export function applyEvent(state: FactoryState, event: Event): void {
       });
       if (event.data.kind === "rejection" && event.task === null) subject.rejections += 1;
       // A failed check before the merge, such as CI's, is not a defect of merged code.
-      // A retried check that fails again is the same defect, so the first failure stands.
-      if (event.data.kind === "check" && task?.merged) task.defectAt ??= event.ts;
       return;
     }
     case "plan.proposed": {
@@ -538,6 +536,13 @@ export function applyEvent(state: FactoryState, event: Event): void {
       }
       subject.risk = event.data.to;
       subject.updatedAt = event.ts;
+      return;
+    }
+    case "task.defect": {
+      const subject = required(task, `task ${event.task}`);
+      if (!subject.merged) throw new StateError(`${subject.ref} is not merged`);
+      // A retried check that fails again is the same defect, so the first failure stands.
+      subject.defectAt ??= event.ts;
       return;
     }
     case "task.returned": {

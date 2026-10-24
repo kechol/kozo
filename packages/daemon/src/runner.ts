@@ -874,6 +874,12 @@ export class Runner implements RunnerOps {
         task: taskRef,
         data: { kind: "check", text: failed },
       });
+      await this.store.append({
+        type: "task.defect",
+        item: item.ref,
+        task: taskRef,
+        data: { reason: `the ${level} gates failed on ${repository.branch} after the merge` },
+      });
       await this.hold(
         item.ref,
         taskRef,
@@ -910,7 +916,6 @@ export class Runner implements RunnerOps {
       },
     });
     if (result.status !== "pass") {
-      // The note names the task, which the defect is counted against.
       await this.store.append({
         type: "note.added",
         item: item.ref,
@@ -919,6 +924,12 @@ export class Runner implements RunnerOps {
           kind: "check",
           text: failed,
         },
+      });
+      await this.store.append({
+        type: "task.defect",
+        item: item.ref,
+        task: taskRef,
+        data: { reason: `the ${level} gates failed on ${repository.branch} after the merge` },
       });
       await this.store.append({
         type: "stage.changed",

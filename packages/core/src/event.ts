@@ -192,6 +192,8 @@ export const eventSchema = z
     event("task.returned", z.strictObject({})),
     event("plan.proposed", z.strictObject({ plan: planSchema })),
     event("plan.accepted", z.strictObject({ plan: planSchema, by: actor })),
+    /** A check on the default branch failed after the task's merge, a post-merge defect. */
+    event("task.defect", z.strictObject({ reason: text })),
     /** kozod re-rated the event's task from its diff; a tier only ever goes up. */
     event(
       "risk.raised",
