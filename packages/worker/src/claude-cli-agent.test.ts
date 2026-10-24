@@ -33,7 +33,7 @@ say({
     prompt: await Bun.stdin.text(),
     sandbox: settings.sandbox.filesystem,
     tokenInCommand: settings.hooks.PreToolUse[0].hooks[0].command.includes(
-      (await Bun.file(after("--settings").replace(/settings\.json$/, "token")).text()).trim(),
+      (await Bun.file(after("--settings").replace(/settings\\.json$/, "token")).text()).trim(),
     ),
     mcp: JSON.parse(await Bun.file(after("--mcp-config")).text()),
     args,
