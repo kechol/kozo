@@ -60,7 +60,6 @@ export function parseFactoryConfig(text: string, issues: string[]): Factory | nu
     return null;
   }
   const factory = result.data;
-  if (factory.runtime !== "sdk") issues.push("factory.yml: only runtime: sdk runs in this version");
   return {
     ...factory,
     repositories: factory.repositories.map((repository) => ({

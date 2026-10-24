@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import { sha256 } from "@kozo/core";
 import { fakeAgent, gitRepository } from "@kozo/testing";
 import { claudeAgent } from "./claude-agent.ts";
+import { claudeCliAgent } from "./claude-cli-agent.ts";
 import type { AgentRecord, AgentRequest, CodingAgent, Instruction } from "./coding-agent.ts";
 import { factoryGitEnvironment } from "./git-environment.ts";
 import { guardToolCall } from "./guard.ts";
@@ -52,6 +54,13 @@ if (process.env.KOZO_LIVE === "1" && claude) {
   implementations.push({
     name: "Agent SDK adapter",
     agent: () => claudeAgent(claude),
+    model: "claude-haiku-5-5",
+  });
+  // kozod's own entry point, which serves the hooks and the tools of a CLI session.
+  const kozod = [process.execPath, join(import.meta.dir, "../../daemon/src/main.ts")];
+  implementations.push({
+    name: "CLI adapter",
+    agent: () => claudeCliAgent(claude, kozod),
     model: "claude-haiku-5-5",
   });
 }

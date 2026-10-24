@@ -12,7 +12,8 @@ async function suite() {
   await repo.commit(suiteBase, "the suite shop");
   await repo.git("switch", "--quiet", "-c", "kozo/k3x9q2/K-1-t1");
   const spec: WorkerSpec = {
-    version: 2,
+    version: 3,
+    runtime: "sdk",
     run: "r-0001",
     agent: "implement",
     model: "fake",
@@ -190,7 +191,7 @@ describe("runSession", () => {
     await workerMain(
       specPath,
       (line) => lines.push(line),
-      fakeAgent([{ say: "hello" }, { answer: { ok: true } }]),
+      () => fakeAgent([{ say: "hello" }, { answer: { ok: true } }]),
       testConfine,
     );
     expect(lines.map((line) => Object.keys(JSON.parse(line))[0])).toEqual([

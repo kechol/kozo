@@ -8,7 +8,7 @@ import {
   platformConfine,
   readDefinition,
 } from "@kozo/verify";
-import { workerMain } from "@kozo/worker";
+import { claudeAgentFor, hookMain, mcpMain, workerMain } from "@kozo/worker";
 import pkg from "../package.json" with { type: "json" };
 import { Daemon, kozodCommand } from "./daemon.ts";
 import { EgressProxy, hostAllowed } from "./egress.ts";
@@ -29,6 +29,8 @@ Runs kozod in the foreground until it receives SIGINT or SIGTERM.
 Options:
   --version        Print the version
   --worker <spec>  Run one agent session for kozod (internal)
+  --hook <socket>  Pass a hook of a claude -p session to its worker (internal)
+  --mcp <socket>   Serve a claude -p session the worker's tools over stdio (internal)
   --eval [<case>...]
                    Run the factory definition's eval cases, or the named ones, each in
                    a throwaway factory home, and print the results as JSON`;
@@ -127,7 +129,15 @@ export async function run(args: readonly string[], out: Output): Promise<number>
   const [option] = args;
   if (option === undefined) return await serve(out);
   if (option === "--eval") return await evaluate(args.slice(1), out);
-  if (option === "--worker" && args[1]) return await workerMain(args[1], out.stdout);
+  if (option === "--worker" && args[1]) {
+    return await workerMain(args[1], out.stdout, (spec) =>
+      claudeAgentFor(spec.runtime, kozodCommand()),
+    );
+  }
+  if (option === "--hook" && args[1]) {
+    return await hookMain(args[1], await Bun.stdin.text(), out.stdout, out.stderr);
+  }
+  if (option === "--mcp" && args[1]) return await mcpMain(args[1], Bun.stdin.stream(), out.stdout);
   if (option === "--version") {
     out.stdout(`kozod ${pkg.version}`);
     return ExitCode.success;

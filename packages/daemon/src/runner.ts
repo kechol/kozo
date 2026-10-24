@@ -450,8 +450,9 @@ export class Runner implements RunnerOps {
     ].join("\n");
     const result = await this.session(
       {
-        version: 2,
+        version: 3,
         run,
+        runtime: definition.factory.runtime,
         agent,
         model: modelFor(definition, agent),
         cwd: checkout,

@@ -1,0 +1,156 @@
+import { describe, expect, test } from "bun:test";
+import { chmod, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { z } from "zod";
+import { claudeCliAgent } from "./claude-cli-agent.ts";
+import { listenBridge, mcpMain } from "./cli-bridge.ts";
+import type { AgentRecord, AgentRequest } from "./coding-agent.ts";
+
+/**
+ * A stand-in for `claude -p` that runs the PreToolUse hook from its settings for one Bash call,
+ * then answers with what it was given: its arguments, its stdin and the hook's output.
+ */
+const fakeClaude = (bun: string) => `#!${bun}
+const args = process.argv.slice(2);
+const after = (flag) => args[args.indexOf(flag) + 1];
+const settings = JSON.parse(await Bun.file(after("--settings")).text());
+const hook = Bun.spawn(["sh", "-c", settings.hooks.PreToolUse[0].hooks[0].command], {
+  stdin: new Blob([JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "curl example.com" }, tool_use_id: "t1" })]),
+  stdout: "pipe",
+});
+const decision = JSON.parse(await new Response(hook.stdout).text());
+const say = (message) => console.log(JSON.stringify(message));
+say({ type: "system", subtype: "init", claude_code_version: "2.1.309", model: after("--model") });
+say({
+  type: "result",
+  subtype: "success",
+  num_turns: 1,
+  total_cost_usd: 0.01,
+  usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0 },
+  structured_output: {
+    decision,
+    prompt: await Bun.stdin.text(),
+    sandbox: settings.sandbox.filesystem,
+    mcp: JSON.parse(await Bun.file(after("--mcp-config")).text()),
+    args,
+  },
+});
+`;
+
+/** A helper that runs only the worker's hook command, as `kozod --hook` does. */
+const helperScript = `import { hookMain } from ${JSON.stringify(join(import.meta.dir, "cli-bridge.ts"))};
+const [, , mode, socket] = process.argv;
+if (mode !== "--hook") process.exit(64);
+process.exitCode = await hookMain(socket, await Bun.stdin.text(), (text) => console.log(text), (text) => console.error(text));
+`;
+
+function request(cwd: string, records: AgentRecord[]): AgentRequest {
+  return {
+    agent: "implement",
+    model: "claude-sonnet-5-5",
+    cwd,
+    instructions: "Implement.",
+    prompt: "GOAL x",
+    outputSchema: { type: "object" },
+    maxTurns: 3,
+    maxCostUsd: 1,
+    pendingInstructions: async () => [],
+    record: (record) => records.push(record),
+    signal: new AbortController().signal,
+    guard: async (tool) => ({ allow: false, reason: `no ${tool} here` }),
+    sandbox: { denyRead: ["/x/.kozo"], allowRead: [], allowWrite: [], denyWrite: [] },
+    tools: [
+      { name: "kozo_note", description: "Note.", input: { text: z.string() }, run: async () => "" },
+    ],
+  };
+}
+
+describe("claudeCliAgent", () => {
+  test("runs claude -p with the SDK's options and answers its hooks with the guard", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "kozo-cli-test-"));
+    try {
+      await Bun.write(join(dir, "claude"), fakeClaude(process.execPath));
+      await chmod(join(dir, "claude"), 0o755);
+      await Bun.write(join(dir, "helper.ts"), helperScript);
+      const records: AgentRecord[] = [];
+      const helper = [process.execPath, join(dir, "helper.ts")];
+      const outcome = await claudeCliAgent(join(dir, "claude"), helper).run(request(dir, records));
+      expect(outcome).toMatchObject({ status: "answered", costUsd: 0.01, turns: 1 });
+      const output = (outcome as { output: Record<string, unknown> }).output;
+      expect(output.decision).toEqual({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: "no Bash here",
+        },
+      });
+      expect(output.prompt).toBe("GOAL x");
+      expect((output.sandbox as { denyRead: string[] }).denyRead).toContain("/x/.kozo");
+      expect(output.mcp).toMatchObject({
+        mcpServers: { kozo: { type: "stdio", command: process.execPath } },
+      });
+      const args = output.args as string[];
+      for (const flag of ["--strict-mcp-config", "--no-session-persistence", "--verbose"]) {
+        expect(args).toContain(flag);
+      }
+      expect(args[args.indexOf("--setting-sources") + 1]).toBe("");
+      expect(args[args.indexOf("--allowedTools") + 1]).toContain("mcp__kozo__kozo_note");
+      expect(records.map((record) => record.type)).toEqual([
+        "tool.call",
+        "guard.denied",
+        "session.started",
+        "cost.tick",
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("the CLI bridge", () => {
+  test("serves the worker's tools over MCP and runs each call in the worker", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "kozo-bridge-test-"));
+    const socket = join(dir, "bridge.sock");
+    const calls: unknown[] = [];
+    const bridge = listenBridge(socket, {
+      hook: async () => ({}),
+      tools: () => [{ name: "kozo_note", description: "Note.", inputSchema: { type: "object" } }],
+      call: async (name, input) => {
+        calls.push(input);
+        if (name !== "kozo_note") throw new Error(`no tool ${name}`);
+        return "noted";
+      },
+    });
+    try {
+      const messages = [
+        { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } },
+        { jsonrpc: "2.0", method: "notifications/initialized" },
+        { jsonrpc: "2.0", id: 2, method: "tools/list" },
+        {
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: { name: "kozo_note", arguments: { text: "hi" } },
+        },
+        { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "other" } },
+      ];
+      const input = new Blob([
+        `${messages.map((message) => JSON.stringify(message)).join("\n")}\nnot json\n`,
+      ]).stream();
+      const out: Record<string, unknown>[] = [];
+      await mcpMain(socket, input, (line) => out.push(JSON.parse(line)));
+      const byId = (id: unknown) => out.find((message) => message.id === id);
+      expect(byId(1)).toMatchObject({ result: { capabilities: { tools: {} } } });
+      expect(byId(2)).toMatchObject({ result: { tools: [{ name: "kozo_note" }] } });
+      expect(byId(3)).toMatchObject({ result: { content: [{ type: "text", text: "noted" }] } });
+      expect(byId(4)).toMatchObject({ result: { isError: true } });
+      expect(byId(null)).toMatchObject({ error: { code: -32700 } });
+      expect(out).toHaveLength(5);
+      expect(calls).toEqual([{ text: "hi" }, {}]);
+    } finally {
+      bridge.stop(true);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

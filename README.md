@@ -12,7 +12,8 @@ and hands you a small diff to read. Merging always stays with you.
 
 - [Bun](https://bun.sh) 1.4.2, the version pinned in `package.json`
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) on `PATH`, signed in
-  with `claude auth login`; kozo runs its agents through the Agent SDK
+  with `claude auth login`; kozo runs its agents through the Agent SDK, or as `claude -p`
+  with `runtime: cli` in `factory.yml`
 - macOS, or Linux with [bubblewrap](https://github.com/containers/bubblewrap) (`bwrap`)
   allowed to create user namespaces, which kozo confines the gates with, and
   [socat](http://www.dest-unreach.org/socat/) when a repository's gates use the services it

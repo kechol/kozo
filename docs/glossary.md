@@ -87,6 +87,7 @@
 | characterization task | A plan task that only adds tests pinning behaviour its item keeps, which prove checks pass without the item's change. | `characterize: true` | - | - |
 | checkpoint | A recorded point at a node entry from which a new run can resume. | `checkpoint` | snapshot | - |
 | child run | A run in a separate session, such as review, that is grouped under its parent run. | `parent_run` | sub-run | - |
+| CLI bridge | The Unix socket of a worker through which the hooks and the MCP server of a `claude -p` session, kozod's own executable started by Claude Code, pass each call to the worker. | `listenBridge`, `kozod --hook`, `kozod --mcp` | - | - |
 | codemod | One shell command in a plan task that rewrites code mechanically, which kozod runs in the worktree before the task's first implement session and commits as kozo. | `codemod` | script, transform | - |
 | command sandbox | The sandbox of kozo's own in which the diff's commands of prepare, the gates and prove run, as opposed to Claude Code's sandbox around an agent's shell. | `CommandSandbox`, `seatbeltProfile` | jail | - |
 | decision log | The per-run file in which the agent records, one line each, what it chose and why. | `decisions.md` in the run directory, `kozo_note` | - | - |
@@ -96,6 +97,7 @@
 | run | One agent attempt in a new session, identified as `r-<nnnn>`. | `run_id` | attempt, job, session | - |
 | run report | The JSON that the worker writes at the end of a run in the schema that the brief specifies. | `report.json` | - | - |
 | run state | The lifecycle state of a run: queued, running, paused, succeeded, failed, stopped or lost. | `run.*` | - | - |
+| runtime | How workers run Claude Code: `sdk` through the Agent SDK in the worker, or `cli` as a `claude -p` process with the CLI bridge. | `runtime` in `factory.yml` | - | - |
 | task branch | The branch that holds one task's diff under the factory ID, whose creation claims the task. | `kozo/<factory ID>/<item>-t<n>` | - | - |
 | thread | The runs and instructions that belong to one task, with at most one running run at a time. | task reference | conversation | - |
 | worktree | The git worktree that kozod creates for one task from the latest default branch. | `~/.kozo/worktrees/<repository>-<path hash>-<item>-t<n>` | checkout, workspace | - |

@@ -2,6 +2,7 @@
 # repository, together with agents/ and skills/; commit a change for it to take effect.
 version: 1
 mode: local
+# How agents run your own claude: sdk through the Agent SDK, or cli as `claude -p`.
 runtime: sdk
 # The repositories kozo works in, each a local clone; add one before `kozo add`. In GitHub mode
 # each also names its GitHub repository, and an optional label takes only the Issues that carry it:
