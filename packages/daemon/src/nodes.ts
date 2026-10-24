@@ -95,15 +95,22 @@ const prepare: NodeStep = async (run) => {
   if (constraints.ports > 0) await takePorts(worktree, constraints.ports);
   const env = await run.env();
   const steps = [
-    ...constraints.services.map((command) => ({ command, confined: undefined, env })),
+    ...constraints.services.map((command) => ({ command, confined: undefined, prepare: false })),
     ...constraints.prepare.map((command) => ({
       command,
       confined: runner.confined(worktree, true),
-      env: { ...env, ...runner.proxyEnvironment() },
+      prepare: true,
     })),
   ];
-  for (const { command, confined, env } of steps) {
-    const code = await runCommand(command, worktree, (text) => void run.log(text), env, confined);
+  for (const { command, confined, prepare } of steps) {
+    const egress = prepare ? runner.egressFor() : { env: {}, revoke: () => {} };
+    const code = await runCommand(
+      command,
+      worktree,
+      (text) => void run.log(text),
+      { ...env, ...egress.env },
+      confined,
+    ).finally(egress.revoke);
     if (code !== 0) {
       return await run.halt("prepare", {
         hold: "attention",

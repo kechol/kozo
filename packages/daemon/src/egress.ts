@@ -85,15 +85,35 @@ function indexOf(bytes: Uint8Array, needle: Uint8Array): number {
   return -1;
 }
 
+/** The most refused hosts kozod keeps and reports, so a stream of requests cannot grow it. */
+const refusedLimit = 100;
+const hostname = /^[a-z0-9.-]{1,253}$/;
+
 /**
  * kozod's egress proxy for prepare: on 127.0.0.1, it opens a CONNECT tunnel to port 443 of a
- * host `allowed` accepts and refuses anything else, reporting each refused host once.
+ * host `allowed` accepts, for a request that carries a token kozod issued for one prepare
+ * command, and refuses anything else, reporting each refused host once.
  */
 export class EgressProxy {
   private constructor(
     private readonly server: TCPSocketListener<Client>,
     readonly refused: Set<string>,
+    private readonly tokens: Set<string>,
   ) {}
+
+  /**
+   * A token for one prepare command and the proxy URL that carries it, which the command's
+   * tools send as Proxy-Authorization; other commands on this machine, such as the gates, have
+   * none. The token stops working once `revoke` is called.
+   */
+  issue(): { url: string; revoke: () => void } {
+    const token = Bun.randomUUIDv7().replaceAll("-", "");
+    this.tokens.add(token);
+    return {
+      url: `http://kozo:${token}@127.0.0.1:${this.port}`,
+      revoke: () => this.tokens.delete(token),
+    };
+  }
 
   get port(): number {
     return this.server.port;
@@ -106,13 +126,22 @@ export class EgressProxy {
     tunnelPort = 443,
   ) {
     const refused = new Set<string>();
+    const tokens = new Set<string>();
     const refuse = (client: Socket<Client>, host: string) => {
-      if (!refused.has(host)) {
-        refused.add(host);
-        report(`kozod: prepare may not reach ${host}; add it to prepare_hosts in factory.yml`);
+      // Only a host name is kept and reported; anything else a request said is not repeated.
+      const name = hostname.test(host) ? host : "a malformed request";
+      if (!refused.has(name) && refused.size < refusedLimit) {
+        refused.add(name);
+        report(`kozod: prepare may not reach ${name}; add it to prepare_hosts in factory.yml`);
       }
       client.write(forbidden);
       client.end();
+    };
+    const authorized = (head: string) => {
+      const header = head.match(/^proxy-authorization: *basic +([A-Za-z0-9+/=]+) *$/im)?.[1];
+      if (!header) return false;
+      const [, token] = atob(header).split(":");
+      return token !== undefined && tokens.has(token);
     };
     const server = Bun.listen<Client>({
       hostname: "127.0.0.1",
@@ -141,11 +170,17 @@ export class EgressProxy {
             else state.head = head;
             return;
           }
-          const line = new TextDecoder().decode(head.subarray(0, end)).split("\r\n")[0] ?? "";
+          const request = new TextDecoder().decode(head.subarray(0, end));
+          const line = request.split("\r\n")[0] ?? "";
           const match = line.match(/^CONNECT ([A-Za-z0-9.-]+):(\d+) HTTP\/1\.[01]$/);
           const host = match?.[1]?.toLowerCase() ?? "";
-          if (!match || match[2] !== String(tunnelPort))
-            return refuse(client, line.split(" ")[1] ?? line);
+          if (!match || match[2] !== String(tunnelPort)) return refuse(client, "");
+          // Without a token kozod issued, the request is not prepare's, so nothing is reported.
+          if (!authorized(request)) {
+            client.write(forbidden);
+            client.end();
+            return;
+          }
           if (!allowed(host)) return refuse(client, host);
           state.opening = true;
           const rest = head.subarray(end + crlf2.length);
@@ -191,7 +226,7 @@ export class EgressProxy {
         },
       },
     });
-    return new EgressProxy(server, refused);
+    return new EgressProxy(server, refused, tokens);
   }
 
   stop() {

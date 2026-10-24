@@ -133,7 +133,7 @@ export class Daemon {
       verifier: claudeVerifier(claude),
       definition,
       confine: confined,
-      egress: egress.port,
+      egress,
     });
     const control = new ControlPlane(home, store, definition, runner);
     const scheduler = new Scheduler(store, runner, definition, report);

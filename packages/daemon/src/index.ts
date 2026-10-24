@@ -93,7 +93,7 @@ async function evaluate(names: readonly string[], out: Output): Promise<number> 
     (line) => out.stderr(line),
   );
   const deps = {
-    egress: egress.port,
+    egress,
     launcher: processLauncher(kozodCommand()),
     judge: claudeJudge(claude),
     verifier: claudeVerifier(claude),

@@ -30,6 +30,7 @@ import {
 import { commitIdentity } from "@kozo/worker";
 import { CommandError } from "./api.ts";
 import { ControlPlane } from "./control-plane.ts";
+import type { EgressProxy } from "./egress.ts";
 import { EventStore } from "./event-store.ts";
 import { readItemFile } from "./item-file.ts";
 import type { Launcher } from "./launcher.ts";
@@ -116,8 +117,8 @@ export interface EvalDeps {
   judge: Judge;
   verifier: Verifier;
   confine: Confine;
-  /** The port of kozod's egress proxy for prepare; without it prepare reaches any host. */
-  egress?: number;
+  /** kozod's egress proxy for prepare; without it prepare reaches any host. */
+  egress?: Pick<EgressProxy, "issue" | "port">;
   /** The body of an upstream issue, for a case that names one instead of copying it. */
   issueBody?: (url: string) => Promise<string>;
 }
@@ -282,16 +283,23 @@ export async function runEvalCase(
           ...prepare.map((command) => ({
             command,
             confined: runner.confined(clone, true),
-            env: { ...env, ...runner.proxyEnvironment() },
+            prepare: true,
           })),
           ...(expected.checks ?? []).map((command) => ({
             command,
             confined: runner.confined(clone),
-            env,
+            prepare: false,
           })),
         ];
-        for (const { command, confined, env } of steps) {
-          const code = await runCommand(command, clone, () => {}, env, confined);
+        for (const { command, confined, prepare } of steps) {
+          const egress = prepare ? runner.egressFor() : { env: {}, revoke: () => {} };
+          const code = await runCommand(
+            command,
+            clone,
+            () => {},
+            { ...env, ...egress.env },
+            confined,
+          ).finally(egress.revoke);
           checks.push({ command, code });
           if (code !== 0) break;
         }

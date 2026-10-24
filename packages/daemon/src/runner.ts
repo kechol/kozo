@@ -57,6 +57,7 @@ import type { WorkerSpec } from "@kozo/worker";
 import { taskSandbox } from "@kozo/worker";
 import pkg from "../package.json" with { type: "json" };
 import type { DefinitionInUse } from "./definition.ts";
+import type { EgressProxy } from "./egress.ts";
 import type { EventStore } from "./event-store.ts";
 import { explorerPrompt, explorerRecords } from "./explorer.ts";
 import { checkNotes, ownerNotes } from "./instructions.ts";
@@ -108,8 +109,8 @@ export interface RunnerDeps {
    * of the default branch, which only a human merges into.
    */
   trustedBase?: string;
-  /** The port of kozod's egress proxy, prepare's only way out; without it prepare reaches any host. */
-  egress?: number;
+  /** kozod's egress proxy, prepare's only way out; without it prepare reaches any host. */
+  egress?: Pick<EgressProxy, "issue" | "port">;
 }
 
 /** A plan as the triage and plan agents write it, without the fields kozod adds. */
@@ -138,17 +139,23 @@ export class Runner implements RunnerOps {
   /** The environment of the diff's own code in prepare, the gates and prove: no credentials. */
   private readonly commandEnv = commandEnvironmentFrom(process.env);
 
-  /** What prepare's commands add to their environment: the egress proxy, when kozod runs one. */
-  proxyEnvironment(): Record<string, string> {
+  /**
+   * What one prepare command adds to its environment, the egress proxy with a token of its own
+   * when kozod runs one, and the call that withdraws the token once the command ends.
+   */
+  egressFor(): { env: Record<string, string>; revoke: () => void } {
     const { egress } = this.deps;
-    if (egress === undefined) return {};
-    const url = `http://127.0.0.1:${egress}`;
+    if (egress === undefined) return { env: {}, revoke: () => {} };
+    const { url, revoke } = egress.issue();
     return {
-      HTTPS_PROXY: url,
-      HTTP_PROXY: url,
-      https_proxy: url,
-      http_proxy: url,
-      KOZO_EGRESS_PORT: String(egress),
+      env: {
+        HTTPS_PROXY: url,
+        HTTP_PROXY: url,
+        https_proxy: url,
+        http_proxy: url,
+        KOZO_EGRESS_PORT: String(egress.port),
+      },
+      revoke,
     };
   }
 

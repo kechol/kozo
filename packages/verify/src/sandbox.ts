@@ -1,4 +1,11 @@
-import { lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import {
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import { lstat, mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
@@ -100,23 +107,37 @@ const toolConfiguration = [
  * at the end of its links, Claude Code's without resolving the paths it is given, and a home's
  * configuration is often a tree of links into dotfiles.
  */
-function withTargets(path: string, follow: (entry: string) => boolean = () => true): string[] {
-  const real = (target: string) => {
-    try {
-      return realpathSync(target);
-    } catch {
-      return null;
-    }
-  };
-  const own = real(path);
+function withTargets(path: string, passes: (hop: string) => boolean = () => true): string[] {
+  const resolved = (link: string) => resolveChecked(link, passes);
+  const own = resolved(path);
   let inside: string[] = [];
   try {
     inside = readdirSync(path)
       .map((name) => join(path, name))
-      .filter((entry) => follow(entry) && lstatSync(entry).isSymbolicLink())
-      .flatMap((entry) => real(entry) ?? []);
+      .filter((entry) => passes(entry) && lstatSync(entry).isSymbolicLink())
+      .flatMap((entry) => resolved(entry) ?? []);
   } catch {}
   return [...new Set([path, ...(own && own !== path ? [own] : []), ...inside])];
+}
+
+/**
+ * Where `link` leads, followed one link at a time, or null when a step, the directory the last
+ * one is in, or the end fails `passes`, so that a chain cannot pass through a place a confined
+ * command could have changed.
+ */
+function resolveChecked(link: string, passes: (hop: string) => boolean): string | null {
+  let current = link;
+  try {
+    for (let hops = 0; lstatSync(current).isSymbolicLink(); hops += 1) {
+      if (hops === 40) return null;
+      current = resolve(dirname(current), readlinkSync(current));
+      if (!passes(current)) return null;
+    }
+    const end = realpathSync(current);
+    return passes(realpathSync(dirname(current))) && passes(end) ? end : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -144,16 +165,13 @@ export function homeReadable(
   // by one, and the next one would read where it leads: links are followed only elsewhere, and
   // never to the home directory itself or above it, nor into or around a denied path.
   const writable = [...caches, ...packageLocks];
-  const safe = (target: string) =>
-    !within(home, target) && !denied.some((path) => within(target, path) || within(path, target));
+  const apart = (place: string, path: string) => within(place, path) || within(path, place);
+  // Every step of a followed link stays clear of the home directory itself and above it, of the
+  // writable roots and of the denied paths.
+  const passes = (place: string) =>
+    !within(home, place) && ![...writable, ...denied].some((path) => apart(place, path));
   const followed = [...toolConfiguration.map((path) => join(home, path)), ...tools].flatMap(
-    (path) =>
-      writable.some((root) => within(path, root))
-        ? [path]
-        : withTargets(
-            path,
-            (entry) => !writable.some((root) => within(root, entry) || within(entry, root)),
-          ).filter((target) => target === path || safe(target)),
+    (path) => (writable.some((root) => within(path, root)) ? [path] : withTargets(path, passes)),
   );
   return [...new Set([...caches, ...followed])];
 }

@@ -76,7 +76,15 @@ describe("homeReadable's links", () => {
     await mkdir(join(home, ".cache"));
     await mkdir(join(home, "Documents"));
     await symlink(join(home, "Documents"), join(home, ".cache", "planted"));
-    const readable = homeReadable({ PATH: "" }, [join(home, ".kozo")], home);
+    // A tool's own link into a cache leads through whatever a command put there, so it is not
+    // followed either.
+    await mkdir(join(home, ".local", "bin"), { recursive: true });
+    await symlink(join(home, ".cache", "planted"), join(home, ".local", "bin", "tool"));
+    const readable = homeReadable(
+      { PATH: join(home, ".local", "bin") },
+      [join(home, ".kozo")],
+      home,
+    );
     expect(readable).toContain(join(dotfiles, "config.toml"));
     expect(readable).not.toContain(join(home, ".kozo"));
     expect(readable).not.toContain(home);
