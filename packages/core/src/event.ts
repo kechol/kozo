@@ -3,7 +3,6 @@ import { autonomyLevelSchema, workClassSchema } from "./charter.ts";
 import { gateLevelSchema } from "./constraints.ts";
 import { type ParseResult, parseJsonDocument } from "./document.ts";
 import { planSchema } from "./plan.ts";
-import { blockedReasonSchema } from "./run-report.ts";
 import {
   formatItemReference,
   itemReferenceSchema,
@@ -11,6 +10,7 @@ import {
   runReferenceSchema,
   taskReferenceSchema,
 } from "./reference.ts";
+import { blockedReasonSchema } from "./run-report.ts";
 import { reviewVerdictSchema } from "./verdict.ts";
 import {
   agentNameSchema,

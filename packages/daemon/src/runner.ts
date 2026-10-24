@@ -3,12 +3,12 @@ import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import {
+  type BlockedReason,
   blueprintNodes,
   type Charter,
   demotedCharter,
   explorerAnswerJsonSchema,
   explorerAnswerSchema,
-  type BlockedReason,
   type GateLevel,
   highestTask,
   isClosed,
