@@ -77,6 +77,49 @@ describe("EgressProxy", () => {
     }
   });
 
+  test("refuses a header that is not base64 and closes a revoked token's open tunnels", async () => {
+    const upstream = Bun.listen({
+      hostname: "127.0.0.1",
+      port: 0,
+      socket: { data() {} },
+    });
+    const proxy = EgressProxy.start(
+      () => true,
+      () => {},
+      upstream.port,
+    );
+    try {
+      const target = `CONNECT 127.0.0.1:${upstream.port} HTTP/1.1\r\nHost: x\r\n`;
+      const garbled = `${target}Proxy-Authorization: Basic a===\r\n\r\n`;
+      expect(await exchange(proxy.port, garbled)).toStartWith("HTTP/1.1 403");
+
+      const access = proxy.issue();
+      const token = new URL(access.url).password;
+      let received = "";
+      const { promise: closed, resolve } = Promise.withResolvers<void>();
+      const { promise: opened, resolve: open } = Promise.withResolvers<void>();
+      const socket = await Bun.connect({
+        hostname: "127.0.0.1",
+        port: proxy.port,
+        socket: {
+          data(_socket, bytes) {
+            received += new TextDecoder().decode(bytes);
+            if (received.includes("200 Connection Established")) open();
+          },
+          close: () => resolve(),
+          error: () => resolve(),
+        },
+      });
+      socket.write(`${target}Proxy-Authorization: Basic ${btoa(`kozo:${token}`)}\r\n\r\n`);
+      await opened;
+      access.revoke();
+      expect(await Promise.race([closed.then(() => "closed"), Bun.sleep(1000)])).toBe("closed");
+    } finally {
+      proxy.stop();
+      upstream.stop(true);
+    }
+  });
+
   test("allows the registries and the hosts or suffixes the factory adds", () => {
     expect(hostAllowed("registry.npmjs.org")).toBe(true);
     expect(hostAllowed("Registry.NPMJS.org")).toBe(true);

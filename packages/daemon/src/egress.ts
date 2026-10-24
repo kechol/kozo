@@ -61,6 +61,8 @@ class Outbox {
 
 interface Client {
   head: Uint8Array;
+  /** The token the tunnel was opened under, whose withdrawal closes it. */
+  token: string | null;
   /** The client's bytes after its request, held until the tunnel opens. */
   early: Uint8Array[];
   out: Outbox;
@@ -98,7 +100,7 @@ export class EgressProxy {
   private constructor(
     private readonly server: TCPSocketListener<Client>,
     readonly refused: Set<string>,
-    private readonly tokens: Set<string>,
+    private readonly tokens: Map<string, Set<Socket<Client>>>,
   ) {}
 
   /**
@@ -108,10 +110,17 @@ export class EgressProxy {
    */
   issue(): { url: string; revoke: () => void } {
     const token = Bun.randomUUIDv7().replaceAll("-", "");
-    this.tokens.add(token);
+    this.tokens.set(token, new Set());
     return {
       url: `http://kozo:${token}@127.0.0.1:${this.port}`,
-      revoke: () => this.tokens.delete(token),
+      // A process the command left behind keeps no tunnel it opened.
+      revoke: () => {
+        for (const client of this.tokens.get(token) ?? []) {
+          client.data.upstream?.socket.end();
+          client.end();
+        }
+        this.tokens.delete(token);
+      },
     };
   }
 
@@ -126,7 +135,7 @@ export class EgressProxy {
     tunnelPort = 443,
   ) {
     const refused = new Set<string>();
-    const tokens = new Set<string>();
+    const tokens = new Map<string, Set<Socket<Client>>>();
     const refuse = (client: Socket<Client>, host: string) => {
       // Only a host name is kept and reported; anything else a request said is not repeated.
       const name = hostname.test(host) ? host : "a malformed request";
@@ -137,11 +146,16 @@ export class EgressProxy {
       client.write(forbidden);
       client.end();
     };
-    const authorized = (head: string) => {
+    /** The issued token a request carries, or null. */
+    const tokenOf = (head: string) => {
       const header = head.match(/^proxy-authorization: *basic +([A-Za-z0-9+/=]+) *$/im)?.[1];
-      if (!header) return false;
-      const [, token] = atob(header).split(":");
-      return token !== undefined && tokens.has(token);
+      if (!header) return null;
+      try {
+        const [, token] = atob(header).split(":");
+        return token !== undefined && tokens.has(token) ? token : null;
+      } catch {
+        return null;
+      }
     };
     const server = Bun.listen<Client>({
       hostname: "127.0.0.1",
@@ -154,6 +168,7 @@ export class EgressProxy {
             out: new Outbox(client as Socket<unknown>),
             upstream: null,
             opening: false,
+            token: null,
           };
         },
         data(client, chunk) {
@@ -176,11 +191,14 @@ export class EgressProxy {
           const host = match?.[1]?.toLowerCase() ?? "";
           if (!match || match[2] !== String(tunnelPort)) return refuse(client, "");
           // Without a token kozod issued, the request is not prepare's, so nothing is reported.
-          if (!authorized(request)) {
+          const token = tokenOf(request);
+          if (token === null) {
             client.write(forbidden);
             client.end();
             return;
           }
+          state.token = token;
+          tokens.get(token)?.add(client);
           if (!allowed(host)) return refuse(client, host);
           state.opening = true;
           const rest = head.subarray(end + crlf2.length);
@@ -220,9 +238,11 @@ export class EgressProxy {
         },
         close(client) {
           client.data.upstream?.socket.end();
+          if (client.data.token) tokens.get(client.data.token)?.delete(client);
         },
         error(client) {
           client.data.upstream?.socket.end();
+          client.end();
         },
       },
     });
