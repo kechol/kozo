@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
@@ -13,7 +13,7 @@ import {
   sessionSandbox,
   toolServer,
 } from "./claude-session.ts";
-import { bridgeTokenVariable, listenBridge } from "./cli-bridge.ts";
+import { bridgeTokenPath, listenBridge } from "./cli-bridge.ts";
 import type { CodingAgent } from "./coding-agent.ts";
 
 const quoted = (word: string) => `'${word.replaceAll("'", "'\\''")}'`;
@@ -35,9 +35,10 @@ export function claudeCliAgent(executable: string, helper: readonly string[]): C
       const tools = request.tools ?? [];
       const dir = await mkdtemp(join(tmpdir(), "kozo-cli-"));
       const socket = join(dir, "bridge.sock");
-      // Only the helpers get the token, from files the session's shell may not read, so that a
+      // Only the helpers get the token, from a file the session's shell may not read, so that a
       // shell which reaches the socket all the same can neither forge a record nor call a tool.
       const token = randomBytes(32).toString("hex");
+      await writeFile(bridgeTokenPath(socket), token, { mode: 0o600 });
       const hidden = [...new Set([dir, await realpath(dir)])];
       const bridge = listenBridge(socket, token, {
         hook: (input) =>
@@ -64,7 +65,7 @@ export function claudeCliAgent(executable: string, helper: readonly string[]): C
           hooks: [
             {
               type: "command",
-              command: `${bridgeTokenVariable}=${token} ${[...helper, "--hook", socket].map(quoted).join(" ")}`,
+              command: [...helper, "--hook", socket].map(quoted).join(" "),
               timeout: 86_400,
             },
           ],
@@ -98,7 +99,6 @@ export function claudeCliAgent(executable: string, helper: readonly string[]): C
                     type: "stdio",
                     command: helper[0],
                     args: [...helper.slice(1), "--mcp", socket],
-                    env: { [bridgeTokenVariable]: token },
                   },
                 }
               : {},

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { claudeCliAgent } from "./claude-cli-agent.ts";
-import { bridgeTokenVariable, listenBridge, mcpMain } from "./cli-bridge.ts";
+import { listenBridge, mcpMain } from "./cli-bridge.ts";
 import type { AgentRecord, AgentRequest } from "./coding-agent.ts";
 
 /**
@@ -32,7 +32,9 @@ say({
     decision,
     prompt: await Bun.stdin.text(),
     sandbox: settings.sandbox.filesystem,
-    shellEnv: process.env.${bridgeTokenVariable} ?? null,
+    tokenInCommand: settings.hooks.PreToolUse[0].hooks[0].command.includes(
+      (await Bun.file(after("--settings").replace(/settings\.json$/, "token")).text()).trim(),
+    ),
     mcp: JSON.parse(await Bun.file(after("--mcp-config")).text()),
     args,
   },
@@ -40,10 +42,10 @@ say({
 `;
 
 /** A helper that runs only the worker's hook command, as `kozod --hook` does. */
-const helperScript = `import { hookMain } from ${JSON.stringify(join(import.meta.dir, "cli-bridge.ts"))};
+const helperScript = `import { hookMain, readBridgeToken } from ${JSON.stringify(join(import.meta.dir, "cli-bridge.ts"))};
 const [, , mode, socket] = process.argv;
 if (mode !== "--hook") process.exit(64);
-process.exitCode = await hookMain(socket, process.env.${bridgeTokenVariable} ?? "", await Bun.stdin.text(), (text) => console.log(text), (text) => console.error(text));
+process.exitCode = await hookMain(socket, await readBridgeToken(socket), await Bun.stdin.text(), (text) => console.log(text), (text) => console.error(text));
 `;
 
 function request(cwd: string, records: AgentRecord[]): AgentRequest {
@@ -95,7 +97,7 @@ describe("claudeCliAgent", () => {
         args[args.indexOf("--settings") + 1]?.replace(/\/settings\.json$/, "") ?? "";
       expect(sandbox.denyRead).toContain(settingsDir);
       expect(sandbox.denyWrite).toContain(settingsDir);
-      expect(output.shellEnv).toBeNull();
+      expect(output.tokenInCommand).toBe(false);
       expect(output.mcp).toMatchObject({
         mcpServers: { kozo: { type: "stdio", command: process.execPath } },
       });

@@ -8,7 +8,7 @@ import {
   platformConfine,
   readDefinition,
 } from "@kozo/verify";
-import { bridgeTokenVariable, claudeAgentFor, hookMain, mcpMain, workerMain } from "@kozo/worker";
+import { claudeAgentFor, hookMain, mcpMain, readBridgeToken, workerMain } from "@kozo/worker";
 import pkg from "../package.json" with { type: "json" };
 import { Daemon, kozodCommand } from "./daemon.ts";
 import { EgressProxy, hostAllowed } from "./egress.ts";
@@ -135,11 +135,11 @@ export async function run(args: readonly string[], out: Output): Promise<number>
     );
   }
   if (option === "--hook" && args[1]) {
-    const token = process.env[bridgeTokenVariable] ?? "";
+    const token = await readBridgeToken(args[1]);
     return await hookMain(args[1], token, await Bun.stdin.text(), out.stdout, out.stderr);
   }
   if (option === "--mcp" && args[1]) {
-    const token = process.env[bridgeTokenVariable] ?? "";
+    const token = await readBridgeToken(args[1]);
     return await mcpMain(args[1], token, Bun.stdin.stream(), out.stdout);
   }
   if (option === "--version") {

@@ -1,9 +1,22 @@
 import { timingSafeEqual } from "node:crypto";
+import { dirname, join } from "node:path";
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import type { UnixSocketListener } from "bun";
 
-/** The variable that gives the helpers, and nothing else in the session, the bridge's token. */
-export const bridgeTokenVariable = "KOZO_BRIDGE_TOKEN";
+/**
+ * The file beside the socket that holds the bridge's token. The helpers read it there, so the
+ * token is in no command line or environment that another process could see.
+ */
+export const bridgeTokenPath = (socket: string) => join(dirname(socket), "token");
+
+/** The token for the bridge at `socket`, or "" when there is none, which the worker refuses. */
+export async function readBridgeToken(socket: string): Promise<string> {
+  try {
+    return (await Bun.file(bridgeTokenPath(socket)).text()).trim();
+  } catch {
+    return "";
+  }
+}
 
 /** One request a hook command or the MCP server sends to the worker. */
 export type BridgeRequest =
