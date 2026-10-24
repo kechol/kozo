@@ -56,7 +56,7 @@ export function deniedCredentials(env: Record<string, string | undefined>): stri
         join(xdg, "gh"),
         join(xdg, "git", "credentials"),
         ...(env.CLAUDE_CONFIG_DIR ? [env.CLAUDE_CONFIG_DIR] : []),
-      ].flatMap(withTargets),
+      ].flatMap((path) => withTargets(path)),
     ),
   ];
 }
@@ -100,7 +100,7 @@ const toolConfiguration = [
  * at the end of its links, Claude Code's without resolving the paths it is given, and a home's
  * configuration is often a tree of links into dotfiles.
  */
-function withTargets(path: string): string[] {
+function withTargets(path: string, follow: (entry: string) => boolean = () => true): string[] {
   const real = (target: string) => {
     try {
       return realpathSync(target);
@@ -113,7 +113,7 @@ function withTargets(path: string): string[] {
   try {
     inside = readdirSync(path)
       .map((name) => join(path, name))
-      .filter((entry) => lstatSync(entry).isSymbolicLink())
+      .filter((entry) => follow(entry) && lstatSync(entry).isSymbolicLink())
       .flatMap((entry) => real(entry) ?? []);
   } catch {}
   return [...new Set([path, ...(own && own !== path ? [own] : []), ...inside])];
@@ -150,7 +150,10 @@ export function homeReadable(
     (path) =>
       writable.some((root) => within(path, root))
         ? [path]
-        : withTargets(path).filter((target) => target === path || safe(target)),
+        : withTargets(
+            path,
+            (entry) => !writable.some((root) => within(root, entry) || within(entry, root)),
+          ).filter((target) => target === path || safe(target)),
   );
   return [...new Set([...caches, ...followed])];
 }
