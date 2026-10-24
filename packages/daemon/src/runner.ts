@@ -1,7 +1,6 @@
-import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative } from "node:path";
 import {
   type BlockedReason,
   blueprintNodes,
@@ -43,7 +42,6 @@ import {
   GitError,
   git,
   globMatcher,
-  homeReadable,
   type Judge,
   listFiles,
   modelFor,
@@ -53,6 +51,7 @@ import {
   runGates,
   SessionError,
   type Verifier,
+  worktreeReadable,
 } from "@kozo/verify";
 import type { WorkerSpec } from "@kozo/worker";
 import { taskSandbox } from "@kozo/worker";
@@ -114,21 +113,6 @@ export interface RunnerDeps {
 /** A plan as the triage and plan agents write it, without the fields kozod adds. */
 const draftOf = ({ version: _version, item: _item, ...draft }: Plan) => draft;
 
-/**
- * The git directory that `worktree` shares with its repository, which git in the worktree reads,
- * or nothing when its `.git` does not link to one.
- */
-function sharedGitDirectory(worktree: string): string[] {
-  try {
-    const link = readFileSync(join(worktree, ".git"), "utf8").match(/^gitdir: (.+)$/m)?.[1];
-    if (!link) return [];
-    const gitDir = resolve(worktree, link.trim());
-    return [resolve(gitDir, readFileSync(join(gitDir, "commondir"), "utf8").trim())];
-  } catch {
-    return [];
-  }
-}
-
 /** Thrown when the repository's documents keep a run from starting at all. */
 export class RunnerError extends Error {}
 
@@ -169,7 +153,7 @@ export class Runner implements RunnerOps {
       confine: this.deps.confine,
       sandbox: {
         denyRead: [this.home.root, homedir()],
-        allowRead: [worktree, ...sharedGitDirectory(worktree), ...homeReadable(process.env)],
+        allowRead: worktreeReadable(worktree, process.env),
         denyReadInside: deniedCredentials(process.env),
         allowWrite: [worktree, ...packageLocks, ...(prepare ? packageCaches : [])],
         denyWrite: [join(worktree, ".git")],

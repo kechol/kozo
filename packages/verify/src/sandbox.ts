@@ -1,7 +1,7 @@
-import { lstatSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { lstat, mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 
 /** What a command confined by kozo may reach beyond the system's own files. */
 export interface CommandSandbox {
@@ -48,11 +48,16 @@ export const credentialPaths = [
 
 export function deniedCredentials(env: Record<string, string | undefined>): string[] {
   const xdg = env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
+  // Each path with where its links lead, for a sandbox that matches paths as given.
   return [
-    ...[...credentialPaths, ".config/git/credentials"].map((path) => join(homedir(), path)),
-    join(xdg, "gh"),
-    join(xdg, "git", "credentials"),
-    ...(env.CLAUDE_CONFIG_DIR ? [env.CLAUDE_CONFIG_DIR] : []),
+    ...new Set(
+      [
+        ...[...credentialPaths, ".config/git/credentials"].map((path) => join(homedir(), path)),
+        join(xdg, "gh"),
+        join(xdg, "git", "credentials"),
+        ...(env.CLAUDE_CONFIG_DIR ? [env.CLAUDE_CONFIG_DIR] : []),
+      ].flatMap(withTargets),
+    ),
   ];
 }
 
@@ -81,7 +86,7 @@ const homeContainers = [".local", ".local/share", ".local/state", ".config", "Li
 // What the tools read of their own configuration in the home directory.
 const toolConfiguration = [
   ".gitconfig",
-  ".config/git/config",
+  ".config/git",
   ".config/mise",
   ".tool-versions",
   ".rustup",
@@ -89,18 +94,28 @@ const toolConfiguration = [
 ];
 
 /**
- * Where the links directly inside the directory `path` lead, since a sandbox reads a file at the
- * end of its links and a configuration directory is often filled with links to dotfiles.
+ * `path` with where its links lead: the path's own target, through a linked directory above it
+ * too, and, for a directory, the targets of the links directly inside it. A sandbox reads a file
+ * at the end of its links, Claude Code's without resolving the paths it is given, and a home's
+ * configuration is often a tree of links into dotfiles.
  */
-function linkTargets(path: string): string[] {
+function withTargets(path: string): string[] {
+  const real = (target: string) => {
+    try {
+      return realpathSync(target);
+    } catch {
+      return null;
+    }
+  };
+  const own = real(path);
+  let inside: string[] = [];
   try {
-    return readdirSync(path)
+    inside = readdirSync(path)
       .map((name) => join(path, name))
       .filter((entry) => lstatSync(entry).isSymbolicLink())
-      .map((entry) => realpathSync(entry));
-  } catch {
-    return [];
-  }
+      .flatMap((entry) => real(entry) ?? []);
+  } catch {}
+  return [...new Set([path, ...(own && own !== path ? [own] : []), ...inside])];
 }
 
 /**
@@ -119,11 +134,40 @@ export function homeReadable(env: Record<string, string | undefined>): string[] 
       depth += 1;
     return [join(home, ...parts.slice(0, depth))];
   });
-  const configuration = toolConfiguration.flatMap((path) => [
-    join(home, path),
-    ...linkTargets(join(home, path)),
-  ]);
-  return [...new Set([...packageCaches, ...configuration, ...tools])];
+  return [
+    ...new Set(
+      [...packageCaches, ...toolConfiguration.map((path) => join(home, path)), ...tools].flatMap(
+        withTargets,
+      ),
+    ),
+  ];
+}
+
+/**
+ * The git directory that `worktree` shares with its repository, which git in the worktree reads,
+ * or nothing when its `.git` does not link to one.
+ */
+export function sharedGitDirectory(worktree: string): string[] {
+  try {
+    const link = readFileSync(join(worktree, ".git"), "utf8").match(/^gitdir: (.+)$/m)?.[1];
+    if (!link) return [];
+    const gitDir = resolve(worktree, link.trim());
+    return [resolve(gitDir, readFileSync(join(gitDir, "commondir"), "utf8").trim())];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * What a command or a shell confined to `worktree` reads in the home directory, which it may not
+ * read otherwise: the worktree, the git directory it shares with its repository, and the paths
+ * of `homeReadable`.
+ */
+export function worktreeReadable(
+  worktree: string,
+  env: Record<string, string | undefined>,
+): string[] {
+  return [worktree, ...sharedGitDirectory(worktree), ...homeReadable(env)];
 }
 
 /**
