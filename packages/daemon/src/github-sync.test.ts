@@ -98,6 +98,37 @@ async function passedRun(store: EventStore, item: string, task: string) {
 }
 
 describe("GitHubSync", () => {
+  test("kozo issue moves a local item without tasks to an Issue that intake takes up", async () => {
+    await using env = await setup("kozo");
+    await env.sync.register();
+    env.github.permissions.set("me/shop kozo", "admin");
+    env.control.moveToIssue = (ref) => env.sync.moveToIssue(ref);
+    const { ref } = await env.control.addItem({
+      title: "Show low stock",
+      body: "Say Only N left.",
+    });
+    const moved = await env.control.act(
+      ref,
+      { kind: "item", item: { repo: null, number: 1 } },
+      "issue",
+      {},
+    );
+    expect(moved.message).toBe(`moved ${ref} to me/shop#1; kozod takes it up as shop#1`);
+    expect(env.store.state.items[ref]?.stage).toBe("cancelled");
+    expect(env.github.calls).toContain("createIssue me/shop Show low stock");
+    expect(env.labels(1)).toContain("kozo");
+    await env.sync.poll();
+    expect(env.store.state.items["shop#1"]).toMatchObject({
+      source: "github",
+      approvals: "level",
+      title: "Show low stock",
+    });
+    expect(await readItemFile(env.home, "shop#1")).toMatchObject({ body: "Say Only N left." });
+    await expect(
+      env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "issue", {}),
+    ).rejects.toThrow("is cancelled");
+  });
+
   test("trusts only a writer's Issue opened after registration, and skips bots", async () => {
     await using env = await setup();
     const before = new Date(Date.now() - 60_000).toISOString();

@@ -539,6 +539,7 @@ export async function verb(name: Verb, args: readonly string[], out: Lines): Pro
     take: () => ({}),
     return: () => ({ text: text ?? missing("return needs what you changed and checked") }),
     reorder: () => ({ before: values.before ?? null }),
+    issue: () => ({}),
   };
   const body = bodies[name]();
   return postAndPrint(out, values.json, `${refPath(ref)}/${name}`, body);

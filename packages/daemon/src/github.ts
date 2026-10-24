@@ -47,6 +47,15 @@ const permissionEndpoint =
 
 /** Whether kozod may run gh with `args`. */
 export function ghAllowed(args: readonly string[]): boolean {
+  // kozod opens an Issue only for a local item it moves to GitHub, with its title and request.
+  if (args[0] === "issue" && args[1] === "create") {
+    return (
+      args.length === 5 &&
+      (args[2] ?? "").startsWith("--repo=") &&
+      (args[3] ?? "").startsWith("--title=") &&
+      args[4] === "--body-file=-"
+    );
+  }
   // kozod closes an Issue only as completed, after it checked the item's DONE_WHEN.
   if (args[0] === "issue" && args[1] === "close") {
     return (
@@ -171,6 +180,18 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
           `--json=${issueFields}`,
         ]),
       );
+    },
+    async createIssue(repository, { title, body }) {
+      // gh prints the new Issue's URL, which ends in its number.
+      const url = await gh(
+        ["issue", "create", `--repo=${repository}`, `--title=${title}`, "--body-file=-"],
+        {
+          stdin: body,
+        },
+      );
+      const number = Number(url.trim().match(/\/issues\/(\d+)$/)?.[1]);
+      if (!Number.isInteger(number)) throw new GhRefused(`gh issue create printed ${url.trim()}`);
+      return number;
     },
     async closeIssue(repository, issue) {
       await gh(["issue", "close", String(issue), `--repo=${repository}`, "--reason=completed"]);

@@ -22,6 +22,7 @@ describe("ghAllowed", () => {
   test("allows only the listed commands and the one comment edit", () => {
     for (const args of [
       ["issue", "list", "--repo=me/app"],
+      ["issue", "create", "--repo=me/app", "--title=Show low stock", "--body-file=-"],
       ["issue", "comment", "12", "--body-file=-"],
       ["pr", "create", "--head=kozo/x/12-t1"],
       ["pr", "checks", "3"],
@@ -35,6 +36,8 @@ describe("ghAllowed", () => {
     }
     for (const args of [
       ["pr", "merge", "3"],
+      ["issue", "create", "--repo=me/app", "--title=x", "--body-file=-", "--assignee=me"],
+      ["issue", "create", "--repo=me/app", "--body-file=-"],
       ["pr", "review", "3", "--approve"],
       ["issue", "close", "12"],
       ["issue", "close", "12", "--repo=me/app", "--reason=not planned"],

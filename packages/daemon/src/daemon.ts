@@ -130,6 +130,8 @@ export class Daemon {
     const control = new ControlPlane(home, store, definition, runner);
     const scheduler = new Scheduler(store, runner, definition, report);
     const github = new GitHubSync(home, store, definition, control, ghGitHub(), report);
+    if (definition.current.factory.mode === "github")
+      control.moveToIssue = (ref) => github.moveToIssue(ref);
     // Each write is one API call; the work the scheduler starts after it is kozod's own.
     const apiCall =
       <A extends unknown[], R>(command: (...args: A) => Promise<R>, tick = true) =>

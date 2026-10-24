@@ -58,6 +58,11 @@ export interface GitHub {
   comments(repository: GitHubRepository, issue: number): Promise<GitHubComment[]>;
   /** One Issue by its number, open or closed. */
   issue(repository: GitHubRepository, issue: number): Promise<GitHubIssue>;
+  /** Opens an Issue with `title` and `body` and returns its number. */
+  createIssue(
+    repository: GitHubRepository,
+    issue: { title: string; body: string },
+  ): Promise<number>;
   /** Closes an Issue as completed, which kozod does only once its item is complete. */
   closeIssue(repository: GitHubRepository, issue: number): Promise<void>;
   comment(repository: GitHubRepository, issue: number, body: string): Promise<void>;

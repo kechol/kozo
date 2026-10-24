@@ -120,6 +120,8 @@ describe("the daily commands", () => {
     expect((await kozo("report", "--days", "2", "--cost")).stdout.split("\n")).toHaveLength(3);
     expect((await kozo("admin", "eval", "add", "r-0099")).code).toBe(4);
     expect((await kozo("admin", "eval", "add")).code).toBe(2);
+    // Local mode has no GitHub to move an item to.
+    expect((await kozo("issue", "K-1")).stderr).toContain("only in GitHub mode");
     expect((await kozo("ls", "items")).stdout).toContain("K-1");
     expect((await kozo("say", "K-1")).code).toBe(2);
     const url = (await kozo("dashboard", "--url")).stdout;

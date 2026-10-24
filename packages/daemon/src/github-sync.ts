@@ -137,6 +137,35 @@ export class GitHubSync {
     }
   }
 
+  /**
+   * `kozo issue`: opens a local item's request as an Issue of its repository, with the intake
+   * label when the repository has one, and cancels the local item, which the next poll takes
+   * up again as the Issue. Only an open item with no tasks moves, as its work would not follow.
+   */
+  async moveToIssue(ref: string): Promise<VerbResult> {
+    const item = this.store.state.items[ref];
+    if (!item) throw new CommandError(404, `${ref} does not exist`);
+    if (item.source !== "local") throw new CommandError(409, `${ref} is not a local item`);
+    if (isClosed(item.stage)) throw new CommandError(409, `${ref} is ${item.stage}`);
+    if (item.tasks.length > 0)
+      throw new CommandError(409, `${ref} has tasks already, whose work would not follow it`);
+    const repository = this.repositories().find((entry) => entry.path === item.repository);
+    if (!repository)
+      throw new CommandError(409, `${item.repository} has no GitHub repository in factory.yml`);
+    const file = await readItemFile(this.home, ref);
+    const number = await this.github.createIssue(repository.github, {
+      title: file.title,
+      body: file.body,
+    });
+    const issue = `${repository.github}#${number}`;
+    await this.wrote(ref, null, "issue", issue);
+    if (repository.label)
+      await this.github.label(repository.github, number, { add: [repository.label] });
+    await this.control.closeWork(ref, "item", "cancelled", `moved to ${issue}`);
+    const name = repository.github.slice(repository.github.indexOf("/") + 1);
+    return { message: `moved ${ref} to ${issue}; kozod takes it up as ${name}#${number}` };
+  }
+
   /** One pass over every GitHub repository; a repository that fails is reported and skipped. */
   async poll(): Promise<void> {
     await this.register();

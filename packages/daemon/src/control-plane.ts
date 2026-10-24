@@ -178,6 +178,9 @@ export class ControlPlane {
     return true;
   }
 
+  /** Moves a local item to an Issue of its repository; GitHub mode sets it. */
+  moveToIssue?: (ref: string) => Promise<VerbResult>;
+
   // --- Judgment and control verbs ---------------------------------------------------------------
 
   /** Performs one verb on a reference; repeating a verb changes nothing a second time. */
@@ -204,6 +207,10 @@ export class ControlPlane {
         return await this.giveBack(ref, body as Body<"return">);
       case "reorder":
         return await this.reorder(ref, body as Body<"reorder">);
+      case "issue":
+        if (!this.moveToIssue)
+          throw new CommandError(409, "kozo issue moves items only in GitHub mode");
+        return await this.moveToIssue(ref);
     }
   }
 
