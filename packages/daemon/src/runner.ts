@@ -153,7 +153,10 @@ export class Runner implements RunnerOps {
       confine: this.deps.confine,
       sandbox: {
         denyRead: [this.home.root, homedir()],
-        allowRead: worktreeReadable(worktree, process.env),
+        allowRead: worktreeReadable(worktree, process.env, [
+          this.home.root,
+          ...deniedCredentials(process.env),
+        ]),
         denyReadInside: deniedCredentials(process.env),
         allowWrite: [worktree, ...packageLocks, ...(prepare ? packageCaches : [])],
         denyWrite: [join(worktree, ".git")],

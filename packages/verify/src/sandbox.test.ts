@@ -60,6 +60,30 @@ describe("homeReadable", () => {
   });
 });
 
+describe("homeReadable's links", () => {
+  test("follows a tool's links but none a confined command could plant, nor into a denied path", async () => {
+    await using dir = await tempDirectory();
+    const home = await realpath(dir.path);
+    const dotfiles = join(home, ".dotfiles", "mise");
+    await mkdir(dotfiles, { recursive: true });
+    await mkdir(join(home, ".config", "mise"), { recursive: true });
+    await symlink(join(dotfiles, "config.toml"), join(home, ".config", "mise", "config.toml"));
+    await Bun.write(join(dotfiles, "config.toml"), "");
+    await mkdir(join(home, ".kozo"));
+    await symlink(join(home, ".kozo"), join(home, ".config", "mise", "factory"));
+    await symlink(home, join(home, ".config", "mise", "everything"));
+    // prepare writes the caches, so a link it planted there leads nowhere readable.
+    await mkdir(join(home, ".cache"));
+    await mkdir(join(home, "Documents"));
+    await symlink(join(home, "Documents"), join(home, ".cache", "planted"));
+    const readable = homeReadable({ PATH: "" }, [join(home, ".kozo")], home);
+    expect(readable).toContain(join(dotfiles, "config.toml"));
+    expect(readable).not.toContain(join(home, ".kozo"));
+    expect(readable).not.toContain(home);
+    expect(readable).not.toContain(join(home, "Documents"));
+  });
+});
+
 describe("seatbeltProfile", () => {
   test("denies by default, quotes paths and leaves out empty lists", () => {
     const profile = seatbeltProfile({ ...empty, allowWrite: ['/w/a"b\\c'], denyRead: ["/home"] });

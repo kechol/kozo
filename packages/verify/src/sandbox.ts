@@ -65,7 +65,7 @@ export function deniedCredentials(env: Record<string, string | undefined>): stri
  * The package managers' download caches in the home directory, which prepare writes so that an
  * install reuses what earlier tasks and the human downloaded. The gates and prove only read them.
  */
-export const packageCaches = [
+const cachePaths = [
   ".npm",
   ".cache",
   ".bun/install/cache",
@@ -77,7 +77,8 @@ export const packageCaches = [
   "Library/Caches/pip",
   ".cargo/registry",
   "go/pkg/mod",
-].map((path) => join(homedir(), path));
+];
+export const packageCaches = cachePaths.map((path) => join(homedir(), path));
 
 // Directories in the home directory that hold the directories of many tools rather than being
 // one tool's own.
@@ -124,8 +125,12 @@ function withTargets(path: string): string[] {
  * tool's directory that holds it, the first one below the home directory or below a directory
  * that holds many tools, such as `.local/share/mise` for `.local/share/mise/shims`.
  */
-export function homeReadable(env: Record<string, string | undefined>): string[] {
-  const home = homedir();
+export function homeReadable(
+  env: Record<string, string | undefined>,
+  denied: readonly string[] = [],
+  home = homedir(),
+): string[] {
+  const caches = cachePaths.map((path) => join(home, path));
   const tools = (env.PATH ?? "").split(":").flatMap((entry) => {
     const parts = relative(home, entry).split("/");
     if (!entry.startsWith("/") || parts[0] === "" || parts[0] === "..") return [];
@@ -134,13 +139,20 @@ export function homeReadable(env: Record<string, string | undefined>): string[] 
       depth += 1;
     return [join(home, ...parts.slice(0, depth))];
   });
-  return [
-    ...new Set(
-      [...packageCaches, ...toolConfiguration.map((path) => join(home, path)), ...tools].flatMap(
-        withTargets,
-      ),
-    ),
-  ];
+  const within = (path: string, root: string) => path === root || path.startsWith(`${root}/`);
+  // A confined command writes the caches and the locks, so a link there could have been planted
+  // by one, and the next one would read where it leads: links are followed only elsewhere, and
+  // never to the home directory itself or above it, nor into or around a denied path.
+  const writable = [...caches, ...packageLocks];
+  const safe = (target: string) =>
+    !within(home, target) && !denied.some((path) => within(target, path) || within(path, target));
+  const followed = [...toolConfiguration.map((path) => join(home, path)), ...tools].flatMap(
+    (path) =>
+      writable.some((root) => within(path, root))
+        ? [path]
+        : withTargets(path).filter((target) => target === path || safe(target)),
+  );
+  return [...new Set([...caches, ...followed])];
 }
 
 /**
@@ -166,8 +178,9 @@ export function sharedGitDirectory(worktree: string): string[] {
 export function worktreeReadable(
   worktree: string,
   env: Record<string, string | undefined>,
+  denied: readonly string[] = [],
 ): string[] {
-  return [worktree, ...sharedGitDirectory(worktree), ...homeReadable(env)];
+  return [worktree, ...sharedGitDirectory(worktree), ...homeReadable(env, denied)];
 }
 
 /**
