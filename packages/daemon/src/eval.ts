@@ -336,9 +336,18 @@ async function tearDown(
   runner: Runner,
   log: (line: string) => void,
 ) {
-  const { ref } = await baseOf(source, mode);
-  const documents = await readBaseDocuments(source, (await git(source, ["rev-parse", ref])).trim());
-  const commands = documents.ok ? documents.constraints.teardown : [];
+  let commands: string[];
+  try {
+    const { ref } = await baseOf(source, mode);
+    const documents = await readBaseDocuments(
+      source,
+      (await git(source, ["rev-parse", ref])).trim(),
+    );
+    commands = documents.ok ? documents.constraints.teardown : [];
+  } catch (error) {
+    log(`kozod: eval teardown: ${(error as Error).message}`);
+    return;
+  }
   if (commands.length === 0) return;
   for (const dir of dirs) {
     try {

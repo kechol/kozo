@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tempDirectory } from "@kozo/testing";
 import { z } from "zod";
 import { claudeCliAgent } from "./claude-cli-agent.ts";
-import { listenBridge, mcpMain } from "./cli-bridge.ts";
+import { hookMain, listenBridge, mcpMain } from "./cli-bridge.ts";
 import type { AgentRecord, AgentRequest } from "./coding-agent.ts";
 
 /**
@@ -169,5 +169,45 @@ describe("the CLI bridge", () => {
     } finally {
       bridge.stop(true);
     }
+  });
+
+  test("carries a request and a reply larger than a socket takes at once, whole", async () => {
+    await using dir = await tempDirectory();
+    const socket = join(dir.path, "bridge.sock");
+    const bridge = listenBridge(socket, "t0ken", {
+      hook: async () => ({}),
+      tools: () => [],
+      call: async (_name, input) => `${input.text}${input.text}`,
+    });
+    try {
+      // Split at any byte, a character that takes three bytes still comes through.
+      const text = "在庫あり".repeat(200_000);
+      const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "x" } };
+      const message = { ...call, params: { name: "x", arguments: { text } } };
+      const out: { result: { content: { text: string }[] } }[] = [];
+      await mcpMain(socket, "t0ken", new Blob([`${JSON.stringify(message)}\n`]).stream(), (line) =>
+        out.push(JSON.parse(line)),
+      );
+      expect(out[0]?.result.content[0]?.text).toBe(`${text}${text}`);
+    } finally {
+      bridge.stop(true);
+    }
+  });
+
+  test("a hook the worker cannot answer refuses the tool call and the stop, and lets the rest go on", async () => {
+    await using dir = await tempDirectory();
+    const socket = join(dir.path, "absent.sock");
+    const exit = (input: string) =>
+      hookMain(
+        socket,
+        "t0ken",
+        input,
+        () => {},
+        () => {},
+      );
+    expect(await exit(JSON.stringify({ hook_event_name: "PreToolUse" }))).toBe(2);
+    expect(await exit(JSON.stringify({ hook_event_name: "Stop" }))).toBe(2);
+    expect(await exit("not json")).toBe(2);
+    expect(await exit(JSON.stringify({ hook_event_name: "PostToolUse" }))).toBe(1);
   });
 });

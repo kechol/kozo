@@ -103,15 +103,18 @@ async function evaluate(names: readonly string[], out: Output): Promise<number> 
     issueBody,
   };
   const cases: EvalResult[] = [];
-  for (const file of files) {
-    out.stderr(`kozod: eval ${basename(file, ".yml")}`);
-    const result = await runEvalCase(file, loaded.definition, deps, (line) => out.stderr(line));
-    out.stderr(
-      `kozod: eval ${result.id}: ${result.outcome}, ${result.passed ? "as expected" : `expected ${result.expected}`}`,
-    );
-    cases.push(result);
+  try {
+    for (const file of files) {
+      out.stderr(`kozod: eval ${basename(file, ".yml")}`);
+      const result = await runEvalCase(file, loaded.definition, deps, (line) => out.stderr(line));
+      out.stderr(
+        `kozod: eval ${result.id}: ${result.outcome}, ${result.passed ? "as expected" : `expected ${result.expected}`}`,
+      );
+      cases.push(result);
+    }
+  } finally {
+    egress.stop();
   }
-  egress.stop();
   const passed = cases.filter((result) => result.passed).length;
   out.stdout(
     JSON.stringify({

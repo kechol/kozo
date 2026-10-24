@@ -23,6 +23,7 @@ describe("ghAllowed", () => {
     for (const args of [
       ["issue", "list", "--repo=me/app"],
       ["issue", "create", "--repo=me/app", "--title=Show low stock", "--body-file=-"],
+      ["issue", "create", "--repo=me/app", "--title=x", "--body-file=-", "--label=kozo"],
       ["issue", "comment", "12", "--body-file=-"],
       ["pr", "create", "--head=kozo/x/12-t1"],
       ["pr", "checks", "3"],
@@ -38,6 +39,7 @@ describe("ghAllowed", () => {
       ["pr", "merge", "3"],
       ["issue", "create", "--repo=me/app", "--title=x", "--body-file=-", "--assignee=me"],
       ["issue", "create", "--repo=me/app", "--body-file=-"],
+      ["issue", "create", "--repo=me/app", "--title=x", "--body-file=-", "--label=a", "--label=b"],
       ["pr", "review", "3", "--approve"],
       ["issue", "close", "12"],
       ["issue", "close", "12", "--repo=me/app", "--reason=not planned"],

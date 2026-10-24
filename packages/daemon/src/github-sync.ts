@@ -153,14 +153,14 @@ export class GitHubSync {
     if (!repository)
       throw new CommandError(409, `${item.repository} has no GitHub repository in factory.yml`);
     const file = await readItemFile(this.home, ref);
+    // The label goes with the Issue, so a failure leaves no Issue that a retry would open again.
     const number = await this.github.createIssue(repository.github, {
       title: file.title,
       body: file.body,
+      labels: repository.label ? [repository.label] : [],
     });
     const issue = `${repository.github}#${number}`;
     await this.wrote(ref, null, "issue", issue);
-    if (repository.label)
-      await this.github.label(repository.github, number, { add: [repository.label] });
     await this.control.closeWork(ref, "item", "cancelled", `moved to ${issue}`);
     const name = repository.github.slice(repository.github.indexOf("/") + 1);
     return { message: `moved ${ref} to ${issue}; kozod takes it up as ${name}#${number}` };

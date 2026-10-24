@@ -5,6 +5,7 @@ export {
   type Confined,
   commandEnvironmentFrom,
   lines,
+  Outbox,
   runCommand,
   shellQuote,
 } from "./command.ts";

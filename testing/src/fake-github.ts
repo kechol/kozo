@@ -110,9 +110,9 @@ export function fakeGitHub(): FakeGitHub {
       calls.push(`issue ${repository} #${issue}`);
       return copyOf(issueOf(repository, issue));
     },
-    async createIssue(repository, { title, body }) {
+    async createIssue(repository, { title, body, labels }) {
       calls.push(`createIssue ${repository} ${title}`);
-      return this.addIssue(repository, { title, body, author: "kozo" });
+      return this.addIssue(repository, { title, body, labels: [...labels], author: "kozo" });
     },
     async closeIssue(repository, issue) {
       calls.push(`closeIssue ${repository} #${issue}`);

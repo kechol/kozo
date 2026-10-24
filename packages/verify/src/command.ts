@@ -61,6 +61,43 @@ export async function* lines(stream: AsyncIterable<Uint8Array>): AsyncGenerator<
   }
 }
 
+/**
+ * Writes to a socket in order, keeping what it could not take until its drain handler calls
+ * `drain`, so a large message is not cut short.
+ */
+export class Outbox {
+  private queue: Uint8Array[] = [];
+  private ending = false;
+  constructor(private readonly socket: { write(bytes: Uint8Array): number; end(): unknown }) {}
+
+  write(bytes: Uint8Array) {
+    this.queue.push(bytes);
+    this.drain();
+  }
+
+  /** Ends the socket once everything written has gone. */
+  end() {
+    this.ending = true;
+    this.drain();
+  }
+
+  drain() {
+    while (this.queue.length > 0) {
+      const next = this.queue[0] as Uint8Array;
+      const written = this.socket.write(next);
+      if (written < next.length) {
+        this.queue[0] = next.subarray(Math.max(written, 0));
+        return;
+      }
+      this.queue.shift();
+    }
+    if (this.ending) {
+      this.ending = false;
+      this.socket.end();
+    }
+  }
+}
+
 /** `text` as one word of a `sh` command line. */
 export function shellQuote(text: string) {
   return `'${text.replaceAll("'", `'\\''`)}'`;

@@ -112,20 +112,22 @@ export class Daemon {
     await mkdir(home.root, { recursive: true, mode: 0o700 });
     await claimHome(home);
     const store = await EventStore.open(home);
-    const report = (line: string) => console.error(line);
-    let definition: DefinitionInUse;
-    try {
-      definition = { current: await startingDefinition(home, store) };
-    } catch (error) {
+    // A start that fails stops again what it started.
+    await using started = new AsyncDisposableStack();
+    started.defer(async () => {
       store.close();
       await rm(home.pidFile, { force: true });
-      throw error;
-    }
+    });
+    const report = (line: string) => console.error(line);
+    const definition: DefinitionInUse = { current: await startingDefinition(home, store) };
     const claude = process.env.KOZO_CLAUDE ?? Bun.which("claude") ?? "claude";
     // prepare reaches other hosts only through this proxy, which reads the allowlist each time.
-    const egress = EgressProxy.start(
-      (host) => hostAllowed(host, definition.current.factory.prepare_hosts ?? []),
-      report,
+    const egress = started.adopt(
+      EgressProxy.start(
+        (host) => hostAllowed(host, definition.current.factory.prepare_hosts ?? []),
+        report,
+      ),
+      (proxy) => proxy.stop(),
     );
     const runner = new Runner(home, store, {
       launcher,
@@ -212,7 +214,7 @@ export class Daemon {
         };
       },
     });
-    const server = serveApi(app, port, dashboard);
+    const server = started.adopt(serveApi(app, port, dashboard), (api) => api.stop(true));
     const reconciler = new Reconciler(
       store,
       runner,
@@ -258,6 +260,7 @@ export class Daemon {
       scheduler.tick();
     }, tickMs);
     scheduler.tick();
+    started.move();
     return new Daemon(
       home,
       store,

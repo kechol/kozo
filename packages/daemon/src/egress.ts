@@ -1,3 +1,4 @@
+import { Outbox } from "@kozo/verify";
 import type { Socket, TCPSocketListener } from "bun";
 
 /**
@@ -32,29 +33,6 @@ export function hostAllowed(host: string, extra: readonly string[] = []): boolea
   );
 }
 
-/** Writes to a socket in order, keeping what it could not take until it drains. */
-class Outbox {
-  private queue: Uint8Array[] = [];
-  constructor(private readonly socket: Socket<unknown>) {}
-
-  write(bytes: Uint8Array) {
-    this.queue.push(bytes);
-    this.drain();
-  }
-
-  drain() {
-    while (this.queue.length > 0) {
-      const next = this.queue[0] as Uint8Array;
-      const written = this.socket.write(next);
-      if (written < next.length) {
-        this.queue[0] = next.subarray(Math.max(written, 0));
-        return;
-      }
-      this.queue.shift();
-    }
-  }
-}
-
 interface Client {
   head: Uint8Array;
   /** The token the tunnel was opened under, whose withdrawal closes it. */
@@ -64,6 +42,8 @@ interface Client {
   out: Outbox;
   upstream: { out: Outbox; socket: Socket<unknown> } | null;
   opening: boolean;
+  /** Set once the client is gone or its token withdrawn; a tunnel opening after it is closed. */
+  closed: boolean;
 }
 
 const crlf2 = new TextEncoder().encode("\r\n\r\n");
@@ -113,7 +93,8 @@ export class EgressProxy {
       // A process the command left behind keeps no tunnel it opened.
       revoke: () => {
         for (const client of this.tokens.get(token) ?? []) {
-          client.data.upstream?.socket.end();
+          client.data.closed = true;
+          client.data.upstream?.socket.terminate();
           client.end();
         }
         this.tokens.delete(token);
@@ -165,14 +146,16 @@ export class EgressProxy {
           client.data = {
             head: new Uint8Array(0),
             early: [],
-            out: new Outbox(client as Socket<unknown>),
+            out: new Outbox(client),
             upstream: null,
             opening: false,
+            closed: false,
             token: null,
           };
         },
         data(client, chunk) {
           const state = client.data;
+          if (state.closed) return;
           if (state.upstream) return state.upstream.out.write(chunk);
           if (state.opening) return void state.early.push(chunk);
           const head = new Uint8Array(state.head.length + chunk.length);
@@ -180,21 +163,21 @@ export class EgressProxy {
           head.set(chunk, state.head.length);
           const end = indexOf(head, crlf2);
           if (end === -1) {
-            // A request line that never ends is not one kozod reads.
-            if (head.length > 8192) refuse(client, "an overlong request");
+            // A request that never ends is not one kozod reads, and its token is not looked for.
+            if (head.length > 8192) deny(client);
             else state.head = head;
             return;
           }
           const request = decoder.decode(head.subarray(0, end));
-          const line = request.split("\r\n")[0] ?? "";
-          const match = line.match(/^CONNECT ([A-Za-z0-9.-]+):(\d+) HTTP\/1\.[01]$/);
-          const host = match?.[1]?.toLowerCase() ?? "";
-          if (!match || match[2] !== String(tunnelPort)) return refuse(client, "");
           // Without a token kozod issued, the request is not prepare's, so nothing is reported.
           const token = tokenOf(request);
           if (token === null) return deny(client);
           state.token = token;
           tokens.get(token)?.add(client);
+          const line = request.split("\r\n")[0] ?? "";
+          const match = line.match(/^CONNECT ([A-Za-z0-9.-]+):(\d+) HTTP\/1\.[01]$/);
+          const host = match?.[1]?.toLowerCase() ?? "";
+          if (!match || match[2] !== String(tunnelPort)) return refuse(client, "");
           if (!allowed(host)) return refuse(client, host);
           state.opening = true;
           const rest = head.subarray(end + crlf2.length);
@@ -204,7 +187,8 @@ export class EgressProxy {
             port: tunnelPort,
             socket: {
               open(upstream) {
-                const out = new Outbox(upstream as Socket<unknown>);
+                if (state.closed) return void upstream.terminate();
+                const out = new Outbox(upstream);
                 state.upstream = { out, socket: upstream as Socket<unknown> };
                 state.opening = false;
                 state.out.write(established);
@@ -217,11 +201,12 @@ export class EgressProxy {
               drain() {
                 state.upstream?.out.drain();
               },
+              // What the client has not taken yet still reaches it.
               close() {
-                client.end();
+                state.out.end();
               },
               error() {
-                client.end();
+                state.out.end();
               },
             },
           }).catch(() => {
@@ -232,12 +217,15 @@ export class EgressProxy {
         drain(client) {
           client.data.out.drain();
         },
+        // Nothing upstream sends any more has a client to go to.
         close(client) {
-          client.data.upstream?.socket.end();
+          client.data.closed = true;
+          client.data.upstream?.socket.terminate();
           if (client.data.token) tokens.get(client.data.token)?.delete(client);
         },
         error(client) {
-          client.data.upstream?.socket.end();
+          client.data.closed = true;
+          client.data.upstream?.socket.terminate();
           client.end();
         },
       },

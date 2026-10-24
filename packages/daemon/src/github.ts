@@ -47,10 +47,11 @@ const permissionEndpoint =
 
 /** Whether kozod may run gh with `args`. */
 export function ghAllowed(args: readonly string[]): boolean {
-  // kozod opens an Issue only for a local item it moves to GitHub, with its title and request.
+  // kozod opens an Issue only for a local item it moves to GitHub, with its title, its request
+  // and the intake label.
   if (args[0] === "issue" && args[1] === "create") {
     return (
-      args.length === 5 &&
+      (args.length === 5 || (args.length === 6 && (args[5] ?? "").startsWith("--label="))) &&
       (args[2] ?? "").startsWith("--repo=") &&
       (args[3] ?? "").startsWith("--title=") &&
       args[4] === "--body-file=-"
@@ -181,10 +182,18 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
         ]),
       );
     },
-    async createIssue(repository, { title, body }) {
-      // gh prints the new Issue's URL, which ends in its number.
+    async createIssue(repository, { title, body, labels }) {
+      // gh looks the labels up before it opens the Issue, and prints the new Issue's URL, which
+      // ends in its number.
       const url = await gh(
-        ["issue", "create", `--repo=${repository}`, `--title=${title}`, "--body-file=-"],
+        [
+          "issue",
+          "create",
+          `--repo=${repository}`,
+          `--title=${title}`,
+          "--body-file=-",
+          ...labels.map((label) => `--label=${label}`),
+        ],
         {
           stdin: body,
         },
