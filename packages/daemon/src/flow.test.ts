@@ -216,6 +216,12 @@ describe("the retrospective", () => {
     expect(week.failures).toEqual([
       { kind: "missing-tool", ref: `${ref}/t1`, at: expect.any(String), text: question },
     ]);
+    const held = env.store.db
+      .query<{ blocked: string }, []>(
+        "select json_extract(line, '$.data.blocked') as blocked from events where type = 'hold.set' and json_extract(line, '$.data.hold') = 'question'",
+      )
+      .get();
+    expect(held?.blocked).toBe("missing-tool");
   }, 120_000);
 });
 

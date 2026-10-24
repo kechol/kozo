@@ -64,6 +64,7 @@ function failures(db: Database, state: FactoryState, since: string): Failure[] {
         text: string | null;
         from: string | null;
         to: string | null;
+        blocked: string | null;
       },
       [string]
     >(
@@ -71,7 +72,8 @@ function failures(db: Database, state: FactoryState, since: string): Failure[] {
               json_extract(line, '$.data.verdict') as verdict,
               coalesce(json_extract(line, '$.data.summary'), json_extract(line, '$.data.text'),
                        json_extract(line, '$.data.reason')) as text,
-              json_extract(line, '$.data.from') as "from", json_extract(line, '$.data.to') as "to"
+              json_extract(line, '$.data.from') as "from", json_extract(line, '$.data.to') as "to",
+              json_extract(line, '$.data.blocked') as blocked
          from events
         where ts >= ? and type in ('review.verdict', 'task.returned', 'stage.changed', 'hold.set')
         order by ts, id`,
@@ -95,8 +97,8 @@ function failures(db: Database, state: FactoryState, since: string): Failure[] {
     // Only a human's commit moves a task from Handoff to Reviewing.
     if (row.type === "stage.changed" && row.from === "handoff" && row.to === "reviewing")
       return failure("human-commit");
-    if (row.type === "hold.set" && row.text?.startsWith("missing-tool: "))
-      return failure("missing-tool", row.text.slice("missing-tool: ".length));
+    if (row.type === "hold.set" && row.blocked === "missing-tool")
+      return failure("missing-tool", (row.text ?? "").replace(/^missing-tool: /, ""));
     return [];
   });
   return [...found, ...defects].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));

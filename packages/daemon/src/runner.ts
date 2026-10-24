@@ -8,6 +8,7 @@ import {
   demotedCharter,
   explorerAnswerJsonSchema,
   explorerAnswerSchema,
+  type BlockedReason,
   type GateLevel,
   highestTask,
   isClosed,
@@ -566,6 +567,7 @@ export class Runner implements RunnerOps {
     hold: "approval" | "question" | "attention",
     reason: string,
     run?: string,
+    blocked?: BlockedReason,
   ) {
     const subject = task === null ? this.store.state.items[item] : this.store.state.tasks[task];
     if (!subject || subject.hold) return;
@@ -579,6 +581,7 @@ export class Runner implements RunnerOps {
         hold,
         by: "kozod",
         reason: reason.slice(0, 2000),
+        ...(blocked ? { blocked } : {}),
       },
     });
   }

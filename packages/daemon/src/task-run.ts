@@ -1,6 +1,7 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  type BlockedReason,
   type Blueprint,
   type BlueprintNode,
   type Charter,
@@ -66,6 +67,7 @@ export interface RunnerOps {
     hold: "approval" | "question" | "attention",
     reason: string,
     run?: string,
+    blocked?: BlockedReason,
   ): Promise<void>;
   moveTask(task: TaskState, to: Stage, run: string | null, reason: string): Promise<void>;
   splitAgain(taskRef: string, question: string): Promise<void>;
@@ -97,6 +99,8 @@ interface Halt {
   end: "succeeded" | "failed" | "lost";
   why?: string;
   ok?: boolean;
+  /** The `kozo_blocked` reason when a session's block holds the task. */
+  blocked?: BlockedReason;
 }
 
 /**
@@ -214,7 +218,14 @@ export class BlueprintRun {
   /** Ends the run at `node` with the task held for a human. */
   async halt(node: Node, held: Halt): Promise<RunEnd> {
     await this.exit(node, held.ok ?? false, held.summary ?? held.reason);
-    await this.runner.hold(this.item.ref, this.task.ref, held.hold, held.reason, this.run);
+    await this.runner.hold(
+      this.item.ref,
+      this.task.ref,
+      held.hold,
+      held.reason,
+      this.run,
+      held.blocked,
+    );
     return await this.stopHere(held.end, held.why);
   }
 

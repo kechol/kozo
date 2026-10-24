@@ -3,6 +3,7 @@ import { autonomyLevelSchema, workClassSchema } from "./charter.ts";
 import { gateLevelSchema } from "./constraints.ts";
 import { type ParseResult, parseJsonDocument } from "./document.ts";
 import { planSchema } from "./plan.ts";
+import { blockedReasonSchema } from "./run-report.ts";
 import {
   formatItemReference,
   itemReferenceSchema,
@@ -170,7 +171,17 @@ export const eventSchema = z
         reason: text,
       }),
     ),
-    event("hold.set", z.strictObject({ target, hold: holdKindSchema, by: actor, reason: text })),
+    event(
+      "hold.set",
+      z.strictObject({
+        target,
+        hold: holdKindSchema,
+        by: actor,
+        reason: text,
+        /** The `kozo_blocked` reason of the session whose block set the hold. */
+        blocked: blockedReasonSchema.optional(),
+      }),
+    ),
     event(
       "hold.cleared",
       z.strictObject({ target, hold: holdKindSchema, by: actor, reason: text.optional() }),

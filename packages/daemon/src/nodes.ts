@@ -298,6 +298,7 @@ const implement: NodeStep = async (run, current) => {
       hold: "question",
       reason: `${blocked.reason}: ${blocked.question}`,
       summary: `blocked: ${blocked.reason}`,
+      blocked: blocked.reason,
       end: "succeeded",
       ok: true,
     });
