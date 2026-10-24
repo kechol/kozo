@@ -938,7 +938,7 @@ export class Runner implements RunnerOps {
     const { mode } = definition.factory;
     const { ref } = await baseOf(item.repository, mode);
     const tip = (await git(item.repository, ["rev-parse", ref])).trim();
-    const charter = await readCharter(item.repository, mode);
+    const charter = await readCharter(item.repository, mode, this.store.state);
     const run = await this.startRun({ item: itemRef, task: taskRef }, "explorer", tip, definition);
     try {
       const records = await explorerRecords(this.home, this.store, mode, itemRef, taskRef);

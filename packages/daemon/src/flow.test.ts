@@ -14,13 +14,18 @@ import {
   fakeAgent,
   gitRepository,
   goodChange,
+  suiteImplement as implement,
+  judgeWith,
+  noVerifier,
+  suitePlan as plan,
+  suiteReport as report,
   suiteBase,
   suiteTask,
   tempDirectory,
   testConfine,
 } from "@kozo/testing";
-import type { Judge, Verifier } from "@kozo/verify";
-import { git, readDefinition } from "@kozo/verify";
+import type { Judge } from "@kozo/verify";
+import { type Definition, git, readDefinition } from "@kozo/verify";
 import type { AgentRequest } from "@kozo/worker";
 import { Automations } from "./automations.ts";
 import { ControlPlane } from "./control-plane.ts";
@@ -28,56 +33,23 @@ import { evalCaseOf } from "./eval.ts";
 import { EventStore } from "./event-store.ts";
 import { inProcessLauncher, type Launcher } from "./launcher.ts";
 import { Reconciler } from "./reconcile.ts";
-import { buildReport } from "./report.ts";
+import { buildReport, type Failure } from "./report.ts";
 import { readCharter } from "./repository.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
 import { worktreePath } from "./worktrees.ts";
 
-const plan = {
-  outcome: "plan",
-  plan: {
-    class: "bugfix",
-    risk: "normal",
-    approach: "Add the low-stock wording to stockLabel and test it",
-    done_when: suiteTask.doneWhen,
-    tasks: [
-      {
-        id: "t1",
-        goal: suiteTask.goal,
-        done_when: suiteTask.doneWhen,
-        scope: suiteTask.scope,
-        depends_on: [],
-        estimate: { lines: 20, files: 2 },
-      },
-    ],
-  },
-};
-
-const report = {
-  version: 1,
-  outcome: "done",
-  summary: "stockLabel says Only N left for 1 to 3 units.",
-  changes: ["Added the low-stock branch to stockLabel"],
-  out_of_scope: [],
-  tests: ["src/stock-low.test.ts"],
-};
-
-const judgeWith = (verdict: "accept" | "revise" | "escalate"): Judge => ({
-  async judge(request) {
-    return {
-      output: { verdict, summary: `${verdict}: the label`, findings: [] },
-      model: request.model,
-      costUsd: 0.01,
-    };
-  },
-});
-
-const noVerifier: Verifier = {
-  async verify() {
-    throw new Error("verify-app is missing, so verify never runs");
-  },
-};
+/** The failures `kozo report --days 7` lists for a test factory. */
+async function weekFailures(env: { store: EventStore; definition: { current: Definition } }) {
+  const report = await buildReport(
+    env.store.db,
+    env.store.state,
+    env.definition.current.factory,
+    "summary",
+    7,
+  );
+  return (report as { failures: Failure[] }).failures;
+}
 
 async function factoryOf(
   script: (request: AgentRequest) => FakeStep[],
@@ -156,18 +128,6 @@ async function factoryOf(
     },
   };
 }
-
-const implement = (): FakeStep[] => [
-  { say: "Writing the test first." },
-  { write: goodChange },
-  { commit: "feat: say only N left when stock is low" },
-  { use: "kozo_gates", input: { level: "full" } },
-  {
-    use: "kozo_note",
-    input: { choice: "Kept the label in one function", reason: "It is the only place" },
-  },
-  { answer: report },
-];
 
 describe("feature items", () => {
   const feature = { ...plan, plan: { ...plan.plan, class: "feature" } };
@@ -252,13 +212,7 @@ describe("the retrospective", () => {
     await env.settle();
     await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
     await env.settle();
-    const week = (await buildReport(
-      env.store.db,
-      env.store.state,
-      env.definition.current.factory,
-      "summary",
-      7,
-    )) as { failures: unknown[] };
+    const week = { failures: await weekFailures(env) };
     expect(week.failures).toEqual([
       { kind: "missing-tool", ref: `${ref}/t1`, at: expect.any(String), text: question },
     ]);
@@ -495,13 +449,7 @@ describe("the minimal path", () => {
     expect(env.agent.requests[2]?.prompt).toContain("The previous attempt did not pass");
     expect(task?.revisions).toBe(2);
     expect(task?.hold).toMatchObject({ kind: "attention" });
-    const week = (await buildReport(
-      env.store.db,
-      env.store.state,
-      env.definition.current.factory,
-      "summary",
-      7,
-    )) as { failures: { kind: string; ref: string }[] };
+    const week = { failures: await weekFailures(env) };
     expect(week.failures.filter((failure) => failure.kind === "revise")).toHaveLength(2);
     expect(week.failures[0]).toMatchObject({ kind: "revise", ref: `${ref}/t1` });
   }, 180_000);
@@ -986,13 +934,7 @@ describe("the minimal path", () => {
     );
     const edited = await readCharter(env.repo.path, "local", env.store.state);
     expect(edited.ok && autonomyLevel(edited.charter, "bugfix")).toBe("L2");
-    const week = (await buildReport(
-      env.store.db,
-      env.store.state,
-      env.definition.current.factory,
-      "summary",
-      7,
-    )) as { failures: { kind: string; ref: string }[] };
+    const week = { failures: await weekFailures(env) };
     expect(week.failures).toContainEqual(expect.objectContaining({ kind: "defect", ref: task }));
   }, 180_000);
 
@@ -1732,13 +1674,7 @@ test("one unit is still counted", () => {
     const sessions = env.agent.requests.length;
     await env.control.act(task, reference, "return", { text: "Wrote the low-stock branch" });
     expect(env.store.state.tasks[task]?.humanCommits).toBe(true);
-    const week = (await buildReport(
-      env.store.db,
-      env.store.state,
-      env.definition.current.factory,
-      "summary",
-      7,
-    )) as { failures: { kind: string; ref: string; text: string }[] };
+    const week = { failures: await weekFailures(env) };
     expect(week.failures).toContainEqual(
       expect.objectContaining({ kind: "human-commit", ref: task, text: "taken and given back" }),
     );

@@ -3,6 +3,24 @@
  * and unsigned, whatever the owner's configuration says. Claude Code drops GIT_CONFIG_GLOBAL
  * from its shell but keeps keys passed through GIT_CONFIG_COUNT.
  */
+/**
+ * The `git -c` flags of a commit kozod makes itself: by `name` and `email`, unsigned and past
+ * the owner's hooks, whatever the owner's configuration says.
+ */
+export const commitIdentity = (
+  name = "kozo",
+  email = "kozo@localhost.invalid",
+): readonly string[] => [
+  "-c",
+  `user.name=${name}`,
+  "-c",
+  `user.email=${email}`,
+  "-c",
+  "commit.gpgsign=false",
+  "-c",
+  "core.hooksPath=/dev/null",
+];
+
 export const factoryGitEnvironment: Record<string, string> = {
   GIT_AUTHOR_NAME: "kozo",
   GIT_AUTHOR_EMAIL: "kozo@localhost.invalid",

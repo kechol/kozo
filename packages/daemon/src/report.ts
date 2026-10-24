@@ -1,21 +1,21 @@
 import type { Database } from "bun:sqlite";
 import {
   autonomyLevel,
+  dayMs,
   type Factory,
   type FactoryState,
   promotionProposals,
   type TaskState,
+  waitsOnOwner,
   workClassSchema,
 } from "@kozo/core";
-import { costOf, midnightOf } from "./queries.ts";
+import { costBetween, costOf, costToday, midnightOf } from "./queries.ts";
 import { readCharter } from "./repository.ts";
 
 export type ReportView = "summary" | "review" | "cost";
 
 /** The window a report covers when the request names none, and the longest it may cover. */
 export const reportDays = { default: 30, max: 365 } as const;
-
-const dayMs = 24 * 60 * 60 * 1000;
 
 /** The middle value of `values`, or null when there is none. */
 function median(values: number[]): number | null {
@@ -39,16 +39,6 @@ function diffCost(db: Database, state: FactoryState, task: TaskState): number {
       .get(task.item)?.usd ?? 0;
   const tasks = state.items[task.item]?.tasks.length ?? 1;
   return costOf(db, "task", task.ref) + own / Math.max(tasks, 1);
-}
-
-function costSince(db: Database, since: Date): number {
-  return (
-    db
-      .query<{ usd: number }, [string]>(
-        "select coalesce(sum(json_extract(line, '$.cost.usd')), 0) as usd from events where ts >= ?",
-      )
-      .get(since.toISOString())?.usd ?? 0
-  );
 }
 
 export interface Failure {
@@ -127,8 +117,8 @@ function metrics(db: Database, state: FactoryState, since: string) {
       ? [(Date.parse(task.merged.at) - Date.parse(task.handedOffAt)) / (60 * 60 * 1000)]
       : [],
   );
-  const held = [...Object.values(state.items), ...Object.values(state.tasks)].filter(
-    (subject) => subject.hold?.kind === "question" || subject.hold?.kind === "attention",
+  const held = [...Object.values(state.items), ...Object.values(state.tasks)].filter((subject) =>
+    waitsOnOwner(subject.hold),
   ).length;
   return {
     merged: merged.length,
@@ -160,16 +150,10 @@ export async function buildReport(
 ) {
   const budget = factory.budget.daily_usd;
   if (view === "cost") {
-    const today = costSince(db, midnightOf(now));
+    const today = costToday(db, now);
     const daily = Array.from({ length: days }, (_, back) => {
       const start = midnightOf(new Date(now.getTime() - back * dayMs));
-      const end = new Date(start.getTime() + dayMs);
-      const usd =
-        db
-          .query<{ usd: number }, [string, string]>(
-            "select coalesce(sum(json_extract(line, '$.cost.usd')), 0) as usd from events where ts >= ? and ts < ?",
-          )
-          .get(start.toISOString(), end.toISOString())?.usd ?? 0;
+      const usd = costBetween(db, start, new Date(start.getTime() + dayMs));
       return { day: start.toISOString(), usd };
     });
     return { view, budget_usd: budget, today_usd: today, days: daily };
@@ -211,6 +195,6 @@ export async function buildReport(
     ...result,
     levels,
     demotions: Object.values(state.demotions),
-    cost_usd: costSince(db, new Date(since)),
+    cost_usd: costBetween(db, new Date(since)),
   };
 }

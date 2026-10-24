@@ -34,6 +34,8 @@ export interface ItemState {
   /** The class the request asked for, or null. */
   requestedClass: WorkClass | null;
   approvals: Approvals;
+  /** When the item reached Complete or Cancelled, or null while it is open. */
+  closedAt: string | null;
   /** Who accepted the item's latest plan, or null before one is accepted. */
   acceptedBy: "human" | "kozod" | null;
   /**
@@ -316,6 +318,7 @@ export function applyEvent(state: FactoryState, event: Event): void {
         source: event.data.source,
         requestedClass: event.data.class,
         approvals: event.data.approvals,
+        closedAt: null,
         acceptedBy: null,
         stage: "intake",
         hold: null,
@@ -371,6 +374,8 @@ export function applyEvent(state: FactoryState, event: Event): void {
         if (event.data.to === "handoff") task.handedOffAt = event.ts;
       }
       if (event.data.target === "item" && item && event.data.to === "triage") item.rejections = 0;
+      if (event.data.target === "item" && item)
+        item.closedAt = isClosed(event.data.to) ? event.ts : null;
       subject.stage = event.data.to;
       subject.updatedAt = event.ts;
       return;
@@ -650,11 +655,19 @@ export function replay(events: Iterable<Event>): FactoryState {
   return state;
 }
 
+export const dayMs = 24 * 60 * 60 * 1000;
+
+/** Whether a hold waits on the owner's answer or action: a question or attention. */
+export const waitsOnOwner = (
+  hold: Hold | null,
+): hold is Hold & { kind: "question" | "attention" } =>
+  hold?.kind === "question" || hold?.kind === "attention";
+
 export const approvalExpiryDays = 7;
 
 /** The items whose approval hold has waited `approvalExpiryDays` or longer at `now`. */
 export function expiredApprovals(state: FactoryState, now: Date): ItemState[] {
-  const limit = now.getTime() - approvalExpiryDays * 24 * 60 * 60 * 1000;
+  const limit = now.getTime() - approvalExpiryDays * dayMs;
   return Object.values(state.items).filter(
     (item) => item.hold?.kind === "approval" && Date.parse(item.hold.since) <= limit,
   );

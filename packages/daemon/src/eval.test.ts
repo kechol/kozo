@@ -6,69 +6,19 @@ import {
   type FakeStep,
   fakeAgent,
   gitRepository,
-  goodChange,
+  judgeWith,
+  noVerifier,
+  suitePlan as plan,
   suiteBase,
+  suiteImplement,
   suiteTask,
   tempDirectory,
   testConfine,
 } from "@kozo/testing";
-import { type Judge, readDefinition, type Verifier } from "@kozo/verify";
+import { readDefinition } from "@kozo/verify";
 import type { AgentRequest } from "@kozo/worker";
 import { resolveRepository, runEvalCase } from "./eval.ts";
 import { inProcessLauncher } from "./launcher.ts";
-
-const plan = {
-  outcome: "plan",
-  plan: {
-    class: "bugfix",
-    risk: "normal",
-    approach: "Add the low-stock wording to stockLabel and test it",
-    done_when: suiteTask.doneWhen,
-    tasks: [
-      {
-        id: "t1",
-        goal: suiteTask.goal,
-        done_when: suiteTask.doneWhen,
-        scope: suiteTask.scope,
-        depends_on: [],
-        estimate: { lines: 20, files: 2 },
-      },
-    ],
-  },
-};
-
-const implement: FakeStep[] = [
-  { write: goodChange },
-  { commit: "feat: say only N left when stock is low" },
-  { use: "kozo_gates", input: { level: "full" } },
-  { use: "kozo_note", input: { choice: "Kept the label in one function", reason: "One place" } },
-  {
-    answer: {
-      version: 1,
-      outcome: "done",
-      summary: "stockLabel says Only N left for 1 to 3 units.",
-      changes: ["Added the low-stock branch to stockLabel"],
-      out_of_scope: [],
-      tests: ["src/stock-low.test.ts"],
-    },
-  },
-];
-
-const accept: Judge = {
-  async judge(request) {
-    return {
-      output: { verdict: "accept", summary: "accept: the label", findings: [] },
-      model: request.model,
-      costUsd: 0.01,
-    };
-  },
-};
-
-const noVerifier: Verifier = {
-  async verify() {
-    throw new Error("verify-app is missing, so verify never runs");
-  },
-};
 
 async function setup(
   script: (request: AgentRequest) => FakeStep[],
@@ -90,7 +40,7 @@ async function setup(
   if (!loaded.ok) throw new Error(loaded.issues.join("; "));
   const deps = {
     launcher: inProcessLauncher(fakeAgent(script), testConfine),
-    judge: accept,
+    judge: judgeWith("accept"),
     verifier: noVerifier,
     confine: testConfine,
   };
@@ -111,7 +61,7 @@ async function setup(
 describe("runEvalCase", () => {
   test("plays the owner to Complete, lays the hidden test over the result and runs the checks", async () => {
     await using env = await setup((request) =>
-      request.agent === "triage" ? [{ answer: plan }] : implement,
+      request.agent === "triage" ? [{ answer: plan }] : suiteImplement(),
     );
     const evals = join(env.dir.path, "evals");
     await Bun.write(join(evals, "low-stock", "hidden.test.ts"), "// the hidden test\n");
@@ -195,7 +145,7 @@ describe("runEvalCase", () => {
       },
     };
     await using env = await setup(
-      (request) => (request.agent === "triage" ? [{ answer: split }] : implement),
+      (request) => (request.agent === "triage" ? [{ answer: split }] : suiteImplement()),
       (text) => `${text}\nservices:\n  - "true"\n`,
     );
     const file = join(env.dir.path, "evals", "two.yml");

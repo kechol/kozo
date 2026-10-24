@@ -2,6 +2,7 @@ export * from "./bad-changes.ts";
 export * from "./confine.ts";
 export * from "./documents.ts";
 export * from "./events.ts";
+export * from "./factory-fixtures.ts";
 export * from "./fake-agent.ts";
 export * from "./fake-github.ts";
 export * from "./git-repository.ts";

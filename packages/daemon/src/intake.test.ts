@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { kozoHome } from "@kozo/core";
+import { emptyState, kozoHome } from "@kozo/core";
 import { exampleCharter, gitRepository, tempDirectory } from "@kozo/testing";
 import { defaultBranch, readDefinition } from "@kozo/verify";
 import { ControlPlane } from "./control-plane.ts";
@@ -54,21 +54,21 @@ describe("readCharter", () => {
     await using repo = await gitRepository();
     await repo.commit({ "README.md": "# shop\n" }, "start");
     expect(await defaultBranch(repo.path)).toBe("main");
-    expect(await readCharter(repo.path, "local")).toEqual({
+    expect(await readCharter(repo.path, "local", emptyState())).toEqual({
       ok: false,
       reason: ".kozo/charter.yml is missing on main",
     });
     await repo.commit({ ".kozo/charter.yml": exampleCharter.replace("ready", "incomplete") });
-    expect(await readCharter(repo.path, "local")).toMatchObject({
+    expect(await readCharter(repo.path, "local", emptyState())).toMatchObject({
       ok: false,
       reason: expect.stringContaining("incomplete"),
     });
     await repo.commit({ ".kozo/charter.yml": "version: 1\n" });
-    expect(await readCharter(repo.path, "local")).toMatchObject({ ok: false });
+    expect(await readCharter(repo.path, "local", emptyState())).toMatchObject({ ok: false });
     await repo.commit({ ".kozo/charter.yml": exampleCharter });
     await repo.git("switch", "--quiet", "-c", "feature");
     await repo.commit({ ".kozo/charter.yml": "broken: [" });
-    expect(await readCharter(repo.path, "local")).toMatchObject({ ok: true });
+    expect(await readCharter(repo.path, "local", emptyState())).toMatchObject({ ok: true });
   });
 });
 

@@ -5,12 +5,15 @@ import {
   type EvalCase,
   type EvalOutcome,
   type Factory,
+  type FactoryState,
+  type ItemState,
   type KozoHome,
   kozoHome,
   parseEvalCase,
   parseReference,
   type Reference,
   sha256,
+  waitsOnOwner,
 } from "@kozo/core";
 import {
   type Confine,
@@ -23,11 +26,13 @@ import {
   showFile,
   type Verifier,
 } from "@kozo/verify";
+import { commitIdentity } from "@kozo/worker";
 import { CommandError } from "./api.ts";
 import { ControlPlane } from "./control-plane.ts";
 import { EventStore } from "./event-store.ts";
 import { readItemFile } from "./item-file.ts";
 import type { Launcher } from "./launcher.ts";
+import { costBetween } from "./queries.ts";
 import { Reconciler } from "./reconcile.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
@@ -62,17 +67,7 @@ export async function evalCaseOf(
   const item = state.items[state.runs[run]?.item ?? ""];
   if (!item) throw new CommandError(404, `${run} does not exist`);
   const tasks = item.tasks.flatMap((ref) => state.tasks[ref] ?? []);
-  const planned = item.plan ?? item.draft;
-  const outcome: EvalOutcome | null =
-    item.stage === "complete"
-      ? "complete"
-      : [item.hold, ...tasks.map((task) => task.hold)].some((hold) => hold?.kind === "question")
-        ? "question"
-        : [item.hold, ...tasks.map((task) => task.hold)].some((hold) => hold?.kind === "attention")
-          ? "attention"
-          : planned && planned.tasks.length > 1
-            ? "split"
-            : null;
+  const outcome = reachedOutcome(state, item)?.outcome ?? null;
   if (outcome === null)
     throw new CommandError(409, `${item.ref} has reached no outcome an eval case can expect yet`);
   const start = store.db
@@ -95,6 +90,24 @@ export async function evalCaseOf(
       expected: { outcome, ...(merged ? { reference: merged } : {}) },
     },
   };
+}
+
+/**
+ * The outcome an item has reached, if any: a question or attention hold on it or a task, with
+ * the hold's reason, Complete, or a plan of more than one task.
+ */
+function reachedOutcome(
+  state: FactoryState,
+  item: ItemState,
+): { outcome: EvalOutcome; reason?: string } | null {
+  const holds = [item, ...item.tasks.flatMap((ref) => state.tasks[ref] ?? [])]
+    .map((subject) => subject.hold)
+    .filter(waitsOnOwner);
+  const held = holds.find((hold) => hold.kind === "question") ?? holds[0];
+  if (held) return { outcome: held.kind, reason: held.reason };
+  if (item.stage === "complete") return { outcome: "complete" };
+  const planned = item.draft ?? item.plan;
+  return planned && planned.tasks.length > 1 ? { outcome: "split" } : null;
 }
 
 export interface EvalDeps {
@@ -120,16 +133,8 @@ export interface EvalResult {
   error?: string;
 }
 
-const owner = [
-  "-c",
-  "user.name=kozo eval",
-  "-c",
-  "user.email=eval@example.com",
-  "-c",
-  "commit.gpgsign=false",
-  "-c",
-  "core.hooksPath=/dev/null",
-];
+// The owner an eval plays commits and merges as itself, past the owner's own signing and hooks.
+const owner = commitIdentity("kozo eval", "eval@example.com");
 
 /** Commits the base's `.kozo/` into a clone whose start commit has none, as a case needs it. */
 async function addKozoFiles(source: string, clone: string) {
@@ -273,12 +278,7 @@ export async function runEvalCase(
           if (code !== 0) break;
         }
       }
-      const costUsd =
-        store.db
-          .query<{ usd: number }, []>(
-            "select coalesce(sum(json_extract(line, '$.cost.usd')), 0) as usd from events",
-          )
-          .get()?.usd ?? 0;
+      const costUsd = costBetween(store.db, new Date(0));
       return {
         id: evalCase.id,
         expected: expected.outcome,
@@ -318,14 +318,9 @@ async function drive(
     const item = state.items[ref];
     if (!item) return { outcome: "stuck" };
     const tasks = item.tasks.flatMap((task) => state.tasks[task] ?? []);
-    const holds = [item.hold, ...tasks.map((task) => task.hold)];
-    for (const kind of ["question", "attention"] as const) {
-      const held = holds.find((hold) => hold?.kind === kind);
-      if (held) return { outcome: kind, reason: held.reason };
-    }
-    const planned = item.draft ?? item.plan;
-    if (expected === "split" && planned && planned.tasks.length > 1) return { outcome: "split" };
-    if (item.stage === "complete") return { outcome: "complete" };
+    // A split is the outcome only when the case expects one; otherwise the work goes on.
+    const reached = reachedOutcome(state, item);
+    if (reached && (reached.outcome !== "split" || expected === "split")) return reached;
     if (item.hold?.kind === "approval") {
       await control.act(ref, reference, "approve", {});
       continue;

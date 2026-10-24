@@ -13,13 +13,13 @@ export type CharterResult =
   | { ok: false; reason: string };
 
 /**
- * Reads the Charter from the tip of the base; anything short of ready is a refusal. With
- * `state`, the levels are the ones kozod applies, its demotions included.
+ * Reads the Charter from the tip of the base; anything short of ready is a refusal. Its levels
+ * are the ones kozod applies, with the demotions in `state`.
  */
 export async function readCharter(
   repository: string,
   mode: Factory["mode"],
-  state?: FactoryState,
+  state: FactoryState,
 ): Promise<CharterResult> {
   let branch: string;
   let ref: string;
@@ -41,6 +41,5 @@ export async function readCharter(
     };
   }
   const sha = sha256(text);
-  const charter = state ? demotedCharter(state, repository, result.value, sha) : result.value;
-  return { ok: true, charter, commit, sha };
+  return { ok: true, charter: demotedCharter(state, repository, result.value, sha), commit, sha };
 }

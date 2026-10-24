@@ -18,6 +18,7 @@ import {
   wrapRequest,
 } from "@kozo/core";
 import { baseOf, defaultBranch, git, installRepositoryTemplate, isAncestor } from "@kozo/verify";
+import { commitIdentity } from "@kozo/worker";
 import { CommandError, type VerbResult } from "./api.ts";
 import type { ControlPlane } from "./control-plane.ts";
 import type { DefinitionInUse } from "./definition.ts";
@@ -113,20 +114,7 @@ export class GitHubSync {
       if (written.length === 0) return { message: `${github} has every file kozo installs` };
       await git(worktree, ["add", "--all"]);
       // The commit is the factory's: kozo's identity, unsigned and past the owner's hooks.
-      await git(worktree, [
-        "-c",
-        "user.name=kozo",
-        "-c",
-        "user.email=kozo@localhost.invalid",
-        "-c",
-        "commit.gpgsign=false",
-        "-c",
-        "core.hooksPath=/dev/null",
-        "commit",
-        "--quiet",
-        "--message",
-        "Install kozo",
-      ]);
+      await git(worktree, [...commitIdentity(), "commit", "--quiet", "--message", "Install kozo"]);
       const head = (await git(worktree, ["rev-parse", "HEAD"])).trim();
       await pushConfirmed(this.github, repository.path, branch, head);
       const pull = await this.github.createPull(github, {
@@ -470,7 +458,7 @@ export class GitHubSync {
       .filter((check) => check.bucket === "fail")
       .map((check) => check.name);
     if (failed.length === 0) return;
-    const charter = await readCharter(path, "github");
+    const charter = await readCharter(path, "github", this.store.state);
     const rounds = charter.ok ? charter.charter.limits.ci_fix_rounds : 0;
     const fixes = this.store.state.tasks[task]?.handoffFixes ?? 0;
     if (fixes >= rounds) {

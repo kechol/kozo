@@ -1,9 +1,7 @@
 import { readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { isClosed, type KozoHome, runFiles } from "@kozo/core";
+import { dayMs, type KozoHome, runFiles } from "@kozo/core";
 import type { EventStore } from "./event-store.ts";
-
-const dayMs = 24 * 60 * 60 * 1000;
 
 /** What a pruned run keeps: its event log, which kozo.db is rebuilt from, and its small records. */
 const kept = (home: KozoHome, run: string) => {
@@ -29,7 +27,7 @@ export async function pruneRecords(
   const state = store.state;
   const closed = (ref: string) => {
     const item = state.items[ref];
-    return item !== undefined && isClosed(item.stage) && item.updatedAt <= before;
+    return item?.closedAt != null && item.closedAt <= before;
   };
   const runs: string[] = [];
   for (const run of Object.values(state.runs)) {

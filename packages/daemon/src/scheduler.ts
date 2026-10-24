@@ -7,6 +7,7 @@ import {
   isRunOver,
   startBlocker,
   type TaskState,
+  waitsOnOwner,
 } from "@kozo/core";
 import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
@@ -136,9 +137,7 @@ export class Scheduler {
     const held = [
       ...Object.values(state.items).filter((item) => item.repository === repository),
       ...tasks,
-    ].filter(
-      (subject) => subject.hold?.kind === "question" || subject.hold?.kind === "attention",
-    ).length;
+    ].filter((subject) => waitsOnOwner(subject.hold)).length;
     if (held >= charter.backpressure.max_held)
       return `${held} items and tasks wait on questions or attention, the Charter's limit`;
     return null;
@@ -204,7 +203,7 @@ export class Scheduler {
     const stops = new Map<string, string | null>();
     const stopOf = async (repository: string) => {
       if (!stops.has(repository)) {
-        const result = await readCharter(repository, this.factory().mode).catch(
+        const result = await readCharter(repository, this.factory().mode, this.store.state).catch(
           (error: Error): CharterResult => ({ ok: false, reason: error.message }),
         );
         stops.set(repository, this.capacity(repository, result));

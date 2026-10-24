@@ -108,7 +108,11 @@ export class ControlPlane {
    */
   async addAutomated(automation: Automation): Promise<{ ref: string } | { skipped: string }> {
     const repository = this.repositoryFor(automation.repository ?? undefined);
-    const charter = await readCharter(repository, this.definition.current.factory.mode);
+    const charter = await readCharter(
+      repository,
+      this.definition.current.factory.mode,
+      this.store.state,
+    );
     if (!charter.ok) return { skipped: `not accepted: ${charter.reason}` };
     const title = normalTitle(automation.title);
     const open = Object.values(this.store.state.items).find(

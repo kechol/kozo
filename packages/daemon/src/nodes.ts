@@ -26,7 +26,7 @@ import {
   writeReviewVerdict,
   writeVerifyVerdict,
 } from "@kozo/verify";
-import { factoryGitEnvironment, taskSandbox } from "@kozo/worker";
+import { commitIdentity, taskSandbox } from "@kozo/worker";
 import { checkNotes } from "./instructions.ts";
 import { handoffReportPath, readItemFile, requestText } from "./item-file.ts";
 import { firstCodeChange, firstNonTestChange, layersFor, onlyDependencyFiles } from "./risk.ts";
@@ -336,14 +336,7 @@ async function applyCodemod(run: BlueprintRun, codemod: string): Promise<RunEnd 
   await git(worktree, ["add", "--all"]);
   if ((await git(worktree, ["status", "--porcelain"])).trim() === "") return;
   await git(worktree, [
-    "-c",
-    `user.name=${factoryGitEnvironment.GIT_AUTHOR_NAME}`,
-    "-c",
-    `user.email=${factoryGitEnvironment.GIT_AUTHOR_EMAIL}`,
-    "-c",
-    "commit.gpgsign=false",
-    "-c",
-    "core.hooksPath=/dev/null",
+    ...commitIdentity(),
     "commit",
     "--quiet",
     "--message",

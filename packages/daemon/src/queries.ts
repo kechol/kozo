@@ -120,15 +120,21 @@ export function midnightOf(now: Date): Date {
   return midnight;
 }
 
-/** What the day's events added to the cost, from local midnight at `now`. */
-export function costToday(db: Database, now: Date): number {
+/** What the events from `from`, and before `to` when given, added to the cost. */
+export function costBetween(db: Database, from: Date, to?: Date): number {
+  const bounds = [from, ...(to ? [to] : [])].map((date) => date.toISOString());
   return (
     db
-      .query<{ usd: number }, [string]>(
-        "select coalesce(sum(json_extract(line, '$.cost.usd')), 0) as usd from events where ts >= ?",
+      .query<{ usd: number }, string[]>(
+        `select coalesce(sum(json_extract(line, '$.cost.usd')), 0) as usd from events where ts >= ?${to ? " and ts < ?" : ""}`,
       )
-      .get(midnightOf(now).toISOString())?.usd ?? 0
+      .get(...bounds)?.usd ?? 0
   );
+}
+
+/** What the day's events added to the cost, from local midnight at `now`. */
+export function costToday(db: Database, now: Date): number {
+  return costBetween(db, midnightOf(now));
 }
 
 export function activeRuns(db: Database): number {
