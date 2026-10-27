@@ -199,12 +199,12 @@ export class Runner implements RunnerOps {
   }
 
   /**
-   * Three sessions in a row that fail on the API, rather than on a limit or a stop-check,
-   * pause the factory: retrying into an outage only spends the budget.
+   * Three sessions in a row that fail on the API, rather than on a limit, without an answer or
+   * by crashing, pause the factory: retrying into an outage only spends the budget.
    */
   private async countApiFailure(result: SessionResult) {
     const reason = result.status === "failed" ? result.outcome.reason : "";
-    const api = result.status === "failed" && !/^(error_max|stop-check)/.test(reason);
+    const api = result.status === "failed" && result.outcome.kind === "api";
     if (api) this.apiFailures += 1;
     else if (result.status === "answered") this.apiFailures = 0;
     if (this.apiFailures >= 3 && !this.store.state.paused) {

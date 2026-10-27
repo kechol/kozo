@@ -2121,6 +2121,17 @@ test("one unit is still counted", () => {
     expect(handoff).toContain("Kept the label");
   }, 120_000);
 
+  test("three sessions in a row that fail without an answer or on a limit do not pause the factory", async () => {
+    for (const kind of ["no-answer", "limit", "crash"] as const) {
+      await using env = await factoryOf(() => [{ fail: `failed: ${kind}`, kind }]);
+      for (const title of ["First", "Second", "Third"]) {
+        await env.control.addItem({ title, class: "docs" });
+        await env.settle();
+      }
+      expect({ kind, paused: env.store.state.paused }).toEqual({ kind, paused: false });
+    }
+  }, 120_000);
+
   test("three sessions in a row that fail on the API pause the factory", async () => {
     await using env = await factoryOf(() => [{ fail: "error_during_execution" }]);
     for (const title of ["First", "Second", "Third"]) {

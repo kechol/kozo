@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { sessionHooks } from "./claude-session.ts";
+import type { HookInput, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { sessionHooks, sessionReader } from "./claude-session.ts";
 import type { AgentRecord, AgentRequest, Instruction } from "./coding-agent.ts";
 
 const answer = {
@@ -65,5 +65,30 @@ describe("sessionHooks", () => {
     const bash = { ...answer, tool_name: "Bash", tool_input: { command: "ls" } } as HookInput;
     expect(await sessionHooks(value).preToolUse(bash)).toEqual({});
     expect(checks).toBe(0);
+  });
+});
+
+describe("sessionReader", () => {
+  const result = (subtype: string, extra: object = {}) =>
+    ({
+      type: "result",
+      subtype,
+      num_turns: 2,
+      total_cost_usd: 0.1,
+      usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0 },
+      result: "I am done.",
+      ...extra,
+    }) as unknown as SDKMessage;
+
+  test("tells a limit, a missing answer and an API failure apart", () => {
+    const kind = (message: SDKMessage) => {
+      const outcome = sessionReader(request([]).value).read(message);
+      return outcome?.status === "failed" ? outcome.kind : outcome?.status;
+    };
+    expect(kind(result("error_max_turns"))).toBe("limit");
+    expect(kind(result("error_max_budget_usd"))).toBe("limit");
+    expect(kind(result("error_during_execution"))).toBe("api");
+    expect(kind(result("success"))).toBe("no-answer");
+    expect(kind(result("success", { structured_output: { word: "x" } }))).toBe("answered");
   });
 });

@@ -159,6 +159,7 @@ export function claudeCliAgent(executable: string, helper: readonly string[]): C
         const said = (await stderr).trim().slice(-300);
         return {
           status: "failed",
+          kind: "crash",
           reason: `the session ended without a result (exit ${code})${said ? `: ${said}` : ""}`,
           ...reader.spent,
         };

@@ -60,7 +60,15 @@ export function inProcessLauncher(agent: CodingAgent, confine: Confine): Launche
           wake?.();
         },
         (error: unknown) => {
-          push({ outcome: { status: "failed", reason: String(error), costUsd: 0, turns: 0 } });
+          push({
+            outcome: {
+              status: "failed",
+              kind: "crash",
+              reason: String(error),
+              costUsd: 0,
+              turns: 0,
+            },
+          });
           done = true;
           wake?.();
         },

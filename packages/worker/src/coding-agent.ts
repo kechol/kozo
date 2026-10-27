@@ -68,9 +68,16 @@ export interface AgentRequest {
   sandbox?: SandboxPaths;
 }
 
+/**
+ * Why a session failed: `api` for the network or the API, `limit` for its turns or budget,
+ * `no-answer` for a finish without the structured answer or with the stop-check spent, and
+ * `crash` for a session that ended without a result.
+ */
+export type FailureKind = "api" | "limit" | "no-answer" | "crash";
+
 export type AgentOutcome =
   | { status: "answered"; output: unknown; costUsd: number; turns: number }
-  | { status: "failed"; reason: string; costUsd: number; turns: number }
+  | { status: "failed"; kind: FailureKind; reason: string; costUsd: number; turns: number }
   | { status: "stopped"; costUsd: number; turns: number };
 
 /**

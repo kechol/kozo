@@ -188,11 +188,14 @@ export function sessionReader(request: AgentRequest) {
       if (message.subtype === "success") {
         return {
           status: "failed",
+          kind: "no-answer",
           reason: `no structured answer: ${message.result.slice(0, 300)}`,
           ...spent,
         };
       }
-      return { status: "failed", reason: message.subtype, ...spent };
+      // error_max_turns, error_max_budget_usd and the like; the rest fail on the way to the API.
+      const kind = message.subtype.startsWith("error_max") ? "limit" : "api";
+      return { status: "failed", kind, reason: message.subtype, ...spent };
     },
   };
 }

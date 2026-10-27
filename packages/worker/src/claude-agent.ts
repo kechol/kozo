@@ -67,13 +67,15 @@ export function claudeAgent(executable: string): CodingAgent {
         }
         return {
           status: "failed",
+          kind: "crash",
           reason: "the session ended without a result",
           ...reader.spent,
         };
       } catch (error) {
         if (request.signal.aborted)
           return { status: "stopped", ...reader.spent } satisfies AgentOutcome;
-        return { status: "failed", reason: (error as Error).message, ...reader.spent };
+        // The SDK throws when Claude Code cannot reach or use the API, as for an outage.
+        return { status: "failed", kind: "api", reason: (error as Error).message, ...reader.spent };
       } finally {
         request.signal.removeEventListener("abort", onAbort);
       }

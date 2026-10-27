@@ -1,7 +1,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { sha256 } from "@kozo/core";
-import type { AgentRequest, CodingAgent } from "@kozo/worker";
+import type { AgentRequest, CodingAgent, FailureKind } from "@kozo/worker";
 import { testGitEnvironment } from "./git-repository.ts";
 
 /** One step of a fake agent's script. */
@@ -22,7 +22,7 @@ export type FakeStep =
   /** Waits until kozod stops the run. */
   | { hang: true }
   | { answer: unknown }
-  | { fail: string };
+  | { fail: string; kind?: FailureKind };
 
 export type FakeScript = FakeStep[] | ((request: AgentRequest) => FakeStep[]);
 
@@ -151,14 +151,26 @@ export function fakeAgent(script: FakeScript): FakeAgent {
           const objection = (await request.beforeStop?.()) ?? null;
           if (objection !== null && index < steps.length - 1) continue;
           if (objection !== null) {
-            return { status: "failed", reason: `stop-check: ${objection}`, costUsd, turns };
+            return {
+              status: "failed",
+              kind: "no-answer",
+              reason: `stop-check: ${objection}`,
+              costUsd,
+              turns,
+            };
           }
           return { status: "answered", output: step.answer, costUsd, turns };
         } else {
-          return { status: "failed", reason: step.fail, costUsd, turns };
+          return { status: "failed", kind: step.kind ?? "api", reason: step.fail, costUsd, turns };
         }
       }
-      return { status: "failed", reason: "the script ended without an answer", costUsd, turns };
+      return {
+        status: "failed",
+        kind: "crash",
+        reason: "the script ended without an answer",
+        costUsd,
+        turns,
+      };
     },
   };
 }
