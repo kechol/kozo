@@ -630,6 +630,30 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[taskRef]).toMatchObject({ stage: "handoff", hold: null });
   }, 120_000);
 
+  test("a MISCONFIGURED prove holds the task at once instead of retrying", async () => {
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+      judgeWith("accept"),
+      {
+        constraints: (text) => {
+          const prove = text.indexOf("prove:");
+          expect(prove).toBeGreaterThan(0);
+          return `${text.slice(0, prove)}prove: []\n`;
+        },
+      },
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const task = env.store.state.tasks[`${ref}/t1`];
+    expect(task?.hold).toMatchObject({
+      kind: "attention",
+      reason: "prove is MISCONFIGURED: no-prove-entries",
+    });
+    expect(env.agent.requests.filter((request) => request.agent === "implement")).toHaveLength(1);
+  }, 120_000);
+
   test("the inbox shows a task awaiting merge only once its final verification passed", async () => {
     // The deep gates of final-verify alone take a while, so the task sits in Handoff meanwhile.
     await using env = await factoryOf(

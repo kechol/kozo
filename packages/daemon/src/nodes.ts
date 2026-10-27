@@ -428,6 +428,15 @@ const verifyDeterministic: NodeStep = async (run, current) => {
       confined: runner.confined(worktree),
       limit: run.limit,
     });
+    // A new session cannot fix the constraints or the base documents, so a human must.
+    if (prove.status === "MISCONFIGURED") {
+      return await run.halt(node, {
+        hold: "attention",
+        reason: `prove is MISCONFIGURED: ${prove.reason}`,
+        end: "failed",
+        why: "prove misconfigured",
+      });
+    }
     if (prove.status !== "pass")
       return await run.retry(node, `${proveLine(prove)}\n${tail(output)}`);
     if (current.characterize && prove.runs.length === 0)
