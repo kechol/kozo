@@ -85,6 +85,8 @@ export interface ApiOptions {
   sessions?: DashboardSessions;
   /** The registered repositories, which the dashboard offers when it adds an item. */
   repositories?: () => string[];
+  /** What the work running now holds back from the daily budget. */
+  reservedUsd?: () => number;
   /** A task's records for the detail view, and one evidence file of a run. */
   records?: {
     task(ref: string): Promise<unknown | null>;
@@ -127,6 +129,7 @@ export function createApi({
   locateTask,
   sessions = new DashboardSessions(),
   repositories = () => [],
+  reservedUsd = () => 0,
   autonomy,
   records,
   report,
@@ -179,6 +182,7 @@ export function createApi({
       activeRuns: activeRuns(store.db),
       waiting: inboxCount(store.db),
       costTodayUsd: costToday(store.db, now()),
+      reservedUsd: reservedUsd(),
       repositories: repositories(),
     });
   });

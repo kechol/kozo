@@ -260,12 +260,14 @@ export async function status(args: readonly string[], out: Lines): Promise<numbe
     activeRuns: number;
     waiting: number;
     costTodayUsd: number;
+    reservedUsd: number;
   };
-  const cost = `$${s.costTodayUsd.toFixed(2)}`;
+  const held = s.reservedUsd > 0 ? `, $${s.reservedUsd.toFixed(2)} held back` : "";
+  const cost = `$${s.costTodayUsd.toFixed(2)} today${held}`;
   if (values.line) {
     const state = s.paused ? "paused" : "up";
     out.stdout(
-      `kozo: ${state} ${s.mode} · ${s.activeRuns} running · ${s.waiting} waiting · ${cost} today`,
+      `kozo: ${state} ${s.mode} · ${s.activeRuns} running · ${s.waiting} waiting · ${cost}`,
     );
     return exitFor(answer);
   }
@@ -278,7 +280,7 @@ export async function status(args: readonly string[], out: Lines): Promise<numbe
       `mode      ${s.mode}`,
       `runs      ${s.activeRuns} running`,
       `waiting   ${s.waiting} in the inbox`,
-      `cost      ${cost} today`,
+      `cost      ${cost}`,
     ],
   );
 }

@@ -79,7 +79,17 @@ export class Scheduler {
     return event.data.ok ? null : (event.data.summary ?? null);
   }
 
-  private start(ref: string, target: "item" | "task", work: () => Promise<void>) {
+  /**
+   * Starts work for an item or a task, which holds back `reserveUsd` of the daily budget, its
+   * repository's session limit, from the moment it starts until it ends.
+   */
+  private start(
+    ref: string,
+    target: "item" | "task",
+    work: () => Promise<void>,
+    reserveUsd: number,
+  ) {
+    const release = this.runner.reserve(reserveUsd);
     const promise = work()
       .catch(async (error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
@@ -103,20 +113,26 @@ export class Scheduler {
           .catch(() => {});
       })
       .finally(() => {
+        release();
         this.active.delete(ref);
         this.tick();
       });
     this.active.set(ref, promise);
   }
 
-  /** Why nothing new may start in this repository now, or null when work may start. */
+  /**
+   * Why nothing new may start in this repository now, or null when work may start. The work
+   * running now holds back its sessions' limits from the budget, so that concurrent sessions
+   * cannot spend past it.
+   */
   private capacity(repository: string, result: CharterResult): string | null {
     if (!result.ok) return `the Charter keeps the repository from running: ${result.reason}`;
     const { charter } = result;
+    const budget = this.factory().budget.daily_usd;
     const spent = costToday(this.store.db, this.now());
-    if (spent >= this.factory().budget.daily_usd) {
-      return `the daily budget of ${this.factory().budget.daily_usd} USD is spent`;
-    }
+    if (spent >= budget) return `the daily budget of ${budget} USD is spent`;
+    if (spent + this.runner.reservedUsd >= budget)
+      return `the daily budget of ${budget} USD is spent or held back by the work running now`;
     const state = this.store.state;
     const tasks = Object.values(state.tasks).filter(
       (task) => state.items[task.item]?.repository === repository,
@@ -189,17 +205,24 @@ export class Scheduler {
   private async plan(): Promise<void> {
     const state = this.store.state;
     if (state.paused || this.stopped) return;
-    // Holds for capacity do not count toward the Charter's limits, so one look per repository
-    // serves the whole pass.
-    const stops = new Map<string, string | null>();
-    const stopOf = async (repository: string) => {
-      if (!stops.has(repository)) {
-        const result = await readCharter(repository, this.factory().mode, this.store.state).catch(
+    // One read of each Charter serves the whole pass; the capacity is looked at each time,
+    // since the work started in this pass holds back budget.
+    const charters = new Map<string, CharterResult>();
+    const charterOf = async (repository: string) => {
+      let result = charters.get(repository);
+      if (!result) {
+        result = await readCharter(repository, this.factory().mode, this.store.state).catch(
           (error: Error): CharterResult => ({ ok: false, reason: error.message }),
         );
-        stops.set(repository, this.capacity(repository, result));
+        charters.set(repository, result);
       }
-      return stops.get(repository) ?? null;
+      return result;
+    };
+    const stopOf = async (repository: string) =>
+      this.capacity(repository, await charterOf(repository));
+    const limitOf = async (repository: string) => {
+      const result = await charterOf(repository);
+      return result.ok ? result.charter.limits.max_cost_usd : 0;
     };
 
     for (const task of Object.values(this.store.state.tasks)) {
@@ -223,7 +246,8 @@ export class Scheduler {
       if (this.active.size >= this.factory().concurrency) return;
       if (!task.merged || task.stage !== "handoff" || task.hold || this.active.has(task.ref))
         continue;
-      this.start(task.ref, "task", () => this.runner.complete(task.ref));
+      // The check runs the gates and no session.
+      this.start(task.ref, "task", () => this.runner.complete(task.ref), 0);
     }
     for (const { ref } of ordered.items) {
       const item = this.store.state.items[ref];
@@ -238,7 +262,7 @@ export class Scheduler {
             ? () => this.runner.replan(item.ref)
             : null;
       if (!draft || (await stopOf(item.repository)) !== null) continue;
-      this.start(item.ref, "item", draft);
+      this.start(item.ref, "item", draft, await limitOf(item.repository));
     }
     for (const { ref } of ordered.tasks) {
       const task = this.store.state.tasks[ref];
@@ -256,20 +280,23 @@ export class Scheduler {
         continue;
       }
       const from = resumePoint(this.store.state, task);
-      this.start(task.ref, "task", () =>
-        this.runner.build(task.ref, from, this.lastFailure(task.ref)),
+      this.start(
+        task.ref,
+        "task",
+        () => this.runner.build(task.ref, from, this.lastFailure(task.ref)),
+        await limitOf(repository),
       );
     }
   }
 
   /**
-   * Starts other work for a task, such as the check at Complete, within the same concurrency as
-   * runs, since it runs the repository's tests too. Returns false when it cannot start now.
+   * Starts other work for a task that runs no session, such as the check at Complete, within the
+   * same concurrency as runs, since it runs the repository's tests too. Returns false when it cannot start now.
    */
   startWork(ref: string, work: () => Promise<void>): boolean {
     if (this.stopped || this.active.has(ref) || this.active.size >= this.factory().concurrency)
       return false;
-    this.start(ref, "task", work);
+    this.start(ref, "task", work, 0);
     return true;
   }
 

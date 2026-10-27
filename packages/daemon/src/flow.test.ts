@@ -630,6 +630,29 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[taskRef]).toMatchObject({ stage: "handoff", hold: null });
   }, 120_000);
 
+  test("a running session holds back its limit, so a second one waits for it", async () => {
+    // The fixtures' Charter lets a session spend 5 USD.
+    let triages = 0;
+    await using env = await factoryOf(
+      (request) =>
+        request.agent === "triage" && triages++ === 0 ? [{ hang: true }] : [{ answer: plan }],
+      judgeWith("accept"),
+      { factory: "budget: { daily_usd: 5 }\n" },
+    );
+    const first = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.control.addItem({ title: "Sold out", class: "docs" });
+    env.scheduler.tick();
+    while (env.agent.requests.length < 1) await Bun.sleep(20);
+    env.scheduler.tick();
+    await Bun.sleep(200);
+    expect(env.agent.requests).toHaveLength(1);
+    await env.control.act(first.ref, { kind: "item", item: { repo: null, number: 1 } }, "pause", {
+      now: true,
+    });
+    await env.settle();
+    expect(env.agent.requests).toHaveLength(2);
+  }, 120_000);
+
   test("closing a task as done removes its worktree and markers and keeps its branch", async () => {
     await using env = await factoryOf(
       (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),

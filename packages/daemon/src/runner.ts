@@ -141,6 +141,26 @@ export class Runner implements RunnerOps {
 
   private apiFailures = 0;
 
+  // What the work running now may still spend, one session's limit each; see reserve.
+  private readonly reservations = new Set<{ usd: number }>();
+
+  /** The amount the work running now holds back from the daily budget. */
+  get reservedUsd(): number {
+    let total = 0;
+    for (const { usd } of this.reservations) total += usd;
+    return total;
+  }
+
+  /**
+   * Holds back `usd` of the daily budget, one session's limit, for work that runs its sessions
+   * one at a time, until the returned function lets it go.
+   */
+  reserve(usd: number): () => void {
+    const reservation = { usd };
+    this.reservations.add(reservation);
+    return () => this.reservations.delete(reservation);
+  }
+
   /** The environment of the diff's own code in prepare, the gates and prove: no credentials. */
   private readonly commandEnv = commandEnvironmentFrom(process.env);
 
@@ -1015,7 +1035,9 @@ export class Runner implements RunnerOps {
     const { ref } = await baseOf(item.repository, mode);
     const tip = (await git(item.repository, ["rev-parse", ref])).trim();
     const charter = await readCharter(item.repository, mode, this.store.state);
+    const maxCostUsd = charter.ok ? charter.charter.limits.max_cost_usd : 1;
     const run = await this.startRun({ item: itemRef, task: taskRef }, "explorer", tip, definition);
+    const release = this.reserve(maxCostUsd);
     try {
       const records = await explorerRecords(this.home, this.store, mode, itemRef, taskRef);
       const answer = await this.deps.judge.judge({
@@ -1023,7 +1045,7 @@ export class Runner implements RunnerOps {
         prompt: explorerPrompt(question, records),
         schema: explorerAnswerJsonSchema,
         model: modelFor(definition, "explorer"),
-        maxCostUsd: charter.ok ? charter.charter.limits.max_cost_usd : 1,
+        maxCostUsd,
       });
       const parsed = explorerAnswerSchema.safeParse(answer.output);
       if (!parsed.success) {
@@ -1036,6 +1058,8 @@ export class Runner implements RunnerOps {
       const spent = error instanceof SessionError ? error.costUsd : 0;
       await this.endRun(run, "failed", String((error as Error).message).slice(0, 500), spent);
       throw error;
+    } finally {
+      release();
     }
   }
 

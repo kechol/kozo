@@ -187,6 +187,7 @@ export class Daemon {
       mode: definition.current.factory.mode,
       commands,
       repositories: () => definition.current.factory.repositories.map(({ path }) => path),
+      reservedUsd: () => runner.reservedUsd,
       report: (view, days) =>
         buildReport(store.db, store.state, definition.current.factory, view, days),
       records: {
