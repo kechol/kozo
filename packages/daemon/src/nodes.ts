@@ -588,29 +588,46 @@ const verifyApp: NodeStep = async (run, current) => {
     await run.exit(node, true, "skipped: the repository has no verify-app.md");
     return;
   }
+  // The verify session's shell may write in the worktree, its evidence included. kozod keeps
+  // the evidence and puts the worktree back at HEAD, so that final-verify's rebase and any later
+  // session see the task's commits alone.
+  let left: string[] = [];
+  try {
+    if (verify.status === "verified")
+      await writeVerifyVerdict(run.files.dir, worktree, verify.record);
+  } finally {
+    left = await discardChanges(worktree);
+  }
+  if (left.length > 0)
+    await run.log(
+      `kozo: discarded what the verify session left in the worktree: ${left.join(", ")}\n`,
+    );
+  const discarded =
+    left.length > 0
+      ? `; kozod discarded what it left in the worktree: ${left.slice(0, 5).join(", ")}`
+      : "";
   if (verify.status === "error") {
     await runner.endRun(child, "failed", verify.message, verify.costUsd);
     return await run.halt(node, {
       hold: "attention",
       reason: `verify failed to run: ${verify.message}`,
-      summary: verify.message,
+      summary: `${verify.message}${discarded}`,
       end: "failed",
       why: "verify failed to run",
     });
   }
-  await writeVerifyVerdict(run.files.dir, worktree, verify.record);
   await runner.endRun(child, "succeeded", undefined, verify.record.costUsd);
   if (verify.record.result === "blocked") {
     return await run.halt(node, {
       hold: "question",
       reason: `verify could not check the change: ${verify.record.summary}`,
-      summary: verify.record.summary,
+      summary: `${verify.record.summary}${discarded}`,
       end: "succeeded",
     });
   }
   if (verify.record.result === "fail") {
     const next = afterReview("revise", current.revisions, charter.limits.inner_retries);
-    await run.exit(node, false, verify.record.summary);
+    await run.exit(node, false, `${verify.record.summary}${discarded}`);
     if ("hold" in next) {
       await runner.hold(
         item.ref,
@@ -623,8 +640,24 @@ const verifyApp: NodeStep = async (run, current) => {
     }
     return await run.sendBack(`verify found DONE_WHEN unmet: ${verify.record.summary}`);
   }
-  await run.exit(node, true, verify.record.summary);
+  await run.exit(node, true, `${verify.record.summary}${discarded}`);
 };
+
+/**
+ * Puts `worktree` back at HEAD, removing untracked files but ignored ones such as installed
+ * dependencies, and returns the paths it found changed.
+ */
+async function discardChanges(worktree: string): Promise<string[]> {
+  const status = await git(worktree, ["status", "--porcelain", "--untracked-files=all"]);
+  const paths = status
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.slice(3));
+  if (paths.length === 0) return [];
+  await git(worktree, ["reset", "--quiet", "--hard", "HEAD"]);
+  await git(worktree, ["clean", "-fdq"]);
+  return paths;
+}
 
 const handoff: NodeStep = async (run, current) => {
   await run.enter("handoff", "D");

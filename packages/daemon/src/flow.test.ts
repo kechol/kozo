@@ -24,7 +24,7 @@ import {
   tempDirectory,
   testConfine,
 } from "@kozo/testing";
-import type { Judge } from "@kozo/verify";
+import type { Judge, Verifier } from "@kozo/verify";
 import { type Definition, git, readDefinition } from "@kozo/verify";
 import type { AgentRequest } from "@kozo/worker";
 import { Automations } from "./automations.ts";
@@ -61,6 +61,7 @@ async function factoryOf(
     factory?: string;
     now?: () => Date;
     launcher?: (fallback: Launcher) => Launcher;
+    verifier?: Verifier;
   } = {},
 ) {
   const repo = await gitRepository();
@@ -90,7 +91,7 @@ async function factoryOf(
   const runner = new Runner(home, store, {
     launcher: options.launcher ? options.launcher(inProcess) : inProcess,
     judge,
-    verifier: noVerifier,
+    verifier: options.verifier ?? noVerifier,
     definition,
     confine: testConfine,
   });
@@ -651,6 +652,50 @@ describe("the minimal path", () => {
     });
     await env.settle();
     expect(env.agent.requests).toHaveLength(2);
+  }, 120_000);
+
+  test("the worktree is back at HEAD after verify-app, with what its session left named", async () => {
+    const doneWhen = plan.plan.tasks[0]?.done_when ?? [];
+    const verifier: Verifier = {
+      async verify(request) {
+        await Bun.write(join(request.cwd, ".output", "verify", "01-label.txt"), "Only 3 left\n");
+        await Bun.write(join(request.cwd, "src", "probe.ts"), "export {};\n");
+        const output = {
+          result: "pass",
+          summary: "The label shows.",
+          conditions: doneWhen.map((condition) => ({
+            condition,
+            met: true,
+            observation: "The page says Only 3 left.",
+            evidence: [".output/verify/01-label.txt"],
+          })),
+          cleanedUp: true,
+        };
+        return { output, model: request.model, costUsd: 0.01 };
+      },
+    };
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+      judgeWith("accept"),
+      { verifier },
+    );
+    await env.repo.commit({ ".kozo/verify-app.md": "# Verify the app\n\nRun it.\n" }, "verify");
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const task = `${ref}/t1`;
+    expect(env.store.state.tasks[task]).toMatchObject({ stage: "handoff", hold: null });
+    const worktree = worktreePath(env.home, env.repo.path, task);
+    expect((await git(worktree, ["status", "--porcelain", "--untracked-files=all"])).trim()).toBe(
+      "",
+    );
+    const exit = env.store.db
+      .query<{ summary: string }, []>(
+        "select json_extract(line, '$.data.summary') as summary from events where type = 'node.exit' and json_extract(line, '$.node') = 'verify-app'",
+      )
+      .get();
+    expect(exit?.summary).toContain("src/probe.ts");
   }, 120_000);
 
   test("closing a task as done removes its worktree and markers and keeps its branch", async () => {
