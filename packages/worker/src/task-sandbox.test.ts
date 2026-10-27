@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { kozoHome } from "@kozo/core";
 import { gitRepository, tempDirectory } from "@kozo/testing";
+import { deniedCredentials } from "@kozo/verify";
 import { claudeAgent } from "./claude-agent.ts";
 import type { AgentRecord } from "./coding-agent.ts";
 import { factoryGitEnvironment } from "./git-environment.ts";
@@ -46,7 +47,7 @@ describe("taskSandbox", () => {
       existingTests: ["src/cart.test.ts"],
     });
     const common = await task.repo.git("rev-parse", "--path-format=absolute", "--git-common-dir");
-    expect(paths.denyRead).toEqual([task.home.root]);
+    expect(paths.denyRead).toEqual([task.home.root, ...deniedCredentials(process.env)]);
     expect(paths.allowRead).toEqual([task.worktree]);
     expect(paths.allowWrite).toEqual([
       join(common, "objects"),
@@ -68,6 +69,25 @@ describe("taskSandbox", () => {
     });
     expect(reading.allowWrite).toEqual([]);
     expect(reading.denyWrite).toContain(task.worktree);
+  });
+
+  test("denies the credentials kozod's environment places, such as gh's under XDG_CONFIG_HOME", async () => {
+    await using task = await taskWorktree();
+    const config = join(task.home.root, "..", "xdg-config");
+    const before = process.env.XDG_CONFIG_HOME;
+    process.env.XDG_CONFIG_HOME = config;
+    try {
+      for (const writable of [true, false]) {
+        const paths = await taskSandbox(task.home, task.worktree, "kozo/k3x9q2/K-1-t1", {
+          writable,
+        });
+        expect(paths.denyRead).toContain(join(config, "gh"));
+        expect(paths.denyRead).toContain(join(config, "git", "credentials"));
+      }
+    } finally {
+      if (before === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = before;
+    }
   });
 
   const claude = Bun.which("claude");

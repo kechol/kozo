@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { KozoHome } from "@kozo/core";
-import { git, protectedPathMatcher } from "@kozo/verify";
+import { deniedCredentials, git, protectedPathMatcher } from "@kozo/verify";
 
 /** The paths a task's sandboxed shell may and may not read and write, beyond its defaults. */
 export interface SandboxPaths {
@@ -29,7 +29,8 @@ async function protectedTargets(worktree: string, patterns: readonly string[]): 
 
 /**
  * The sandbox of one task's shell. It cannot read the factory's home, which holds the API
- * token and every other task, except its own worktree. Claude Code lets a worktree's shell
+ * token and every other task, except its own worktree, nor the credentials, which kozod finds
+ * from its own environment because the worker's lacks variables such as `XDG_CONFIG_HOME`. Claude Code lets a worktree's shell
  * write the git directory it shares with the repository, so every ref but the task's own
  * branch, and the files that tie the worktree to the repository, are denied by name; a write
  * denial wins over any allowance. Protected paths and existing tests are unwritable too, so
@@ -51,9 +52,10 @@ export async function taskSandbox(
   )
     .trim()
     .split("\n");
+  const denyRead = [home.root, ...deniedCredentials(process.env)];
   if (!writable) {
     return {
-      denyRead: [home.root],
+      denyRead,
       allowRead: [worktree],
       allowWrite: [],
       denyWrite: [worktree, commonDir],
@@ -63,7 +65,7 @@ export async function taskSandbox(
     .split("\n")
     .filter((ref) => ref !== "" && ref !== `refs/heads/${taskBranch}`);
   return {
-    denyRead: [home.root],
+    denyRead,
     allowRead: [worktree],
     allowWrite: [
       join(commonDir, "objects"),
