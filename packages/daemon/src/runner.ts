@@ -984,31 +984,23 @@ export class Runner implements RunnerOps {
       owner.tasks.some((ref) => !isClosed(this.store.state.tasks[ref]?.stage ?? "cancelled"))
     )
       return;
+    // A defect sends the item straight back to Triage, so it never looks complete, and its
+    // Issue is never closed, in between.
+    const defective = result.status !== "pass";
+    if (defective) await recordDefect();
     await this.store.append({
       type: "stage.changed",
       item: item.ref,
       data: {
         target: "item",
         from: owner.stage,
-        to: "complete",
+        to: defective ? "triage" : "complete",
         by: "kozod",
-        reason: "every task is complete",
+        reason: defective
+          ? "the check after the merge failed, a post-merge defect"
+          : "every task is complete",
       },
     });
-    if (result.status !== "pass") {
-      await recordDefect();
-      await this.store.append({
-        type: "stage.changed",
-        item: item.ref,
-        data: {
-          target: "item",
-          from: "complete",
-          to: "triage",
-          by: "kozod",
-          reason: "the check after the merge failed, a post-merge defect",
-        },
-      });
-    }
   }
 
   /**

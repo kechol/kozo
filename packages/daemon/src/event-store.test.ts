@@ -116,15 +116,15 @@ describe("EventStore", () => {
     expect(types.at(-1)?.type).toBe("stage.changed");
 
     await store.append({
-      type: "stage.changed",
+      type: "note.added",
       item: "K-1",
-      data: { target: "item", from: "complete", to: "triage", by: "kozod", reason: "test" },
+      data: { kind: "instruction", text: "test" },
     });
     store.close();
     const reopened = await EventStore.open(home);
-    expect(reopened.state.items["K-1"]?.stage).toBe("triage");
+    expect(reopened.state.items["K-1"]?.notes.at(-1)?.text).toBe("test");
     expect(reopened.db.query("select shown_stage from items").get()).toEqual({
-      shown_stage: "triage",
+      shown_stage: "complete",
     });
     await reopened.rebuildIndex();
     expect(reopened.db.query<{ n: number }, []>("select count(*) as n from events").get()?.n).toBe(

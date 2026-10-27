@@ -290,6 +290,9 @@ export class GitHubSync {
   ) {
     const cancelled = reason === "not_planned" || reason === "duplicate";
     const closer = await this.github.closedBy(github, number);
+    // kozod closes an Issue after its item, which is its own record of the close.
+    this.self ??= await this.github.login();
+    if (closer === this.self) return;
     const writer =
       closer !== null && writers.includes(await this.github.permission(github, closer));
     if (!writer && !(cancelled && closer === author)) {

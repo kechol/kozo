@@ -205,10 +205,9 @@ const itemEdges: Partial<Record<Stage, readonly Stage[]>> = {
   triage: ["planning", "complete"],
   // `kozo retry` sends an item held in Planning back to Triage.
   planning: ["triage", "complete"],
-  // A task that cannot be done within its scope sends its item back to be split again.
-  building: ["planning", "complete"],
-  // An item whose DONE_WHEN fails after the merge goes back to Triage.
-  complete: ["triage"],
+  // A task that cannot be done within its scope sends its item back to be split again, and an
+  // item whose DONE_WHEN fails after its last task's merge goes back to Triage.
+  building: ["planning", "triage", "complete"],
 };
 
 const taskEdges: Partial<Record<Stage, readonly Stage[]>> = {
