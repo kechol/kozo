@@ -368,13 +368,11 @@ export class ControlPlane {
         `${ref} is held by ${subject.hold.kind}; it does not move until that clears`,
       );
     await this.setHold(kind, ref, "paused", "kozo pause");
-    const running = this.runner?.sessionFor(ref) ?? null;
-    if (body.now && running) this.runner?.stopSession(running);
+    const running = body.now ? await this.runner?.stopWork(ref) : null;
     return {
-      message:
-        body.now && running
-          ? `paused ${ref} and stopped ${running}`
-          : `paused ${ref}; it stops at the next node`,
+      message: running
+        ? `paused ${ref} and stopped ${running}`
+        : `paused ${ref}; it stops at the next node`,
     };
   }
 
@@ -411,9 +409,9 @@ export class ControlPlane {
   }
 
   /**
-   * Hands a task to the human: stops its session and holds it for the take, in place of a
-   * question or attention the human takes it to settle. Its worktree must exist, since that is
-   * where the human works.
+   * Hands a task to the human: holds it for the take, in place of a question or attention the
+   * human takes it to settle, and stops its work. Its worktree must exist, since that is where
+   * the human works.
    */
   private async take(ref: string): Promise<VerbResult> {
     const { subject } = this.subject(ref, "task");
@@ -427,10 +425,10 @@ export class ControlPlane {
     const worktree = worktreePath(this.home, item.repository, ref);
     if (!(await hasWorktree(worktree)))
       throw new CommandError(409, `${ref} has no worktree yet; its first run makes one`);
-    const running = this.runner?.sessionFor(ref);
-    if (running) this.runner?.stopSession(running);
     await this.clearHold("task", ref, "kozo take");
     await this.setHold("task", ref, "taken", "kozo take");
+    // Held first, so that the run stops at its node; the worktree is the human's once it has.
+    await this.runner?.stopWork(ref);
     const branch = taskBranch(this.store.factoryId, ref);
     return {
       message: `${ref} is yours: commit in ${worktree} on ${branch}, then run kozo return ${ref} <what you changed and checked>`,
@@ -496,7 +494,7 @@ export class ControlPlane {
 
   /**
    * Moves an item and its open tasks, or one task, to Complete or Cancelled for a human: stops
-   * their sessions, clears their holds and removes a cancelled task's branch. The item follows a
+   * their work, clears their holds and removes a cancelled task's branch. The item follows a
    * task once every task of it is closed.
    */
   async closeWork(
@@ -510,10 +508,10 @@ export class ControlPlane {
     for (const task of tasks) {
       const state = this.store.state.tasks[task];
       if (!state || isClosed(state.stage)) continue;
-      const running = this.runner?.sessionFor(task);
-      if (running) this.runner?.stopSession(running);
       await this.clearHold("task", task);
       await this.move("task", task, to, reason);
+      // Closed first, so that the run stops; its worktree goes once it has.
+      await this.runner?.stopWork(task);
       if (to === "cancelled") await this.runner?.release(task, true);
     }
     // Closing a task closes its item only once every task of the item is closed, as Complete

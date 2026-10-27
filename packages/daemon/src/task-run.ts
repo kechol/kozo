@@ -139,6 +139,8 @@ export class BlueprintRun {
   readonly existingTests: string[];
   /** Why the run before this one did not pass, which the brief carries. */
   readonly failure: string | null;
+  /** Aborts when a human stops the task's work, which stops the command running for it. */
+  readonly signal: AbortSignal;
 
   constructor(
     readonly runner: RunnerOps,
@@ -151,6 +153,7 @@ export class BlueprintRun {
       listed: string[];
       existingTests: string[];
       failure: string | null;
+      signal: AbortSignal;
     },
   ) {
     const { task, item, repository, definition, run } = start;
@@ -168,6 +171,7 @@ export class BlueprintRun {
     this.listed = start.listed;
     this.existingTests = start.existingTests;
     this.failure = start.failure;
+    this.signal = start.signal;
     this.layers = layersFor[task.risk];
   }
 
@@ -184,9 +188,12 @@ export class BlueprintRun {
     return this.repository.constraints;
   }
 
-  /** How long each command kozod runs for the task may take: the Charter's session limit. */
+  /**
+   * When each command kozod runs for the task stops: after the Charter's session limit, or when
+   * a human stops the task's work.
+   */
   get limit(): CommandLimit {
-    return { minutes: this.charter.limits.max_minutes };
+    return { minutes: this.charter.limits.max_minutes, signal: this.signal };
   }
 
   /** The environment of the worktree's commands. */

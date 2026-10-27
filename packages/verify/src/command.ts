@@ -6,20 +6,32 @@ export interface Confined {
   sandbox: CommandSandbox;
 }
 
-/** How long a command may run before it is stopped with everything it started. */
+/**
+ * When a command must stop with everything it started: once `minutes` pass, or once `signal`
+ * aborts.
+ */
 export interface CommandLimit {
-  minutes: number;
+  minutes?: number;
+  signal?: AbortSignal;
 }
 
-/** The exit code of a command stopped at its limit, as timeout(1) reports one. */
+/** The exit code of a command stopped at its time limit, as timeout(1) reports one. */
 export const outOfTimeCode = 124;
+
+/** Thrown by `runCommand` for a command its limit's signal stopped. */
+export class CommandStopped extends Error {
+  constructor(command: string) {
+    super(`${command} was stopped`);
+  }
+}
 
 /**
  * Runs `command` through `sh -c` in `cwd`, passing its output to `log`, and returns its exit
  * code. Without `env` the command inherits this process's environment. With `confined` it runs
  * in that sandbox, with a temporary directory of its own as TMPDIR. With `limit` it runs in a
- * process group of its own, which gets SIGTERM once the limit passes and SIGKILL 10 seconds
- * later, and the command fails with `outOfTimeCode`.
+ * process group of its own, which gets SIGTERM when the limit is reached and SIGKILL 10 seconds
+ * later: a command out of time fails with `outOfTimeCode`, and a stopped one throws
+ * `CommandStopped`.
  */
 export async function runCommand(
   command: string,
@@ -41,13 +53,21 @@ export async function runCommand(
     const output = Promise.all([forward(child.stdout, log), forward(child.stderr, log)]);
     const finished = output.then(() => child.exited);
     if (!limit) return await finished;
-    const code = await within(finished, limit.minutes * 60_000);
-    if (code !== undefined) return code;
+    const reached = limitReached(limit);
+    const first = await Promise.race([
+      finished.then((code) => ({ code })),
+      reached.promise.then((why) => ({ why })),
+    ]).finally(reached.clear);
+    if ("code" in first) return first.code;
     signalGroup(child.pid, "SIGTERM");
     await within(child.exited, 10_000);
     signalGroup(child.pid, "SIGKILL");
     // A process that left the group may still hold the output open.
     await within(output, 1_000);
+    if (first.why === "stopped") {
+      log(`\nkozo: ${command} was stopped\n`);
+      throw new CommandStopped(command);
+    }
     log(`\nkozo: ${command} ran out of time after ${limit.minutes} minutes\n`);
     return outOfTimeCode;
   };
@@ -58,6 +78,25 @@ export async function runCommand(
       TMPDIR: temp,
     }),
   );
+}
+
+/** Resolves once `limit` is reached, and `clear` lets go of its timer and listener. */
+function limitReached({ minutes, signal }: CommandLimit) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stop = () => {};
+  const promise = new Promise<"time" | "stopped">((resolve) => {
+    stop = () => resolve("stopped");
+    if (minutes !== undefined) timer = setTimeout(() => resolve("time"), minutes * 60_000);
+    if (signal?.aborted) stop();
+    else signal?.addEventListener("abort", stop, { once: true });
+  });
+  return {
+    promise,
+    clear() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", stop);
+    },
+  };
 }
 
 /** What `promise` resolves to, or undefined once `ms` pass first. */

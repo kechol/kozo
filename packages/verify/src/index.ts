@@ -3,6 +3,7 @@ export * from "./base-documents.ts";
 export { globMatcher, isNewTestCase, protectedPathMatcher } from "./changes.ts";
 export {
   type CommandLimit,
+  CommandStopped,
   type Confined,
   commandEnvironmentFrom,
   lines,

@@ -1766,6 +1766,75 @@ test("one unit is still counted", () => {
     expect(nodes).not.toContain("implement");
   }, 120_000);
 
+  test("a take during the gates stops them, and the run resumes at its node once given back", async () => {
+    // A gate of the fast level only, which a low task's checks run and its agent's full
+    // kozo_gates does not.
+    const slow = "sleep 47";
+    const lowPlan = {
+      ...plan,
+      plan: {
+        ...plan.plan,
+        risk: "low",
+        tasks: [{ ...plan.plan.tasks[0], scope: ["docs/**"] }],
+      },
+    };
+    const docs: FakeStep[] = [
+      { write: { "docs/stock.md": "Stock labels say Only N left from 1 to 3 units.\n" } },
+      { commit: "docs: describe the low stock label" },
+      { use: "kozo_gates", input: { level: "full" } },
+      { use: "kozo_note", input: { choice: "Documented it", reason: "Docs only" } },
+      { answer: { ...report, tests: [] } },
+    ];
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: lowPlan }] : docs),
+      judgeWith("accept"),
+      {
+        constraints: (text) =>
+          text
+            .replace("gates:\n", `gates:\n  slow:\n    run: ${slow}\n`)
+            .replace("fast: [lint, test]", "fast: [slow, lint, test]"),
+      },
+    );
+    const running = () => Bun.spawnSync(["pgrep", "-f", slow]).stdout.toString().trim() !== "";
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    env.scheduler.tick();
+    for (let waited = 0; !running(); waited += 50) {
+      if (waited > 60_000) throw new Error("the slow gate never started");
+      await Bun.sleep(50);
+    }
+    const task = `${ref}/t1`;
+    const reference = { kind: "task", item: { repo: null, number: 1 }, task: 1 } as const;
+    const stoppedRun = env.store.state.tasks[task]?.runs.at(-1) ?? "";
+
+    await env.control.act(task, reference, "take", {});
+    expect(running()).toBe(false);
+    expect(env.store.state.runs[stoppedRun]?.state).toBe("stopped");
+    expect(env.store.state.tasks[task]?.checkpoint?.node).toBe("verify-deterministic");
+    const worktree = worktreePath(env.home, env.repo.path, task);
+    expect((await git(worktree, ["status", "--porcelain"])).trim()).toBe("");
+
+    await env.control.act(task, reference, "return", { text: "Looked, changed nothing" });
+    env.scheduler.tick();
+    for (let waited = 0; !running(); waited += 50) {
+      if (waited > 60_000) throw new Error("the slow gate never started again");
+      await Bun.sleep(50);
+    }
+    const resumed = env.store.state.tasks[task]?.runs.at(-1) ?? "";
+    expect(resumed).not.toBe(stoppedRun);
+    const nodes = env.store.db
+      .query<{ node: string }, [string]>(
+        "select json_extract(line, '$.node') as node from events where type = 'node.enter' and run_id = ? order by id",
+      )
+      .all(resumed)
+      .map((row) => row.node);
+    expect(nodes[0]).toBe("verify-deterministic");
+    await env.control.act(task, reference, "close", { cancel: "enough" });
+    expect(running()).toBe(false);
+    expect(env.store.state.runs[resumed]?.state).toBe("stopped");
+  }, 120_000);
+
   test("kozo say --ask answers from the records in an explorer run and leaves the task as it was", async () => {
     const prompts: string[] = [];
     const accepting = judgeWith("accept");

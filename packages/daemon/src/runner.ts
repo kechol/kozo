@@ -35,6 +35,7 @@ import {
 import {
   baseOf,
   type CommandLimit,
+  CommandStopped,
   type Confine,
   type Confined,
   commandEnvironmentFrom,
@@ -129,6 +130,8 @@ export class RunnerError extends Error {}
 export class Runner implements RunnerOps {
   /** The sessions running now, by run, so that a human can stop one at once. */
   private readonly sessions = new Map<string, LaunchedSession>();
+  /** The blueprint work running now, by task, so that a human can stop its commands too. */
+  private readonly building = new Map<string, { stop: AbortController; ended: Promise<void> }>();
 
   constructor(
     readonly home: KozoHome,
@@ -226,10 +229,28 @@ export class Runner implements RunnerOps {
   }
 
   /** Stops a run's session now; the run ends as stopped. Returns whether one was running. */
-  stopSession(run: string): boolean {
+  private stopSession(run: string): boolean {
     const session = this.sessions.get(run);
     session?.stop();
     return session !== undefined;
+  }
+
+  /**
+   * Stops the work running for a task or an item now: its session, and the command a blueprint
+   * run of the task is running, after which the run ends as stopped at its node. Resolves once
+   * that run has ended, with the run stopped, if any.
+   */
+  async stopWork(ref: string): Promise<string | null> {
+    const session = this.sessionFor(ref);
+    if (session) this.stopSession(session);
+    const work = this.building.get(ref);
+    if (!work) return session;
+    const run = Object.values(this.store.state.runs).find(
+      (info) => info.task === ref && !isRunOver(info.state),
+    );
+    work.stop.abort();
+    await work.ended;
+    return session ?? run?.ref ?? null;
   }
 
   /** The run whose session is running for a task or an item, if any. */
@@ -628,13 +649,32 @@ export class Runner implements RunnerOps {
     start: Node = "claim",
     failure: string | null = null,
   ): Promise<void> {
+    const stop = new AbortController();
+    const { promise: ended, resolve } = Promise.withResolvers<void>();
+    this.building.set(taskRef, { stop, ended });
+    try {
+      await this.attempts(taskRef, start, failure, stop.signal);
+    } finally {
+      this.building.delete(taskRef);
+      resolve();
+    }
+  }
+
+  private async attempts(
+    taskRef: string,
+    start: Node,
+    failure: string | null,
+    signal: AbortSignal,
+  ): Promise<void> {
     let from: Node = start;
     let previous = failure;
     for (let attempts = 1; ; attempts += 1) {
-      const outcome = await this.runNodes(taskRef, from, previous).catch(async (error: unknown) => {
-        await this.failOpenRuns(taskRef, error);
-        throw error;
-      });
+      const outcome = await this.runNodes(taskRef, from, previous, signal).catch(
+        async (error: unknown) => {
+          await this.failOpenRuns(taskRef, error);
+          throw error;
+        },
+      );
       if (outcome.kind !== "retry") return;
       if (attempts >= outcome.rounds) {
         await this.hold(
@@ -650,7 +690,12 @@ export class Runner implements RunnerOps {
     }
   }
 
-  private async runNodes(taskRef: string, start: Node, failure: string | null): Promise<RunEnd> {
+  private async runNodes(
+    taskRef: string,
+    start: Node,
+    failure: string | null,
+    signal: AbortSignal,
+  ): Promise<RunEnd> {
     const task = this.store.state.tasks[taskRef];
     const item = task ? this.store.state.items[task.item] : undefined;
     if (!task || !item?.plan || task.hold) return { kind: "done" };
@@ -677,23 +722,36 @@ export class Runner implements RunnerOps {
       listed,
       existingTests,
       failure,
+      signal,
     });
+    const stopReason = (task: TaskState | undefined) =>
+      !task || isClosed(task.stage)
+        ? "the task is closed"
+        : task.hold
+          ? "the task is held"
+          : this.stopping
+            ? "kozod stopped"
+            : "a human stopped it";
 
     // Every node runs: verify-app decides from the risk tier, which a blueprint never lowers.
     for (const node of blueprintNodes.slice(blueprintNodes.indexOf(start))) {
       const current = this.store.state.tasks[taskRef];
       if (!current || isClosed(current.stage))
-        return await blueprintRun.stopHere("stopped", "the task is closed");
-      if (current.hold || this.stopping) {
+        return await blueprintRun.stopHere("stopped", stopReason(current));
+      if (current.hold || this.stopping || signal.aborted) {
         // The next run resumes at this node, not at the one that finished before the stop.
         await blueprintRun.checkpoint(node);
-        return await blueprintRun.stopHere(
-          "stopped",
-          current.hold ? "the task is held" : "kozod stopped",
-        );
+        return await blueprintRun.stopHere("stopped", stopReason(current));
       }
-      const ended = await nodeSteps[node](blueprintRun, current);
-      if (ended) return ended;
+      try {
+        const ended = await nodeSteps[node](blueprintRun, current);
+        if (ended) return ended;
+      } catch (error) {
+        if (!(error instanceof CommandStopped)) throw error;
+        const now = this.store.state.tasks[taskRef];
+        if (now && !isClosed(now.stage)) await blueprintRun.checkpoint(node);
+        return await blueprintRun.stopHere("stopped", stopReason(now));
+      }
     }
     return await blueprintRun.stopHere("succeeded");
   }
@@ -1050,8 +1108,7 @@ export class Runner implements RunnerOps {
     }
     const reason = `${taskRef} cannot be done within its scope, so the item is split again: ${question}`;
     for (const ref of stopped) {
-      const running = this.sessionFor(ref);
-      if (running && ref !== taskRef) this.stopSession(running);
+      if (ref !== taskRef) void this.stopWork(ref);
       const task = this.store.state.tasks[ref];
       if (!task) continue;
       if (task.hold)
