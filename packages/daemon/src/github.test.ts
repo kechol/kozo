@@ -32,6 +32,8 @@ describe("ghAllowed", () => {
       ["pr", "edit", "3", "--repo=me/app", "--body-file=-"],
       ["api", "--method", "GET", "--paginate", "--slurp", "repos/me/app/issues/12/events"],
       ["issue", "close", "12", "--repo=me/app", "--reason=completed"],
+      ["issue", "edit", "12", "--repo=me/app", "--add-label=kozo:triage"],
+      ["issue", "edit", "12", "--repo=me/app", "--add-label=a", "--remove-label=b"],
     ]) {
       expect({ args, allowed: ghAllowed(args) }).toEqual({ args, allowed: true });
     }
@@ -60,6 +62,11 @@ describe("ghAllowed", () => {
       ["api", "--method", "GET", "repos/me/app/collaborators"],
       ["api", "--method", "GET", "repos/me/app/collaborators/x/permission", "--paginate"],
       ["--repo", "me/app", "pr", "merge"],
+      ["issue", "edit", "12", "--repo=me/app"],
+      ["issue", "edit", "12", "--repo=me/app", "--title=x"],
+      ["issue", "edit", "12", "--repo=me/app", "--add-label=a", "--body=x"],
+      ["issue", "edit", "12", "--add-label=a"],
+      ["issue", "edit", "--repo=me/app", "12", "--add-label=a"],
     ]) {
       expect({ args, allowed: ghAllowed(args) }).toEqual({ args, allowed: false });
     }
@@ -131,6 +138,9 @@ describe("ghAllowed", () => {
     ]);
     for (const { args } of calls)
       expect({ args, allowed: ghAllowed(args) }).toMatchObject({ allowed: true });
+    expect(
+      calls.find((call) => call.args[1] === "list" && call.args[0] === "issue")?.args,
+    ).toContain("--limit=10000");
     expect(calls.find((call) => call.args[1] === "comment")).toEqual({
       args: ["issue", "comment", "12", "--repo=me/app", "--body-file=-"],
       stdin: "--body text; rm -rf /",

@@ -33,7 +33,6 @@ const listed = new Set([
   "issue list",
   "issue view",
   "issue comment",
-  "issue edit",
   "label create",
   "pr create",
   "pr list",
@@ -45,6 +44,9 @@ const eventsEndpoint = /^repos\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/issues\/[0-9]+\/
 const permissionEndpoint =
   /^repos\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/collaborators\/[A-Za-z0-9-]+\/permission$/;
 
+/** The most open Issues kozod reads in one listing. */
+export const openIssueLimit = 10_000;
+
 /** Whether kozod may run gh with `args`. */
 export function ghAllowed(args: readonly string[]): boolean {
   // kozod opens an Issue only for a local item it moves to GitHub, with its title, its request
@@ -55,6 +57,16 @@ export function ghAllowed(args: readonly string[]): boolean {
       (args[2] ?? "").startsWith("--repo=") &&
       (args[3] ?? "").startsWith("--title=") &&
       args[4] === "--body-file=-"
+    );
+  }
+  // An Issue's labels are the one thing kozod edits on it: no title, body, assignee or state.
+  if (args[0] === "issue" && args[1] === "edit") {
+    const changes = args.slice(4);
+    return (
+      changes.length > 0 &&
+      /^[0-9]+$/.test(args[2] ?? "") &&
+      (args[3] ?? "").startsWith("--repo=") &&
+      changes.every((arg) => /^--(add|remove)-label=/.test(arg))
     );
   }
   // kozod closes an Issue only as completed, after it checked the item's DONE_WHEN.
@@ -155,7 +167,8 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
         "list",
         `--repo=${repository}`,
         "--state=open",
-        "--limit=200",
+        // gh pages through them all up to the limit, which no intake queue reaches.
+        `--limit=${openIssueLimit}`,
         `--json=${issueFields}`,
         ...labels.map((label) => `--label=${label}`),
       ]);

@@ -712,7 +712,9 @@ Part of #${issue}`;
     }
     const registered = this.store.state.repositories[github]?.registeredAt ?? "";
     const permission = await this.github.permission(github, issue.author);
-    const trusted = writers.includes(permission) && issue.createdAt >= registered;
+    // Compared as times, since GitHub's timestamps and kozod's differ in their fractions.
+    const trusted =
+      writers.includes(permission) && Date.parse(issue.createdAt) >= Date.parse(registered);
     await this.control.admit(
       ref,
       { repository: path, class: null, title: issue.title.trim(), body: issue.body },

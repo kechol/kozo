@@ -149,16 +149,28 @@ describe("GitHubSync", () => {
     });
     const old = env.github.addIssue("me/shop", { title: "Old", createdAt: before });
     env.github.addIssue("me/shop", { title: "Bump", author: "dependabot[bot]" });
+    // GitHub gives whole seconds: an Issue opened in the second of the registration but before
+    // it is older, though its text sorts after kozod's timestamp with a fraction.
+    const registered = env.store.state.repositories["me/shop"]?.registeredAt ?? "";
+    const justBefore = env.github.addIssue("me/shop", {
+      title: "Just before",
+      createdAt: new Date(Date.parse(registered) - 1).toISOString().replace(/\.\d+Z$/, "Z"),
+    });
 
     await env.sync.poll();
     const { items } = env.store.state;
-    expect(Object.keys(items)).toEqual([`shop#${trusted}`, `shop#${reader}`, `shop#${old}`]);
+    expect(Object.keys(items)).toEqual([
+      `shop#${trusted}`,
+      `shop#${reader}`,
+      `shop#${old}`,
+      `shop#${justBefore}`,
+    ]);
     expect(items[`shop#${trusted}`]).toMatchObject({
       stage: "triage",
       hold: null,
       approvals: "level",
     });
-    for (const untrusted of [reader, old])
+    for (const untrusted of [reader, old, justBefore])
       expect(items[`shop#${untrusted}`]).toMatchObject({
         hold: { reason: "start approval" },
         approvals: "always",
