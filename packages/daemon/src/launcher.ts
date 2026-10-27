@@ -16,9 +16,11 @@ export interface Launcher {
 /**
  * Starts each session in its own worker process: kozod's own executable with `--worker`. The
  * worker gets only the variables claude needs to run and to sign in, so no GitHub token or
- * other credential reaches it.
+ * other credential reaches it. Stopping sends SIGTERM, and SIGKILL to a worker still running
+ * `graceMs` later, which leaves its session lost rather than kozod waiting on it for ever; the
+ * grace covers the 10 seconds a worker gives claude to stop.
  */
-export function processLauncher(command: readonly string[]): Launcher {
+export function processLauncher(command: readonly string[], graceMs = 15_000): Launcher {
   return {
     launch(_spec, specPath) {
       const child = Bun.spawn([...command, "--worker", specPath], {
@@ -36,7 +38,12 @@ export function processLauncher(command: readonly string[]): Launcher {
         }
         await child.exited;
       }
-      return { messages: messages(), stop: () => child.kill("SIGTERM") };
+      const stop = () => {
+        child.kill("SIGTERM");
+        const kill = setTimeout(() => child.kill("SIGKILL"), graceMs);
+        void child.exited.then(() => clearTimeout(kill));
+      };
+      return { messages: messages(), stop };
     },
   };
 }
