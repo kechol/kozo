@@ -19,7 +19,7 @@ const inboxQuery = `
     from tasks t join items i on i.ref = t.item where t.hold in ('question', 'attention')
   union all
   select 'task', t.ref, i.title, 'merge', null, t.updated_at
-    from tasks t join items i on i.ref = t.item where t.stage = 'handoff' and t.hold is null
+    from tasks t join items i on i.ref = t.item where t.awaiting_merge = 1
   order by since, ref`;
 
 export function list(db: Database, kind: ListKind) {

@@ -96,7 +96,7 @@ describe("EventStore", () => {
     expect(store.state.items["K-1"]?.stage).toBe("complete");
     const db = store.db;
     expect(db.query("select value from meta where key = 'schema_version'").get()).toEqual({
-      value: "1",
+      value: "2",
     });
     expect(db.query("select ref, stage, shown_stage from items").all()).toEqual([
       { ref: "K-1", stage: "complete", shown_stage: "complete" },

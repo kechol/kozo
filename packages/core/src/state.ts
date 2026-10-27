@@ -587,6 +587,28 @@ export function isRunOver(state: RunState): boolean {
   return state === "succeeded" || state === "failed" || state === "stopped" || state === "lost";
 }
 
+/** The last implement run of a task, the one that carries its blueprint. */
+export function lastBlueprintRun(state: FactoryState, task: TaskState) {
+  const runs = task.runs.map((ref) => state.runs[ref]).filter((run) => run?.agent === "implement");
+  return runs.at(-1) ?? null;
+}
+
+/**
+ * A task in Handoff whose latest run passed final verification, the only node that ends a run
+ * as succeeded and records `handoff.ready`, whether or not it is held since.
+ */
+export function finallyVerified(state: FactoryState, task: TaskState): boolean {
+  return task.stage === "handoff" && lastBlueprintRun(state, task)?.state === "succeeded";
+}
+
+/**
+ * A finally verified task with no hold waits for a human to merge it: what the inbox, the
+ * lists, the dashboard and the backpressure count as awaiting merge.
+ */
+export function awaitingMerge(state: FactoryState, task: TaskState): boolean {
+  return task.hold === null && finallyVerified(state, task);
+}
+
 /** The stage to show for an item: its earliest open task once it has tasks, else its own. */
 export function itemStage(state: FactoryState, item: ItemState): Stage {
   if (item.tasks.length === 0 || isClosed(item.stage)) return item.stage;

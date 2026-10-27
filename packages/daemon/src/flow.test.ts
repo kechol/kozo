@@ -32,6 +32,7 @@ import { ControlPlane } from "./control-plane.ts";
 import { evalCaseOf } from "./eval.ts";
 import { EventStore } from "./event-store.ts";
 import { inProcessLauncher, type Launcher } from "./launcher.ts";
+import { list } from "./queries.ts";
 import { Reconciler } from "./reconcile.ts";
 import { buildReport, type Failure } from "./report.ts";
 import { readCharter } from "./repository.ts";
@@ -627,6 +628,37 @@ describe("the minimal path", () => {
     now = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     await env.settle();
     expect(env.store.state.tasks[taskRef]).toMatchObject({ stage: "handoff", hold: null });
+  }, 120_000);
+
+  test("the inbox shows a task awaiting merge only once its final verification passed", async () => {
+    // The deep gates of final-verify alone take a while, so the task sits in Handoff meanwhile.
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+      judgeWith("accept"),
+      {
+        constraints: (text) =>
+          text
+            .replace("gates:\n", "gates:\n  settle:\n    run: sleep 3\n")
+            .replace("deep: [lint, test]", "deep: [settle, lint, test]"),
+      },
+    );
+    const merges = () =>
+      (list(env.store.db, "inbox") as { ref: string; waiting: string }[]).filter(
+        (row) => row.waiting === "merge",
+      );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    env.scheduler.tick();
+    const task = `${ref}/t1`;
+    for (let waited = 0; env.store.state.tasks[task]?.stage !== "handoff"; waited += 20) {
+      if (waited > 60_000) throw new Error("the task never reached Handoff");
+      await Bun.sleep(20);
+    }
+    expect(env.store.state.tasks[task]?.hold).toBeNull();
+    expect(merges()).toEqual([]);
+    await env.scheduler.idle();
+    expect(merges()).toEqual([expect.objectContaining({ ref: task })]);
   }, 120_000);
 
   test("tasks awaiting a merge at the Charter's limit stop new triage and hold waiting tasks", async () => {

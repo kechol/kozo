@@ -1,5 +1,6 @@
 import { join, resolve } from "node:path";
 import {
+  awaitingMerge,
   type GitHub,
   type GitHubIssue,
   type GitHubPermission,
@@ -28,7 +29,6 @@ import { installBody, quiet, statusBody } from "./github-report.ts";
 import { enqueue } from "./instructions.ts";
 import { readItemFile, requestText, writeItemFile } from "./item-file.ts";
 import { readCharter } from "./repository.ts";
-import { awaitingMerge } from "./scheduler.ts";
 import { detachedCheckout, removeCheckout, taskBranch, worktreePath } from "./worktrees.ts";
 
 /** The label a human adds to an Issue to approve its start. */
@@ -383,7 +383,7 @@ export class GitHubSync {
       const url = pulls.get(task);
       // Only a task whose last run passed final verification, with that head on GitHub: one
       // going through Reviewing to Handoff again would be judged by its earlier head.
-      if (!state || !awaitingMerge(this.store.state, state) || state.hold || !url) continue;
+      if (!state || !awaitingMerge(this.store.state, state) || !url) continue;
       const head = this.written(ref, task, "push").at(-1)?.split(" ")[1];
       if (head === undefined || head !== this.ready(task)?.head) continue;
       const branch = taskBranch(this.store.factoryId, task);

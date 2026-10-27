@@ -3,6 +3,7 @@ import {
   demotionDue,
   demotionKey,
   type Factory,
+  finallyVerified,
   isRunOver,
   lowerLevel,
   type TaskState,
@@ -13,7 +14,6 @@ import { factoryGitEnvironment } from "@kozo/worker";
 import type { EventStore } from "./event-store.ts";
 import { readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
-import { awaitingMerge } from "./scheduler.ts";
 import { taskBranch } from "./worktrees.ts";
 
 /** The stable patch IDs of the patches that `git <args>` prints, each with its commit. */
@@ -197,7 +197,8 @@ export class Reconciler {
   /** One pass over the tasks that wait on something outside kozod, then over their record. */
   async reconcile(): Promise<void> {
     for (const task of Object.values(this.store.state.tasks)) {
-      if (!awaitingMerge(this.store.state, task)) continue;
+      // A held task may still be merged by a human, who settles the hold that way.
+      if (!finallyVerified(this.store.state, task)) continue;
       await this.check(task).catch((error: unknown) =>
         this.report(
           `kozod: reconciling ${task.ref}: ${error instanceof Error ? error.message : String(error)}`,

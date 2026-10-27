@@ -1,7 +1,13 @@
 import { Database } from "bun:sqlite";
-import { type Event, type FactoryState, itemStage, recordOnlyTypes } from "@kozo/core";
+import {
+  awaitingMerge,
+  type Event,
+  type FactoryState,
+  itemStage,
+  recordOnlyTypes,
+} from "@kozo/core";
 
-export const indexSchemaVersion = 1;
+export const indexSchemaVersion = 2;
 
 const schema = `
 create table meta (key text primary key, value text not null);
@@ -16,7 +22,7 @@ create table tasks (
   scope text not null, depends_on text not null, stage text not null,
   hold text, hold_reason text, hold_since text,
   revisions integer not null, handoff_fixes integer not null, checkpoint text,
-  updated_at text not null
+  awaiting_merge integer not null, updated_at text not null
 );
 create table runs (
   ref text primary key, item text not null, task text, parent text, agent text not null,
@@ -117,7 +123,9 @@ export class IndexDb {
         const task = state.tasks[ref];
         if (!task) continue;
         this.db
-          .query(`insert or replace into tasks values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .query(
+            `insert or replace into tasks values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
           .run(
             task.ref,
             task.item,
@@ -132,6 +140,7 @@ export class IndexDb {
             task.revisions,
             task.handoffFixes,
             json(task.checkpoint),
+            awaitingMerge(state, task) ? 1 : 0,
             task.updatedAt,
           );
       }

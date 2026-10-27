@@ -1,10 +1,12 @@
 import {
+  awaitingMerge,
   blueprintNodes,
   type Factory,
   type FactoryState,
   inOrder,
   isClosed,
   isRunOver,
+  lastBlueprintRun,
   startBlocker,
   type TaskState,
   waitsOnOwner,
@@ -15,17 +17,6 @@ import { costToday } from "./queries.ts";
 import { type CharterResult, readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
 import type { Node } from "./task-run.ts";
-
-/** The last implement run of a task, the one that carries its blueprint. */
-export function lastBlueprintRun(state: FactoryState, task: TaskState) {
-  const runs = task.runs.map((ref) => state.runs[ref]).filter((run) => run?.agent === "implement");
-  return runs.at(-1) ?? null;
-}
-
-/** A task in Handoff whose final verification passed waits for a human to merge it. */
-export function awaitingMerge(state: FactoryState, task: TaskState): boolean {
-  return task.stage === "handoff" && lastBlueprintRun(state, task)?.state === "succeeded";
-}
 
 /**
  * Where a task's next run starts: at verify-deterministic for a task a human gave back, at the
@@ -130,7 +121,7 @@ export class Scheduler {
     const tasks = Object.values(state.tasks).filter(
       (task) => state.items[task.item]?.repository === repository,
     );
-    const waiting = tasks.filter((task) => awaitingMerge(state, task) && !task.hold).length;
+    const waiting = tasks.filter((task) => awaitingMerge(state, task)).length;
     if (waiting >= charter.backpressure.max_awaiting_merge) {
       return `${waiting} tasks await a merge, the Charter's limit`;
     }
