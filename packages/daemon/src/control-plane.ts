@@ -494,7 +494,7 @@ export class ControlPlane {
 
   /**
    * Moves an item and its open tasks, or one task, to Complete or Cancelled for a human: stops
-   * their work, clears their holds and removes a cancelled task's branch. The item follows a
+   * their work, clears their holds, removes their worktrees and a cancelled task's branch. The item follows a
    * task once every task of it is closed.
    */
   async closeWork(
@@ -510,9 +510,10 @@ export class ControlPlane {
       if (!state || isClosed(state.stage)) continue;
       await this.clearHold("task", task);
       await this.move("task", task, to, reason);
-      // Closed first, so that the run stops; its worktree goes once it has.
+      // Closed first, so that the run stops; its worktree goes once it has, and its branch with
+      // it when cancelled.
       await this.runner?.stopWork(task);
-      if (to === "cancelled") await this.runner?.release(task, true);
+      await this.runner?.release(task, to === "cancelled");
     }
     // Closing a task closes its item only once every task of the item is closed, as Complete
     // when any of them was.

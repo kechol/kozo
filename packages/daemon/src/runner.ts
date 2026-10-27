@@ -1132,7 +1132,7 @@ export class Runner implements RunnerOps {
     });
   }
 
-  /** Removes a task's worktree and branch after it is cancelled. */
+  /** Removes a closed task's worktree, and its branch when `deleteBranch`. */
   async release(taskRef: string, deleteBranch: boolean) {
     const task = this.store.state.tasks[taskRef];
     const item = task ? this.store.state.items[task.item] : undefined;

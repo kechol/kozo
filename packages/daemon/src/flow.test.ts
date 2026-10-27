@@ -630,6 +630,29 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[taskRef]).toMatchObject({ stage: "handoff", hold: null });
   }, 120_000);
 
+  test("closing a task as done removes its worktree and markers and keeps its branch", async () => {
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+      judgeWith("accept"),
+      { constraints: (text) => `${text}ports: 1\n` },
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const task = `${ref}/t1`;
+    const worktree = worktreePath(env.home, env.repo.path, task);
+    expect(env.store.state.tasks[task]?.stage).toBe("handoff");
+    expect(await Bun.file(`${worktree}.prepared`).exists()).toBe(true);
+    expect(await Bun.file(`${worktree}.ports`).exists()).toBe(true);
+    const reference = { kind: "task", item: { repo: null, number: 1 }, task: 1 } as const;
+    await env.control.act(task, reference, "close", { done: true });
+    expect(env.store.state.tasks[task]?.stage).toBe("complete");
+    for (const path of [join(worktree, "README.md"), `${worktree}.prepared`, `${worktree}.ports`])
+      expect({ path, exists: await Bun.file(path).exists() }).toEqual({ path, exists: false });
+    expect(await env.repo.git("branch", "--list", "kozo/*")).not.toBe("");
+  }, 120_000);
+
   test("a MISCONFIGURED prove holds the task at once instead of retrying", async () => {
     await using env = await factoryOf(
       (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),

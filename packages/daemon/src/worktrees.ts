@@ -117,7 +117,10 @@ export async function atMergedCommit(worktree: string, tip: string): Promise<boo
   );
 }
 
-/** Removes a task's worktree and, when cancelling, deletes its branch too. */
+/**
+ * Removes a task's worktree and the markers kozod keeps beside it, so that a worktree made again
+ * at the same path is prepared afresh, and when cancelling deletes its branch too.
+ */
 export async function releaseTask(
   home: KozoHome,
   repository: string,
@@ -130,6 +133,8 @@ export async function releaseTask(
     await git(repository, ["worktree", "remove", "--force", worktree]);
   }
   await git(repository, ["worktree", "prune"]);
+  await rm(`${worktree}.prepared`, { force: true });
+  await rm(`${worktree}.ports`, { force: true });
   if (deleteBranch && (await branchTip(repository, branch)) !== null) {
     await git(repository, ["branch", "-D", branch]);
   }

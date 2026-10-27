@@ -75,8 +75,12 @@ describe("claimTask", () => {
       "kozo <kozo@localhost.invalid> N",
     );
 
+    await Bun.write(`${claim.worktree}.prepared`, "now\n");
+    await Bun.write(`${claim.worktree}.ports`, "[4100]\n");
     await releaseTask(home, repo.path, "K-1/t1", { factory, deleteBranch: true });
     expect(await Bun.file(`${claim.worktree}/fix.ts`).exists()).toBe(false);
+    expect(await Bun.file(`${claim.worktree}.prepared`).exists()).toBe(false);
+    expect(await Bun.file(`${claim.worktree}.ports`).exists()).toBe(false);
     expect(await repo.git("branch", "--list", "kozo/*")).toBe("");
     await releaseTask(home, repo.path, "K-1/t1", { factory, deleteBranch: true });
   });
