@@ -4,7 +4,14 @@ import { verdictFileSchema } from "@kozo/core";
 import { gitRepository, tempDirectory } from "@kozo/testing";
 import { parseAgentDefinition } from "./agent-definition.ts";
 import { type Judge, SessionError, type SessionRequest } from "./judge.ts";
-import { reviewAgent, reviewLine, reviewPrompt, runReview, writeReviewVerdict } from "./review.ts";
+import {
+  capDiff,
+  reviewAgent,
+  reviewLine,
+  reviewPrompt,
+  runReview,
+  writeReviewVerdict,
+} from "./review.ts";
 
 function fakeJudge(output: unknown) {
   const requests: SessionRequest[] = [];
@@ -63,6 +70,23 @@ describe("runReview", () => {
     );
   });
 
+  test("the judge still answers on a diff too long to show whole", async () => {
+    const repo = await gitRepository();
+    await using _ = repo;
+    const base = await repo.commit({ "src/cart.ts": "export const total = 1;\n" });
+    const long = Array.from({ length: 500 }, (_, index) => `export const n${index} = ${index};`);
+    await repo.commit({ "src/table.ts": `${long.join("\n")}\n`, "bun.lock": "{}\n" });
+    const { judge, requests } = fakeJudge(accept);
+    const { result } = await review(repo.path, base, judge);
+    expect(result.status).toBe("reviewed");
+    const prompt = requests[0]?.prompt ?? "";
+    expect(prompt).toContain("- bun.lock (+1 -0): a lockfile, not shown");
+    expect(prompt).toMatch(
+      /- src\/table\.ts \(\+500 -0\): only its first 400 of \d+ diff lines shown/,
+    );
+    expect(prompt).not.toContain("export const n499");
+  });
+
   test("an answer outside the schema is an error", async () => {
     const { repo, base } = await repository();
     await using _ = repo;
@@ -104,6 +128,45 @@ describe("runReview", () => {
     await using _ = repo;
     const base = await repo.commit({ "a.txt": "1\n" });
     expect((await review(repo.path, base, fakeJudge(accept).judge)).result.status).toBe("error");
+  });
+});
+
+describe("capDiff", () => {
+  const fileDiff = (path: string, lines: number) =>
+    [
+      `diff --git a/${path} b/${path}`,
+      `--- a/${path}`,
+      `+++ b/${path}`,
+      `@@ -0,0 +1,${lines} @@`,
+      ...Array.from({ length: lines - 4 }, (_, index) => `+line ${index}`),
+    ].join("\n");
+
+  test("shows 400 lines of a file and 4,000 in all, and names what it left out", () => {
+    const files = Array.from({ length: 12 }, (_, index) => fileDiff(`src/f${index}.ts`, 390));
+    const { diff, unseen } = capDiff(`${files.join("\n")}\n`);
+    expect(diff.split("\n").filter((line) => line.startsWith("diff --git"))).toHaveLength(11);
+    expect(unseen).toEqual([
+      "src/f10.ts (+386 -0): only its first 100 of 390 diff lines shown",
+      "src/f11.ts (+386 -0): not shown, past the 4000 lines in all",
+    ]);
+  });
+
+  test("cuts a long file and leaves a lockfile out", () => {
+    const { diff, unseen } = capDiff(
+      `${[fileDiff("bun.lock", 50), fileDiff("src/long.ts", 450), fileDiff("src/ok.ts", 10)].join("\n")}\n`,
+    );
+    expect(diff).not.toContain("bun.lock");
+    expect(diff).toContain("+line 395");
+    expect(diff).not.toContain("+line 396");
+    expect(diff).toContain("diff --git a/src/ok.ts b/src/ok.ts");
+    expect(unseen).toEqual([
+      "bun.lock (+46 -0): a lockfile, not shown",
+      "src/long.ts (+446 -0): only its first 400 of 450 diff lines shown",
+    ]);
+    const prompt = reviewPrompt("Goal", ["Done"], diff, [], unseen);
+    const instructions = prompt.slice(0, prompt.indexOf("</instructions>"));
+    expect(instructions).toContain("NOT SHOWN:");
+    expect(instructions).toContain("- bun.lock (+46 -0): a lockfile, not shown");
   });
 });
 

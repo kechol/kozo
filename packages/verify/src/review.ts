@@ -53,12 +53,19 @@ async function review(options: ReviewOptions, spend: Spend): Promise<ReviewRecor
   const { head, mergeBase: base } = await resolveRange(cwd, options.base, "HEAD");
   const diff = await git(cwd, [...(await diffCommand(cwd)), "-U5", base, head, "--"]);
   if (diff.trim() === "") throw new SessionError("there is no diff to review");
+  const shown = capDiff(diff);
 
   const answer = await spending(
     spend,
     judge.judge({
       instructions: options.instructions ?? reviewAgent.instructions,
-      prompt: reviewPrompt(options.goal, options.doneWhen, diff, options.ownerNotes),
+      prompt: reviewPrompt(
+        options.goal,
+        options.doneWhen,
+        shown.diff,
+        options.ownerNotes,
+        shown.unseen,
+      ),
       schema: reviewJudgmentJsonSchema,
       model,
       maxCostUsd: options.maxCostUsd,
@@ -79,24 +86,74 @@ async function review(options: ReviewOptions, spend: Spend): Promise<ReviewRecor
   };
 }
 
+// How much of a diff the judge reads: enough for any change a task makes by hand, while a
+// lockfile or a generated file would fill the session with lines nobody wrote.
+const fileLimit = 400;
+const totalLimit = 4_000;
+const lockFiles =
+  /(^|\/)(bun\.lockb?|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|go\.sum|Cargo\.lock|poetry\.lock|uv\.lock|Pipfile\.lock|Gemfile\.lock|composer\.lock)$/;
+
+/**
+ * The part of a unified diff the judge reads: each file's diff up to 400 lines and 4,000 lines in
+ * all, with lockfiles left out, and a line for each file cut or left out saying what was not
+ * shown.
+ */
+export function capDiff(diff: string): { diff: string; unseen: string[] } {
+  const files = diff.split(/^(?=diff --git )/m).filter((file) => file.trim() !== "");
+  const shown: string[] = [];
+  const unseen: string[] = [];
+  let left = totalLimit;
+  for (const file of files) {
+    const lines = file.replace(/\n$/, "").split("\n");
+    const path = /^diff --git a\/.* b\/(.*)$/.exec(lines[0] ?? "")?.[1] ?? "a file";
+    const added = lines.filter((line) => line.startsWith("+") && !line.startsWith("+++")).length;
+    const removed = lines.filter((line) => line.startsWith("-") && !line.startsWith("---")).length;
+    const size = `+${added} -${removed}`;
+    if (lockFiles.test(path)) {
+      unseen.push(`${path} (${size}): a lockfile, not shown`);
+      continue;
+    }
+    if (left === 0) {
+      unseen.push(`${path} (${size}): not shown, past the ${totalLimit} lines in all`);
+      continue;
+    }
+    const room = Math.min(fileLimit, left);
+    shown.push(lines.slice(0, room).join("\n"));
+    left -= Math.min(room, lines.length);
+    if (lines.length > room)
+      unseen.push(`${path} (${size}): only its first ${room} of ${lines.length} diff lines shown`);
+  }
+  return { diff: `${shown.join("\n")}\n`, unseen };
+}
+
 /**
  * Builds the judge's prompt from the instructions and the diff alone. The diff is untrusted, so
- * anything in it that would close its section is defused first.
+ * anything in it that would close its section is defused first. `unseen` names the parts of the
+ * diff kozod left out, in the instructions, where the diff cannot forge them.
  */
 export function reviewPrompt(
   goal: string,
   doneWhen: readonly string[],
   diff: string,
   ownerNotes: readonly string[] = [],
+  unseen: readonly string[] = [],
 ): string {
   const defuse = (text: string) => defuseSections(text, ["instructions", "diff"]);
   const conditions = doneWhen.map((condition) => `- ${defuse(condition)}`).join("\n");
+  const cut =
+    unseen.length === 0
+      ? []
+      : [
+          "NOT SHOWN: kozod left these parts of the diff out; judge what you see, and say in a finding when what is left out keeps you from judging a condition.",
+          ...unseen.map((part) => `- ${defuse(part)}`),
+        ];
   return [
     "<instructions>",
     `GOAL: ${defuse(goal)}`,
     "DONE_WHEN:",
     conditions,
     ...ownerNotesSection(ownerNotes, defuse),
+    ...cut,
     "</instructions>",
     "",
     '<diff trust="untrusted">',
