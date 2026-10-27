@@ -205,7 +205,6 @@ const gitAllowed = new Set([
   "show",
   "show-branch",
   "show-ref",
-  "stash",
   "status",
   "var",
   "version",
@@ -482,9 +481,9 @@ function analyzeGit(args: Word[], context: Analysis): GuardDecision {
     .filter((word) => name !== "checkout" || !word.dynamic)
     .map((word) => word.text);
   // An argument built from an expansion could turn into any option. Only paths after a literal
-  // --, and the message of git commit or git stash, as in commit -m "$(cat <<EOF ...)", may be.
+  // --, and the message of git commit, as in commit -m "$(cat <<EOF ...)", may be.
   const paths = words.findIndex((word) => !word.dynamic && word.text === "--");
-  const takesMessage = name === "commit" || name === "stash";
+  const takesMessage = name === "commit";
   const dynamicOption = words.findIndex((word, index) => {
     if (!word.dynamic || (paths !== -1 && index > paths)) return false;
     const flag = words[index - 1];
@@ -493,6 +492,14 @@ function analyzeGit(args: Word[], context: Analysis): GuardDecision {
   if (dynamicOption !== -1) return refuse(`git ${name}: an argument built from an expansion`);
   const reason = gitRefusedReasons[name];
   if (reason) return refuse(`git ${name}: ${reason}`);
+  // The sandbox keeps a run from writing refs/stash, so a stash fails after the call; reading
+  // what is stashed is harmless.
+  if (name === "stash" && rest[0] !== "list" && rest[0] !== "show") {
+    return refuse(
+      "git stash: the run keeps its changes in its worktree; commit them or keep editing",
+    );
+  }
+  if (name === "stash") return allow;
   if (name === "grep" && rest.some(opensPager)) {
     return refuse("git grep --open-files-in-pager runs another program");
   }
