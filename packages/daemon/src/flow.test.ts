@@ -589,6 +589,12 @@ describe("the minimal path", () => {
       `${taskRef} is already paused`,
     );
     expect(Object.values(env.store.state.runs).at(-1)?.state).toBe("stopped");
+    // A refused retry leaves no instruction for the next run.
+    const notes = env.store.state.items[ref]?.notes.length;
+    await expect(
+      env.control.act(taskRef, task, "retry", { text: "Try the other label" }),
+    ).rejects.toThrow("is held by paused");
+    expect(env.store.state.items[ref]?.notes.length).toBe(notes);
 
     await env.control.pauseFactory();
     expect((await env.control.pauseFactory()).message).toBe("the factory is already paused");

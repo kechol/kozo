@@ -393,10 +393,10 @@ export class ControlPlane {
   ): Promise<VerbResult> {
     const { subject, item } = this.subject(ref, kind);
     if (isClosed(subject.stage)) throw new CommandError(409, `${ref} is ${subject.stage}`);
-    if (body.text) await this.note(item, ref, "instruction", body.text);
     if (subject.hold && subject.hold.kind !== "attention" && subject.hold.kind !== "question") {
       throw new CommandError(409, `${ref} is held by ${subject.hold.kind}`);
     }
+    if (body.text) await this.note(item, ref, "instruction", body.text);
     await this.clearHold(kind, ref, body.text);
     if (kind === "item" && subject.stage === "planning")
       await this.move("item", ref, "triage", "kozo retry");
