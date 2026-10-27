@@ -133,9 +133,13 @@ export class Notifier {
     const waiting = [...Object.values(state.items), ...Object.values(state.tasks)].filter(
       (subject) => subject.hold?.kind === "approval",
     );
+    const keyOf = (subject: (typeof waiting)[number]) => `${subject.ref} ${subject.hold?.since}`;
+    // An approval given, or one closed, needs no more reminders.
+    const still = new Set(waiting.map(keyOf));
+    for (const key of this.reminded.keys()) if (!still.has(key)) this.reminded.delete(key);
     for (const subject of waiting) {
       const since = subject.hold?.since ?? "";
-      const key = `${subject.ref} ${since}`;
+      const key = keyOf(subject);
       const due = Math.min(reminders, Math.floor((now - Date.parse(since)) / reminderMs));
       if (due <= (this.reminded.get(key) ?? 0)) continue;
       this.reminded.set(key, due);

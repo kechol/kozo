@@ -229,6 +229,11 @@ export class GitHubSync {
         await this.closeWhenComplete(github, ref, issue.number);
       });
     }
+    // Only an open Issue gets its status published again.
+    const published = new Set(issues.map((issue) => `${name}#${issue.number}`));
+    for (const ref of this.statuses.keys()) {
+      if (ref.startsWith(`${name}#`) && !published.has(ref)) this.statuses.delete(ref);
+    }
   }
 
   /**

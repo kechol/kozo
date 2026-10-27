@@ -568,7 +568,9 @@ describe("GitHubSync", () => {
       ],
     ]);
 
-    // An item kozod completed closes its Issue, once.
+    // An item kozod completed closes its Issue, once, and its status is no longer kept.
+    const statuses = (env.sync as unknown as { statuses: Map<string, string> }).statuses;
+    expect(statuses.has(`shop#${edited}`)).toBe(true);
     await env.control.act(
       `shop#${edited}`,
       { kind: "item", item: { repo: "shop", number: edited ?? 0 } },
@@ -581,6 +583,7 @@ describe("GitHubSync", () => {
       `closeIssue me/shop #${edited}`,
     ]);
     expect(issues().find((entry) => entry.number === edited)?.state).toBe("closed");
+    expect(statuses.has(`shop#${edited}`)).toBe(false);
   });
 
   test("sends a task back on red CI and change requests, and takes a human's commits", async () => {

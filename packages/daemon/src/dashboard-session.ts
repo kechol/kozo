@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { secretMatches } from "@kozo/core";
 
 const codeLifetimeMs = 60_000;
+// A page left open keeps its session through its own calls; one unused for a day is gone.
+const sessionIdleMs = 24 * 60 * 60 * 1000;
 
 const secret = () => randomBytes(32).toString("hex");
 
@@ -9,11 +11,13 @@ const secret = () => randomBytes(32).toString("hex");
  * The dashboard's sessions. `kozo dashboard` asks for a code with the API token and opens the
  * page with it; the code is good once, for a minute, since a process's arguments are visible to
  * other users of the machine. The page trades it for a session token, which only this kozod
- * process accepts, so the API token itself never reaches the browser.
+ * process accepts until it goes unused for a day, so the API token itself never reaches the
+ * browser.
  */
 export class DashboardSessions {
   private readonly codes = new Map<string, number>();
-  private readonly tokens = new Set<string>();
+  /** Each session token, with when it was last used. */
+  private readonly tokens = new Map<string, number>();
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -32,12 +36,18 @@ export class DashboardSessions {
     if (found === undefined) return null;
     this.codes.delete(found);
     const token = secret();
-    this.tokens.add(token);
+    this.tokens.set(token, this.now());
     return token;
   }
 
   // A session token is 256 random bits, so looking it up by value tells a guesser nothing.
   accepts(token: string): boolean {
-    return this.tokens.has(token);
+    const now = this.now();
+    for (const [known, used] of this.tokens) {
+      if (now - used > sessionIdleMs) this.tokens.delete(known);
+    }
+    if (!this.tokens.has(token)) return false;
+    this.tokens.set(token, now);
+    return true;
   }
 }

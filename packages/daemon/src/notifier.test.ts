@@ -139,6 +139,16 @@ describe("Notifier", () => {
       "K-1 has waited 4 days for your approval: plan approval",
       "K-1 has waited 6 days for your approval: plan approval",
     ]);
+    // An approval given leaves nothing behind to remind of.
+    const reminded = (env.notifier as unknown as { reminded: Map<string, number> }).reminded;
+    expect(reminded.size).toBe(1);
+    await env.store.append({
+      type: "hold.cleared",
+      item: "K-1",
+      data: { target: "item", hold: "approval", by: "human" },
+    });
+    await env.notifier.remind();
+    expect(reminded.size).toBe(0);
   });
 });
 
