@@ -98,11 +98,11 @@ const prepare: NodeStep = async (run) => {
   const steps = [
     ...constraints.services.map((command) => ({
       command,
-      start: () => runCommand(command, worktree, log, env),
+      start: () => runCommand(command, worktree, log, env, undefined, run.limit),
     })),
     ...constraints.prepare.map((command) => ({
       command,
-      start: () => runner.prepare(command, worktree, log, env),
+      start: () => runner.prepare(command, worktree, log, env, run.limit),
     })),
   ];
   for (const { command, start } of steps) {
@@ -227,7 +227,7 @@ const implement: NodeStep = async (run, current) => {
   const processesBefore = await runningProcesses();
   const result = await runner.session(
     {
-      version: 3,
+      version: 4,
       run: run.run,
       runtime: definition.factory.runtime,
       agent: "implement",
@@ -257,6 +257,7 @@ const implement: NodeStep = async (run, current) => {
         base: repository.base,
         env: await run.env(),
         sandbox: runner.confined(worktree).sandbox,
+        minutes: charter.limits.max_minutes,
       },
       requireNote: true,
     },
@@ -332,6 +333,7 @@ async function applyCodemod(run: BlueprintRun, codemod: string): Promise<RunEnd 
     (text) => void run.log(text),
     await run.env(),
     runner.confined(worktree),
+    run.limit,
   );
   if (code !== 0) {
     return await run.halt("implement", {
@@ -388,6 +390,7 @@ const verifyDeterministic: NodeStep = async (run, current) => {
     worktree,
     repository.base,
     join(run.files.dir, "gates-verify.log"),
+    run.limit,
   );
   const gates = recorded.result;
   let output = recorded.output;
@@ -423,6 +426,7 @@ const verifyDeterministic: NodeStep = async (run, current) => {
       log: collect,
       env: await run.env(),
       confined: runner.confined(worktree),
+      limit: run.limit,
     });
     if (prove.status !== "pass")
       return await run.retry(node, `${proveLine(prove)}\n${tail(output)}`);
@@ -646,6 +650,7 @@ const finalVerify: NodeStep = async (run) => {
     worktree,
     repository.base,
     join(run.files.dir, "gates-final.log"),
+    run.limit,
   );
   if (deep.status !== "pass") {
     return await run.backToBuilding(

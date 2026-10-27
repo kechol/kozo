@@ -55,6 +55,35 @@ describe("runGates", () => {
     );
   });
 
+  test("a gate that runs out of time is stopped with what it started and fails", async () => {
+    const slow = `
+version: 1
+tests: ["**/*.test.ts"]
+gates:
+  hang:
+    run: (sleep 60; touch late-marker) & sleep 60
+  marker:
+    run: touch ran-marker
+levels:
+  fast: [hang, marker]
+`;
+    await using dir = await tempDirectory({ [constraintsPath]: slow });
+    let log = "";
+    const started = performance.now();
+    const result = await runGates({
+      cwd: dir.path,
+      level: "fast",
+      log: (text) => (log += text),
+      limit: { minutes: 1 / 60 },
+    });
+    expect(performance.now() - started).toBeLessThan(5_000);
+    expect(result.status).toBe("fail");
+    expect(result.gates.map((gate) => [gate.name, gate.exitCode])).toEqual([["hang", 124]]);
+    expect(log).toContain("kozo: (sleep 60; touch late-marker) & sleep 60 ran out of time after");
+    const ps = Bun.spawnSync(["pgrep", "-f", "touch late-marker"]);
+    expect(ps.stdout.toString()).toBe("");
+  });
+
   test("a missing constraints file is MISCONFIGURED", async () => {
     await using dir = await tempDirectory({});
     const { result, line } = await gatesIn(dir.path, "fast");

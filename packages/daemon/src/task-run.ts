@@ -17,6 +17,7 @@ import {
 import {
   type Base,
   blueprintFor,
+  type CommandLimit,
   type Confined,
   type Definition,
   type GatesResult,
@@ -59,6 +60,7 @@ export interface RunnerOps {
     worktree: string,
     log: (text: string) => void,
     env: Record<string, string>,
+    limit?: CommandLimit,
   ): Promise<number>;
   session(spec: WorkerSpec, envelope: Envelope, maxMinutes: number): Promise<SessionResult>;
   startRun(
@@ -84,6 +86,7 @@ export interface RunnerOps {
     cwd: string,
     base: string,
     outputPath: string,
+    limit?: CommandLimit,
   ): Promise<{ result: GatesResult; output: string }>;
   lastBrief(task: TaskState, run: string): Promise<string>;
   refs(repository: string, branch: string): Promise<Map<string, string>>;
@@ -179,6 +182,11 @@ export class BlueprintRun {
 
   get constraints(): Constraints {
     return this.repository.constraints;
+  }
+
+  /** How long each command kozod runs for the task may take: the Charter's session limit. */
+  get limit(): CommandLimit {
+    return { minutes: this.charter.limits.max_minutes };
   }
 
   /** The environment of the worktree's commands. */

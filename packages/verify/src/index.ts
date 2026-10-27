@@ -2,10 +2,12 @@ export * from "./agent-definition.ts";
 export * from "./base-documents.ts";
 export { globMatcher, isNewTestCase, protectedPathMatcher } from "./changes.ts";
 export {
+  type CommandLimit,
   type Confined,
   commandEnvironmentFrom,
   lines,
   Outbox,
+  outOfTimeCode,
   runCommand,
   shellQuote,
 } from "./command.ts";

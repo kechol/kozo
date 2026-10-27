@@ -2,7 +2,14 @@ import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { type BaseDocumentsProblem, readBaseDocuments } from "./base-documents.ts";
 import { changedFiles, diffCommand, globMatcher, literal, resolveRange } from "./changes.ts";
-import { type Confined, guarded, runCommand, secondsSince, shellQuote } from "./command.ts";
+import {
+  type CommandLimit,
+  type Confined,
+  guarded,
+  runCommand,
+  secondsSince,
+  shellQuote,
+} from "./command.ts";
 import { GitError, git } from "./git.ts";
 
 export interface ProveRun {
@@ -51,6 +58,8 @@ export interface ProveOptions {
   env?: Record<string, string>;
   /** The sandbox the test commands run in; they run unconfined when it is unset. */
   confined?: Confined;
+  /** How long each test command may run; it runs as long as it takes when it is unset. */
+  limit?: CommandLimit;
 }
 
 /**
@@ -70,6 +79,7 @@ async function prove({
   log,
   env,
   confined,
+  limit,
 }: ProveOptions): Promise<ProveResult> {
   const { baseTip, head, mergeBase } = await resolveRange(cwd, base, "HEAD");
   const documents = await readBaseDocuments(cwd, baseTip);
@@ -124,7 +134,7 @@ async function prove({
   for (const run of runs) {
     log(`==> with the change: ${run.command}\n`);
     const started = performance.now();
-    run.withChange = await runCommand(run.command, cwd, log, env, confined);
+    run.withChange = await runCommand(run.command, cwd, log, env, confined, limit);
     run.seconds += secondsSince(started);
     if (run.withChange !== 0) {
       log(`kozo: the tests fail with the change applied: ${run.files.join(", ")}\n`);
@@ -137,7 +147,7 @@ async function prove({
     for (const run of runs) {
       log(`==> without the change: ${run.command}\n`);
       const started = performance.now();
-      run.withoutChange = await runCommand(run.command, cwd, log, env, confined);
+      run.withoutChange = await runCommand(run.command, cwd, log, env, confined, limit);
       run.seconds += secondsSince(started);
     }
   } finally {

@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { type GateLevel, parseConstraints } from "@kozo/core";
 import { constraintsPath } from "./base-documents.ts";
 import { resolveRef } from "./changes.ts";
-import { type Confined, runCommand, secondsSince } from "./command.ts";
+import { type CommandLimit, type Confined, runCommand, secondsSince } from "./command.ts";
 import { GitError, showFile } from "./git.ts";
 
 export interface GateRun {
@@ -38,6 +38,8 @@ export interface GatesOptions {
   env?: Record<string, string>;
   /** The sandbox the gates run in; they run unconfined when it is unset. */
   confined?: Confined;
+  /** How long each gate may run; a gate runs as long as it takes when it is unset. */
+  limit?: CommandLimit;
 }
 
 export async function runGates({
@@ -47,6 +49,7 @@ export async function runGates({
   log,
   env,
   confined,
+  limit,
 }: GatesOptions): Promise<GatesResult> {
   const started = performance.now();
   const elapsed = () => secondsSince(started);
@@ -98,7 +101,7 @@ export async function runGates({
     // The constraints schema guarantees every listed gate is defined.
     const run = parsed.value.gates[name]?.run ?? "";
     const gateStarted = performance.now();
-    const exitCode = await runCommand(run, cwd, emit, env, confined);
+    const exitCode = await runCommand(run, cwd, emit, env, confined, limit);
     gates.push({ name, exitCode, seconds: secondsSince(gateStarted) });
     if (exitCode !== 0) {
       endLine();

@@ -34,6 +34,7 @@ import {
 } from "@kozo/core";
 import {
   baseOf,
+  type CommandLimit,
   type Confine,
   type Confined,
   commandEnvironmentFrom,
@@ -149,10 +150,11 @@ export class Runner implements RunnerOps {
     worktree: string,
     log: (text: string) => void,
     env: Record<string, string>,
+    limit?: CommandLimit,
   ): Promise<number> {
     const { egress } = this.deps;
     const confined = this.confined(worktree, true);
-    if (egress === undefined) return await runCommand(command, worktree, log, env, confined);
+    if (egress === undefined) return await runCommand(command, worktree, log, env, confined, limit);
     const { url, revoke } = egress.issue();
     const proxy = {
       HTTPS_PROXY: url,
@@ -161,7 +163,9 @@ export class Runner implements RunnerOps {
       http_proxy: url,
       KOZO_EGRESS_PORT: String(egress.port),
     };
-    return await runCommand(command, worktree, log, { ...env, ...proxy }, confined).finally(revoke);
+    return await runCommand(command, worktree, log, { ...env, ...proxy }, confined, limit).finally(
+      revoke,
+    );
   }
 
   async envFor(worktree: string): Promise<Record<string, string>> {
@@ -453,7 +457,7 @@ export class Runner implements RunnerOps {
     ].join("\n");
     const result = await this.session(
       {
-        version: 3,
+        version: 4,
         run,
         runtime: definition.factory.runtime,
         agent,
@@ -704,6 +708,7 @@ export class Runner implements RunnerOps {
     cwd: string,
     base: string,
     outputPath: string,
+    limit?: CommandLimit,
   ) {
     let output = "";
     const result = await runGates({
@@ -712,6 +717,7 @@ export class Runner implements RunnerOps {
       base,
       env: await this.envFor(cwd),
       confined: this.confined(cwd),
+      limit,
       log: (text) => {
         output += text;
       },
@@ -873,6 +879,7 @@ export class Runner implements RunnerOps {
       worktree,
       repository.base,
       join(itemDirectory(this.home, item.ref), `check-${taskRef.split("/").at(-1)}.log`),
+      { minutes: repository.charter.limits.max_minutes },
     );
     const defect = `the ${level} gates failed on ${repository.branch} after the merge`;
     const recordDefect = async () => {

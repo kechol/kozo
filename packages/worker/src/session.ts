@@ -14,7 +14,7 @@ import type { SandboxPaths } from "./task-sandbox.ts";
 
 /** Everything a worker needs to run one session, written by kozod into the run directory. */
 export const workerSpecSchema = z.strictObject({
-  version: z.literal(3),
+  version: z.literal(4),
   run: z.string(),
   /** How the worker runs Claude Code: through the Agent SDK, or as `claude -p`. */
   runtime: z.enum(["sdk", "cli"]),
@@ -47,8 +47,8 @@ export const workerSpecSchema = z.strictObject({
   }),
   /**
    * The gates the agent runs with kozo_gates and stop-check requires: the level that must pass,
-   * the ref whose constraints define them, and the environment and command sandbox kozod's own
-   * gates run them with; null gives the agent no gates.
+   * the ref whose constraints define them, and the environment, command sandbox and time limit
+   * per gate kozod's own gates run them with; null gives the agent no gates.
    */
   gates: z
     .strictObject({
@@ -63,6 +63,7 @@ export const workerSpecSchema = z.strictObject({
         denyWrite: z.array(z.string()),
         network: z.enum(["local", "any"]),
       }),
+      minutes: z.number().positive(),
     })
     .nullable(),
   /** Whether stop-check requires at least one kozo_note. */
@@ -170,6 +171,7 @@ export async function runSession(
           base: gates.base,
           env: gates.env,
           confined: { confine, sandbox: gates.sandbox },
+          limit: { minutes: gates.minutes },
           log: (text) => {
             output += text;
           },
