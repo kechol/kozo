@@ -24,6 +24,7 @@ const attempts = [
   "git checkout main",
   'bash -c "git push origin HEAD:main"',
   "eval git push origin HEAD:main",
+  "{g..g}it push origin HEAD:main",
   'sh -c "$(echo git) push origin HEAD:main"',
   "alias g=git; g push origin HEAD:main",
   "echo pwned > ../outside.txt",

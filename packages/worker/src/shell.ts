@@ -117,6 +117,9 @@ export function parseShell(source: string): ParsedShell {
   const readWord = (): Word => {
     let text = "";
     let dynamic = false;
+    // Where an unquoted brace opened in `text`: `{a,b}` and `{a..z}` expand into other words, so
+    // a pair around anything is dynamic, while a lone brace and find's `{}` stay literal.
+    let brace = -1;
     while (i < source.length) {
       const c = source[i] ?? "";
       if (blank(c) || operatorChars.has(c)) break;
@@ -157,6 +160,8 @@ export function parseShell(source: string): ParsedShell {
         i = backtick(i);
       } else {
         if (c === "*" || c === "?" || c === "[") dynamic = true;
+        if (c === "{") brace = text.length;
+        if (c === "}" && brace !== -1 && text.length > brace + 1) dynamic = true;
         text += c;
         i += 1;
       }

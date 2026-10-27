@@ -47,6 +47,16 @@ describe("parseShell", () => {
     expect(names("if true; then git push; fi")).toEqual(["true", "git push"]);
     expect(parseShell("cat <<EOF | sh\ngit push\nEOF\n").heredocs).toEqual(["git push"]);
     expect(() => parseShell("echo 'open")).toThrow("unclosed single quote");
+    const dynamic = (source: string) =>
+      parseShell(source).commands.flatMap((words) => words.map((word) => word.dynamic));
+    expect(dynamic("{g..g}it a{b,c} '{x,y}' { } {}")).toEqual([
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+    ]);
   });
 });
 
@@ -58,6 +68,8 @@ describe("guardToolCall", () => {
         "git status && git diff --stat",
         "git add -A && git commit -m 'fix: reject a blank quantity'",
         "git log --oneline -5 | head -3",
+        "echo '{a,b}' \"{g..g}\" { } {}",
+        "{ bun test; } > out.log",
         "git branch --show-current",
         "git checkout -- src/cart.ts",
         "git config --get user.name",
@@ -129,6 +141,10 @@ describe("guardToolCall", () => {
         "echo `git update-ref refs/heads/main HEAD`",
         'bash -c "git push"',
         "sh -c 'git merge main'",
+        "{g..g}it push origin HEAD:main",
+        "{gh,true} pr list",
+        "g{i,i}t status",
+        "git {push,status}",
         "eval git push",
         'eval "$CMD"',
         "$GIT push",
