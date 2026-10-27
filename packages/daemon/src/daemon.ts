@@ -232,32 +232,46 @@ export class Daemon {
     );
     const notifier = new Notifier(store, () => definition.current.factory, notify);
     notifier.start();
-    void notifier.remind();
-    const pollGitHub = () =>
-      definition.current.factory.mode === "github"
-        ? github.poll().catch((error: unknown) => report(`kozod: polling GitHub failed: ${error}`))
-        : Promise.resolve();
-    let reconciling = pollGitHub().then(() => scheduler.tick());
+    const remind = () =>
+      void notifier
+        .remind()
+        .catch((error: unknown) => report(`kozod: reminding of approvals failed: ${error}`));
+    remind();
+    const pollGitHub = async () => {
+      if (definition.current.factory.mode === "github") await github.poll();
+    };
+    const jobs = serialJobs(report);
+    jobs.add("polling GitHub", async () => {
+      await pollGitHub();
+      scheduler.tick();
+    });
     let ticks = 0;
     const every = (ms: number) => ticks % Math.max(1, Math.round(ms / tickMs)) === 0;
     const timer = setInterval(() => {
       ticks += 1;
+      // The automations' minute is the tick's, however long the jobs before them take.
+      const now = new Date();
       // GitHub is read every five minutes, with no webhook and no open port.
-      if (every(300_000)) reconciling = reconciling.then(pollGitHub).then(() => scheduler.tick());
+      if (every(300_000)) {
+        jobs.add("polling GitHub", async () => {
+          await pollGitHub();
+          scheduler.tick();
+        });
+      }
       // The factory definition is read and reconciliation runs once a minute; looking for work
       // to start, every tick.
       if (every(60_000)) {
-        reconciling = reconciling
-          .then(() => refreshDefinition(home, store, definition, report))
-          .catch((error: unknown) =>
-            report(`kozod: reading the factory definition failed: ${error}`),
-          )
-          .then(() => reconciler.reconcile())
-          .then(() => scheduler.tick());
+        jobs.add("reading the factory definition", () =>
+          refreshDefinition(home, store, definition, report),
+        );
+        jobs.add("reconciling", async () => {
+          await reconciler.reconcile();
+          scheduler.tick();
+        });
       }
-      if (every(3_600_000)) void notifier.remind();
+      if (every(3_600_000)) remind();
       // An item an automation adds is started by the next tick.
-      reconciling = reconciling.then(() => automations.run(new Date()));
+      jobs.add("running automations", () => automations.run(now));
       scheduler.tick();
     }, tickMs);
     scheduler.tick();
@@ -271,7 +285,7 @@ export class Daemon {
       runner,
       notifier,
       timer,
-      () => reconciling,
+      () => jobs.idle(),
       egress,
     );
   }
@@ -292,4 +306,25 @@ export class Daemon {
     this.store.close();
     await rm(this.home.pidFile, { force: true });
   }
+}
+
+/**
+ * Runs jobs one after another in the order they are added. A job that fails is reported and the
+ * next one runs all the same, so one failure cannot stop polling, reconciliation or automations
+ * for the rest of kozod's life.
+ */
+export function serialJobs(report: (line: string) => void) {
+  let last: Promise<void> = Promise.resolve();
+  return {
+    add(what: string, job: () => Promise<unknown>) {
+      last = last.then(job).then(
+        () => {},
+        (error: unknown) => report(`kozod: ${what} failed: ${error}`),
+      );
+    },
+    /** Resolves once every job added so far has run. */
+    idle(): Promise<void> {
+      return last;
+    },
+  };
 }

@@ -11,7 +11,7 @@ import {
   tempDirectory,
   testConfine,
 } from "@kozo/testing";
-import { Daemon } from "./daemon.ts";
+import { Daemon, serialJobs } from "./daemon.ts";
 import { inProcessLauncher } from "./launcher.ts";
 
 const silent = async () => {};
@@ -196,4 +196,24 @@ describe("Daemon", () => {
       await second.stop();
     }
   }, 120_000);
+});
+
+describe("serialJobs", () => {
+  test("runs every job in order, reporting a failed one and going on", async () => {
+    const lines: string[] = [];
+    const ran: string[] = [];
+    const jobs = serialJobs((line) => lines.push(line));
+    jobs.add("reading the factory definition", async () => {
+      ran.push("definition");
+      throw new Error("factory.yml does not parse");
+    });
+    jobs.add("polling GitHub", async () => {
+      ran.push("poll");
+    });
+    await jobs.idle();
+    expect(ran).toEqual(["definition", "poll"]);
+    expect(lines).toEqual([
+      "kozod: reading the factory definition failed: Error: factory.yml does not parse",
+    ]);
+  });
 });
