@@ -45,6 +45,17 @@ export function parseEventLog(text: string, name: string): ParseResult<EventLog>
 }
 
 /**
+ * The text of a log without a last line that a crash cut short, one that ends without a newline
+ * and does not parse, or null when it has none. No state ever applied such a line, since an
+ * event is applied only after its whole line is written and synced.
+ */
+export function withoutTornLine(text: string): string | null {
+  if (text === "" || text.endsWith("\n")) return null;
+  const start = text.lastIndexOf("\n") + 1;
+  return parseEvent(text.slice(start)).ok ? null : text.slice(0, start);
+}
+
+/**
  * The seals in `logs` that their run's log does not match: a run log that is missing, or
  * whose line count or last line differs from what kozod sealed when the run ended.
  */

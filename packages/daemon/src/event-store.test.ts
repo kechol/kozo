@@ -146,6 +146,27 @@ describe("EventStore", () => {
     await expect(EventStore.open(home)).rejects.toThrow("the event logs do not replay");
   });
 
+  test("a last line a crash cut short is dropped, and any other broken line still stops it", async () => {
+    await using dir = await tempDirectory();
+    const home = kozoHome(dir.path);
+    const store = await EventStore.open(home);
+    await store.append(created);
+    store.close();
+    const whole = await Bun.file(home.eventsLog).text();
+    await Bun.write(home.eventsLog, `${whole}{"v":1,"ts":"2026-`);
+
+    const reopened = await EventStore.open(home);
+    expect(reopened.state.items["K-1"]?.title).toBe("Reject a blank quantity");
+    expect(await Bun.file(home.eventsLog).text()).toBe(whole);
+    await reopened.append({ ...created, item: "K-2" });
+    reopened.close();
+    expect((await lines(home.eventsLog)).map((event) => event.seq)).toEqual([0, 1, 2]);
+
+    const kept = await Bun.file(home.eventsLog).text();
+    await Bun.write(home.eventsLog, `${kept}{"v":1,"ts":"2026-\n`);
+    await expect(EventStore.open(home)).rejects.toThrow(EventLogError);
+  });
+
   test("ending a run seals its log, which then takes no more events", async () => {
     await using dir = await tempDirectory();
     const home = kozoHome(dir.path);

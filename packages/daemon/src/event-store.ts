@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { mkdir, open, readdir } from "node:fs/promises";
+import { mkdir, open, readdir, truncate } from "node:fs/promises";
 import { dirname, relative } from "node:path";
 import {
   applyEvent,
@@ -19,6 +19,7 @@ import {
   runFiles,
   sealIssues,
   sha256,
+  withoutTornLine,
 } from "@kozo/core";
 import { IndexDb } from "./index-db.ts";
 
@@ -71,7 +72,19 @@ async function readLogs(home: KozoHome): Promise<EventLog[]> {
   for (const path of paths) {
     const file = Bun.file(path);
     if (!(await file.exists())) continue;
-    const result = parseEventLog(await file.text(), relative(home.root, path));
+    const name = relative(home.root, path);
+    let text = await file.text();
+    // A crash while writing leaves at most this; anything else in a log stays an error.
+    const repaired = withoutTornLine(text);
+    if (repaired !== null) {
+      const kept = Buffer.byteLength(repaired);
+      await truncate(path, kept);
+      console.error(
+        `kozod: dropped the last ${file.size - kept} bytes of ${name}, a line cut short by a crash`,
+      );
+      text = repaired;
+    }
+    const result = parseEventLog(text, name);
     if (!result.ok) throw new EventLogError(result.issues.join("\n"));
     logs.push(result.value);
   }
