@@ -132,7 +132,7 @@ export class Daemon {
     const runner = new Runner(home, store, {
       launcher,
       judge: claudeJudge(claude),
-      verifier: claudeVerifier(claude),
+      verifier: claudeVerifier(claude, home.root),
       definition,
       confine: confined,
       egress,

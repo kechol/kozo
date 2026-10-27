@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { gateLevelSchema } from "@kozo/core";
+import { gateLevelSchema, kozoHome } from "@kozo/core";
 import {
   claudeJudge,
   claudeVerifier,
@@ -354,7 +354,7 @@ async function verify(args: readonly string[], out: Output, cwd: string): Promis
   const result = await runVerify({
     ...values,
     cwd,
-    verifier: claudeVerifier(values.executable),
+    verifier: claudeVerifier(values.executable, kozoHome().root),
     log: logTo(out, values.json),
   });
   if (result.status === "verified" && values.out !== undefined) {

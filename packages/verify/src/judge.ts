@@ -162,12 +162,23 @@ export function claudeJudge(executable: string): Judge {
 const verifyTools = ["Bash"];
 
 /**
+ * The sandbox of the verify session's shell. Like a task's shell, it cannot read the factory's
+ * home, which holds the API token, except the worktree under test.
+ */
+export function verifierSandbox(homeRoot: string, worktree: string) {
+  return localSandbox({
+    denyRead: [...deniedCredentials(process.env), homeRoot],
+    allowRead: [worktree],
+  });
+}
+
+/**
  * A verifier that runs the user's own `claude` in the worktree with the shell as its only tool.
  * Shell commands run in Claude Code's sandbox: writes stay inside the worktree, the network
- * reaches only this machine, and neither the credential files above nor the sign-in variables
- * can be read. A sandbox that cannot start fails the session.
+ * reaches only this machine, and neither the credential files above, the factory's home nor the
+ * sign-in variables can be read. A sandbox that cannot start fails the session.
  */
-export function claudeVerifier(executable: string): Verifier {
+export function claudeVerifier(executable: string, homeRoot: string): Verifier {
   return {
     async verify({ cwd, ...request }) {
       return await runSession(executable, request, {
@@ -177,7 +188,7 @@ export function claudeVerifier(executable: string): Verifier {
         permissionMode: "dontAsk",
         // The app under test, built from the diff, could otherwise read the sign-in variables.
         env: scrubbedShell,
-        sandbox: localSandbox({ denyRead: deniedCredentials(process.env) }),
+        sandbox: verifierSandbox(homeRoot, cwd),
       });
     },
   };
