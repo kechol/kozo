@@ -141,7 +141,8 @@ export class Daemon {
     });
     const control = new ControlPlane(home, store, definition, runner);
     const scheduler = new Scheduler(store, runner, definition, report);
-    const github = new GitHubSync(home, store, definition, control, ghGitHub(), report);
+    const gh = ghGitHub();
+    const github = new GitHubSync(home, store, definition, control, gh, report);
     if (definition.current.factory.mode === "github")
       control.moveToIssue = (ref) => github.moveToIssue(ref);
     // Each write is one API call; the work the scheduler starts after it is kozod's own.
@@ -224,6 +225,13 @@ export class Daemon {
       report,
       (ref, work) => scheduler.startWork(ref, work),
       () => definition.current.factory.mode,
+      async (path, branch) => {
+        const { mode, repositories } = definition.current.factory;
+        const name = repositories.find((repository) => repository.path === path)?.github;
+        if (mode !== "github" || !name) return null;
+        const pulls = await gh.pullsFor(name, branch);
+        return pulls.find((pull) => pull.state === "merged")?.mergeCommit ?? null;
+      },
     );
     await reconciler.recover();
     // In GitHub mode work arrives as Issues, so automations add items only in local mode.

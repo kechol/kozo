@@ -116,6 +116,7 @@ async function factoryOf(
     home,
     store,
     definition,
+    runner,
     control,
     scheduler,
     reconciler,
@@ -1217,6 +1218,42 @@ describe("the minimal path", () => {
     await env.repo.commit({ "LATER.txt": "later\n" }, "a later change");
     await env.reconciler.reconcile();
     await env.scheduler.idle();
+    expect(env.store.state.tasks[task]).toMatchObject({
+      stage: "complete",
+      merged: { commit: squashed },
+    });
+  }, 180_000);
+
+  test("in GitHub mode a merge is found by its pull request's merge commit, which no patch matches", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: plan }] : implement(),
+    );
+    const { task } = await toHandoff(env);
+    const branch = `kozo/${env.store.factoryId}/K-1-t1`;
+    // A squash whose author also reworded a line: its patch is not the branch's.
+    await env.repo.git("merge", "--squash", "--quiet", branch);
+    await Bun.write(join(env.repo.path, "NOTES.txt"), "resolved by hand\n");
+    await env.repo.git("add", "--all");
+    await env.repo.git("commit", "--quiet", "-m", "the low stock notice, squashed with a fix");
+    const squashed = (await env.repo.git("rev-parse", "HEAD")).trim();
+    const byPatch = new Reconciler(env.store, env.runner, () => {});
+    await byPatch.reconcile();
+    expect(env.store.state.tasks[task]?.merged).toBeNull();
+    const asked: string[] = [];
+    const byPull = new Reconciler(
+      env.store,
+      env.runner,
+      () => {},
+      (ref, work) => env.scheduler.startWork(ref, work),
+      () => "local",
+      async (_, name) => {
+        asked.push(name);
+        return name === branch ? squashed : null;
+      },
+    );
+    await byPull.reconcile();
+    await env.scheduler.idle();
+    expect(asked).toEqual([branch]);
     expect(env.store.state.tasks[task]).toMatchObject({
       stage: "complete",
       merged: { commit: squashed },

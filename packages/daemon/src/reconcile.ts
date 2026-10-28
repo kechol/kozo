@@ -106,6 +106,14 @@ export class Reconciler {
     },
     /** The factory's mode, which decides where a repository's base is. */
     private readonly mode: () => Factory["mode"] = () => "local",
+    /**
+     * The merge commit of the merged pull request of a branch, in GitHub mode, or null; a squash
+     * over a base that moved, or with a conflict resolved, has no patch to find it by.
+     */
+    private readonly mergeCommitOf: (
+      repository: string,
+      branch: string,
+    ) => Promise<string | null> = async () => null,
   ) {}
 
   /** Marks the runs that were running when kozod stopped as lost; their tasks resume later. */
@@ -144,7 +152,9 @@ export class Reconciler {
       );
       return;
     }
-    if (await contains(repository, `refs/heads/${branch}`, ref)) {
+    const pulled = await this.mergeCommitOf(repository, branch);
+    const viaPull = pulled !== null && (await isAncestor(repository, pulled, ref));
+    if (viaPull || (await contains(repository, `refs/heads/${branch}`, ref))) {
       if (!task.merged) {
         await this.store.append({
           type: "branch.merged",
@@ -154,7 +164,14 @@ export class Reconciler {
             branch,
             head: tip,
             into: target,
-            ...(await mergingCommit(repository, tip, ref)),
+            ...(viaPull
+              ? {
+                  commit: pulled,
+                  committer: (
+                    await git(repository, ["log", "-1", "--format=%cn <%ce>", pulled])
+                  ).trim(),
+                }
+              : await mergingCommit(repository, tip, ref)),
           },
         });
       }
