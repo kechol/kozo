@@ -1,7 +1,14 @@
-import { itemStage, type KozoHome } from "@kozo/core";
-import { baseOf, defuseSections, git } from "@kozo/verify";
+import {
+  explorerAnswerJsonSchema,
+  explorerAnswerSchema,
+  itemStage,
+  type KozoHome,
+} from "@kozo/core";
+import { baseOf, defuseSections, git, modelFor, SessionError } from "@kozo/verify";
 import type { EventStore } from "./event-store.ts";
 import { readItemFile, requestText } from "./item-file.ts";
+import { readCharter } from "./repository.ts";
+import { type Runner, RunnerError } from "./runner.ts";
 import { runRecords } from "./task-records.ts";
 import { hasWorktree, worktreePath } from "./worktrees.ts";
 
@@ -97,4 +104,49 @@ export function explorerPrompt(question: string, records: string): string {
     defuse(records),
     "</records>",
   ].join("\n");
+}
+
+/**
+ * Answers a human's question about an item or one of its tasks from kozod's records, in an
+ * explorer run of its own; nothing else about the subject changes.
+ */
+export async function askExplorer(
+  runner: Runner,
+  itemRef: string,
+  taskRef: string | null,
+  question: string,
+): Promise<string> {
+  const item = runner.store.state.items[itemRef];
+  if (!item) throw new RunnerError(`${itemRef} does not exist`);
+  const definition = runner.deps.definition.current;
+  const { mode } = definition.factory;
+  const { ref } = await baseOf(item.repository, mode);
+  const tip = (await git(item.repository, ["rev-parse", ref])).trim();
+  const charter = await readCharter(item.repository, mode, runner.store.state);
+  const maxCostUsd = charter.ok ? charter.charter.limits.max_cost_usd : 1;
+  const run = await runner.startRun({ item: itemRef, task: taskRef }, "explorer", tip, definition);
+  const release = runner.reserve(maxCostUsd);
+  try {
+    const records = await explorerRecords(runner.home, runner.store, mode, itemRef, taskRef);
+    const answer = await runner.deps.judge.judge({
+      instructions: definition.agents.explorer.instructions,
+      prompt: explorerPrompt(question, records),
+      schema: explorerAnswerJsonSchema,
+      model: modelFor(definition, "explorer"),
+      maxCostUsd,
+    });
+    const parsed = explorerAnswerSchema.safeParse(answer.output);
+    if (!parsed.success) {
+      await runner.endRun(run, "failed", "the answer does not match its schema", answer.costUsd);
+      throw new RunnerError("the explorer's answer does not match its schema");
+    }
+    await runner.endRun(run, "succeeded", undefined, answer.costUsd);
+    return parsed.data.answer;
+  } catch (error) {
+    const spent = error instanceof SessionError ? error.costUsd : 0;
+    await runner.endRun(run, "failed", String((error as Error).message).slice(0, 500), spent);
+    throw error;
+  } finally {
+    release();
+  }
 }
