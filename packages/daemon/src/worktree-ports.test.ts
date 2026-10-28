@@ -18,6 +18,17 @@ describe("takePorts", () => {
     });
   });
 
+  test("never hands one port to two worktrees, however many prepare at once", async () => {
+    await using dir = await tempDirectory();
+    const worktrees = Array.from({ length: 20 }, (_, index) =>
+      join(dir.path, `shop-K-${index}-t1`),
+    );
+    const taken = await Promise.all(worktrees.map((worktree) => takePorts(worktree, 3)));
+    const all = taken.flat();
+    expect(all).toHaveLength(60);
+    expect(new Set(all).size).toBe(60);
+  });
+
   test("names a worktree without ports, in letters a container project accepts", async () => {
     await using dir = await tempDirectory();
     expect(await worktreeEnvironment(join(dir.path, "My Shop-1a2b3c4d-app#212-t2"))).toEqual({
