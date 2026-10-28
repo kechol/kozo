@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { isRunOver, type KozoHome, runFiles, sha256 } from "@kozo/core";
+import { type AgentName, isRunOver, type KozoHome, runFiles, sha256 } from "@kozo/core";
 import { type Definition, modelFor } from "@kozo/verify";
 import type { WorkerSpec } from "@kozo/worker";
 import pkg from "../package.json" with { type: "json" };
@@ -131,7 +131,7 @@ export class RunRecords {
 
   async startRun(
     envelope: Omit<Envelope, "run_id">,
-    agent: "triage" | "plan" | "implement" | "review" | "verify" | "explorer",
+    agent: AgentName,
     charterCommit: string,
     definition: Definition,
   ) {

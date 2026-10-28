@@ -1,6 +1,7 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  type AgentName,
   type BlockedReason,
   type Blueprint,
   type BlueprintNode,
@@ -65,7 +66,7 @@ export interface RunnerOps {
   session(spec: WorkerSpec, envelope: Envelope, maxMinutes: number): Promise<SessionResult>;
   startRun(
     envelope: Omit<Envelope, "run_id">,
-    agent: "triage" | "plan" | "implement" | "review" | "verify" | "explorer",
+    agent: AgentName,
     charterCommit: string,
     definition: Definition,
   ): Promise<string>;

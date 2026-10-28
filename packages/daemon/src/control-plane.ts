@@ -79,13 +79,7 @@ export class ControlPlane {
       this.store.state,
     );
     if (!charter.ok) throw new CommandError(422, `not accepted: ${charter.reason}`);
-    const title = normalTitle(body.title);
-    const duplicate = Object.values(this.store.state.items).find(
-      (item) =>
-        !isClosed(item.stage) &&
-        item.repository === repository &&
-        normalTitle(item.title) === title,
-    );
+    const duplicate = this.openDuplicate(repository, body.title);
     if (duplicate) throw new CommandError(409, `${duplicate.ref} already asks for this`);
 
     const ref = this.store.nextLocalItem();
@@ -101,6 +95,17 @@ export class ControlPlane {
       : { ref, message: `added ${ref}; it waits for your start approval`, awaitingHuman: true };
   }
 
+  /** An open item of `repository` that asks for the same, by its title. */
+  private openDuplicate(repository: string, title: string) {
+    const normal = normalTitle(title);
+    return Object.values(this.store.state.items).find(
+      (item) =>
+        !isClosed(item.stage) &&
+        item.repository === repository &&
+        normalTitle(item.title) === normal,
+    );
+  }
+
   /**
    * Adds an automation's request as an item that waits for a start approval, unless the
    * repository has an open item of the same title. Returns the new item's reference, or why
@@ -114,13 +119,7 @@ export class ControlPlane {
       this.store.state,
     );
     if (!charter.ok) return { skipped: `not accepted: ${charter.reason}` };
-    const title = normalTitle(automation.title);
-    const open = Object.values(this.store.state.items).find(
-      (item) =>
-        !isClosed(item.stage) &&
-        item.repository === repository &&
-        normalTitle(item.title) === title,
-    );
+    const open = this.openDuplicate(repository, automation.title);
     if (open) return { skipped: `${open.ref} still asks for it` };
     const ref = this.store.nextLocalItem();
     await this.admit(

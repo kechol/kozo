@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { gateLevelSchema, kozoHome } from "@kozo/core";
+import { gateLevelSchema, kozoHome, verbSchema } from "@kozo/core";
 import {
   claudeJudge,
   claudeVerifier,
@@ -161,20 +161,7 @@ export async function run(
     if (command === "check") return await check(rest, out);
     if (command === "dashboard") return await dashboard(rest, out);
     if (command === "report") return await metricsReport(rest, out);
-    const verbs = [
-      "say",
-      "approve",
-      "reject",
-      "pause",
-      "resume",
-      "retry",
-      "close",
-      "take",
-      "return",
-      "reorder",
-      "issue",
-    ] as const;
-    const named = verbs.find((name) => name === command);
+    const named = verbSchema.options.find((name) => name === command);
     if (named) return await verb(named, rest, out);
   } catch (error) {
     const fromParseArgs = String((error as { code?: unknown }).code).startsWith("ERR_PARSE_ARGS");
