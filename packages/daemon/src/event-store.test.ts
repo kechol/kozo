@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { cp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { kozoHome, StateError, sha256 } from "@kozo/core";
@@ -155,7 +155,13 @@ describe("EventStore", () => {
     const whole = await Bun.file(home.eventsLog).text();
     await Bun.write(home.eventsLog, `${whole}{"v":1,"ts":"2026-`);
 
+    const said = spyOn(console, "error").mockImplementation(() => {});
     const reopened = await EventStore.open(home);
+    const calls = [...said.mock.calls];
+    said.mockRestore();
+    expect(calls).toEqual([
+      ["kozod: dropped the last 18 bytes of events.jsonl, a line cut short by a crash"],
+    ]);
     expect(reopened.state.items["K-1"]?.title).toBe("Reject a blank quantity");
     expect(await Bun.file(home.eventsLog).text()).toBe(whole);
     await reopened.append({ ...created, item: "K-2" });

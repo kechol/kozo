@@ -78,9 +78,10 @@ async function readLogs(home: KozoHome): Promise<EventLog[]> {
     const repaired = withoutTornLine(text);
     if (repaired !== null) {
       const kept = Buffer.byteLength(repaired);
+      const dropped = Buffer.byteLength(text) - kept;
       await truncate(path, kept);
       console.error(
-        `kozod: dropped the last ${file.size - kept} bytes of ${name}, a line cut short by a crash`,
+        `kozod: dropped the last ${dropped} bytes of ${name}, a line cut short by a crash`,
       );
       text = repaired;
     }
