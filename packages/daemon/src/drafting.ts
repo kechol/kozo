@@ -124,7 +124,7 @@ async function draftPlan(
   ].join("\n");
   const result = await runner.session(
     {
-      version: 4,
+      version: 5,
       run,
       runtime: definition.factory.runtime,
       agent,

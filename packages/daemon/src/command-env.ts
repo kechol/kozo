@@ -26,7 +26,7 @@ export class CommandEnvironment {
   constructor(
     private readonly home: KozoHome,
     private readonly store: EventStore,
-    private readonly deps: Pick<RunnerDeps, "confine" | "egress">,
+    private readonly deps: Pick<RunnerDeps, "confine" | "egress" | "apiPort">,
   ) {}
 
   /** The environment of the diff's own code in prepare, the gates and prove: no credentials. */
@@ -82,6 +82,7 @@ export class CommandEnvironment {
         allowWrite: [worktree, ...packageLocks, ...(prepare ? packageCaches : [])],
         denyWrite: [join(worktree, ".git")],
         network: prepare && this.deps.egress === undefined ? "any" : "local",
+        denyPorts: this.deps.apiPort === undefined ? [] : [this.deps.apiPort],
       },
     };
   }

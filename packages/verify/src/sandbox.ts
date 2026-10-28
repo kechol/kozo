@@ -24,6 +24,11 @@ export interface CommandSandbox {
   denyWrite: string[];
   /** `local` reaches only this machine; `any` reaches every host, for installing dependencies. */
   network: "local" | "any";
+  /**
+   * Ports of this machine a `local` command may not reach, such as kozod's API. On Linux the
+   * command's network reaches only the ports relayed into it, so these are out of reach anyway.
+   */
+  denyPorts: number[];
 }
 
 /** Turns a command line into one that runs it confined to `sandbox`. */
@@ -247,6 +252,9 @@ export function seatbeltProfile(sandbox: CommandSandbox): string {
       ? ["(allow network*)"]
       : [
           '(allow network-outbound (remote ip "localhost:*"))',
+          ...sandbox.denyPorts.map(
+            (port) => `(deny network-outbound (remote ip "localhost:${port}"))`,
+          ),
           '(allow network-bind network-inbound (local ip "localhost:*"))',
           // Unix sockets only where the command may write, which keeps Docker's socket out of reach.
           ...sandbox.allowWrite.flatMap((path) => [
@@ -451,6 +459,7 @@ export async function platformConfine(): Promise<Confine> {
     allowWrite: [],
     denyWrite: [],
     network: "local",
+    denyPorts: [],
   };
   const probe = async (confine: Confine, name: string) => {
     const child = Bun.spawn(confine(empty, ["/bin/sh", "-c", "true"]), {
@@ -517,6 +526,7 @@ export async function withSandboxTemp<T>(
         allowWrite: [...(await writableRoots(sandbox.allowWrite)), temp],
         denyWrite: await resolve(sandbox.denyWrite),
         network: sandbox.network,
+        denyPorts: sandbox.denyPorts,
       },
       temp,
     );

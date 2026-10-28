@@ -135,6 +135,8 @@ export class Daemon {
       verifier: claudeVerifier(claude, home.root),
       definition,
       confine: confined,
+      // A port the OS picks, as tests ask for, is not known yet here.
+      ...(port > 0 ? { apiPort: port } : {}),
       egress,
     });
     const control = new ControlPlane(home, store, definition, runner);

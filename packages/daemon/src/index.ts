@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { kozoHome } from "@kozo/core";
+import { apiPort, kozoHome } from "@kozo/core";
 import {
   claudeJudge,
   claudeVerifier,
@@ -100,6 +100,7 @@ async function evaluate(names: readonly string[], out: Output): Promise<number> 
     judge: claudeJudge(claude),
     verifier: claudeVerifier(claude, home.root),
     confine: await platformConfine(),
+    apiPort: Number(process.env.KOZO_PORT ?? apiPort),
     issueBody,
   };
   const cases: EvalResult[] = [];

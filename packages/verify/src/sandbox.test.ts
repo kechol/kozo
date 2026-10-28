@@ -23,6 +23,7 @@ const empty: CommandSandbox = {
   allowWrite: [],
   denyWrite: [],
   network: "local",
+  denyPorts: [],
 };
 
 describe("packageLocks", () => {
@@ -101,6 +102,14 @@ describe("seatbeltProfile", () => {
     expect(profile).not.toContain("(allow file-read-data");
     expect(profile).not.toContain("(allow network*)");
     expect(seatbeltProfile({ ...empty, network: "any" })).toContain("(allow network*)");
+  });
+
+  test("denies the ports it is given after allowing the rest of this machine", () => {
+    const profile = seatbeltProfile({ ...empty, denyPorts: [7420] });
+    const allow = profile.indexOf('(allow network-outbound (remote ip "localhost:*"))');
+    const deny = profile.indexOf('(deny network-outbound (remote ip "localhost:7420"))');
+    expect(allow).toBeGreaterThan(-1);
+    expect(deny).toBeGreaterThan(allow);
   });
 });
 
@@ -291,6 +300,28 @@ describe.skipIf(!sandboxed)("this machine's sandbox", () => {
     const server = `bun -e 'const s = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("up") }); console.log(await (await fetch(s.url)).text()); s.stop()'`;
     expect((await confined(work, local, server)).output).toBe("up\n");
   });
+
+  test.skipIf(process.platform !== "darwin")(
+    "cannot reach a port it is denied, such as kozod's API, and reaches the others",
+    async () => {
+      await using dir = await tempDirectory();
+      const work = await realpath(dir.path);
+      const listen = () =>
+        Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("up") });
+      const api = listen();
+      const other = listen();
+      try {
+        const fetchOf = (port: number) =>
+          `bun -e 'fetch("http://127.0.0.1:${port}/").then(async (r) => console.log(await r.text()), () => console.log("refused"))'`;
+        const sandbox = { ...empty, allowWrite: [work], denyPorts: [Number(api.port)] };
+        expect((await confined(work, sandbox, fetchOf(Number(api.port)))).output).toBe("refused\n");
+        expect((await confined(work, sandbox, fetchOf(Number(other.port)))).output).toBe("up\n");
+      } finally {
+        api.stop(true);
+        other.stop(true);
+      }
+    },
+  );
 
   test("reaches the worktree's ports this machine listens on and serves on the others", async () => {
     await using dir = await tempDirectory();

@@ -231,7 +231,7 @@ const implement: NodeStep = async (run, current) => {
   const processesBefore = await runningProcesses();
   const result = await runner.session(
     {
-      version: 4,
+      version: 5,
       run: run.run,
       runtime: definition.factory.runtime,
       agent: "implement",

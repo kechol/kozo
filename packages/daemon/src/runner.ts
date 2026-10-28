@@ -42,6 +42,8 @@ import { releaseTask } from "./worktrees.ts";
 
 export interface RunnerDeps {
   launcher: Launcher;
+  /** kozod's API port, which no command it confines may reach. */
+  apiPort?: number;
   judge: Judge;
   verifier: Verifier;
   /** The factory definition; a run reads it once, when it starts. */

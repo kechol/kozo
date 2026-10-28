@@ -19,7 +19,7 @@ async function suite() {
   await repo.commit(suiteBase, "the suite shop");
   await repo.git("switch", "--quiet", "-c", "kozo/k3x9q2/K-1-t1");
   const spec: WorkerSpec = {
-    version: 4,
+    version: 5,
     runtime: "sdk",
     run: "r-0001",
     agent: "implement",
@@ -51,6 +51,7 @@ async function suite() {
         allowWrite: [repo.path],
         denyWrite: [],
         network: "local",
+        denyPorts: [],
       },
       minutes: 30,
     },

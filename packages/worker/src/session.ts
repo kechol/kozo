@@ -14,7 +14,7 @@ import type { SandboxPaths } from "./task-sandbox.ts";
 
 /** Everything a worker needs to run one session, written by kozod into the run directory. */
 export const workerSpecSchema = z.strictObject({
-  version: z.literal(4),
+  version: z.literal(5),
   run: z.string(),
   /** How the worker runs Claude Code: through the Agent SDK, or as `claude -p`. */
   runtime: z.enum(["sdk", "cli"]),
@@ -62,6 +62,7 @@ export const workerSpecSchema = z.strictObject({
         allowWrite: z.array(z.string()),
         denyWrite: z.array(z.string()),
         network: z.enum(["local", "any"]),
+        denyPorts: z.array(z.int().positive()),
       }),
       minutes: z.number().positive(),
     })

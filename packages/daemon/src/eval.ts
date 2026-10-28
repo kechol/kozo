@@ -119,6 +119,8 @@ export interface EvalDeps {
   confine: Confine;
   /** kozod's egress proxy for prepare; without it prepare reaches any host. */
   egress?: Pick<EgressProxy, "issue" | "port">;
+  /** kozod's API port, which the case's commands may not reach. */
+  apiPort?: number;
   /** The body of an upstream issue, for a case that names one instead of copying it. */
   issueBody?: (url: string) => Promise<string>;
 }
@@ -236,6 +238,7 @@ export async function runEvalCase(
       confine: deps.confine,
       trustedBase,
       ...(deps.egress === undefined ? {} : { egress: deps.egress }),
+      ...(deps.apiPort === undefined ? {} : { apiPort: deps.apiPort }),
     });
     const control = new ControlPlane(home, store, inUse, runner);
     const scheduler = new Scheduler(store, runner, inUse, log);
