@@ -8,6 +8,7 @@ import {
   parseEvalCase,
   runFiles,
   sha256,
+  type TaskState,
 } from "@kozo/core";
 import {
   eventually,
@@ -38,7 +39,7 @@ import { Reconciler } from "./reconcile.ts";
 import { buildReport, type Failure } from "./report.ts";
 import { readCharter } from "./repository.ts";
 import { Runner } from "./runner.ts";
-import { Scheduler } from "./scheduler.ts";
+import { resumePoint, Scheduler } from "./scheduler.ts";
 import { worktreePath } from "./worktrees.ts";
 
 /** The failures `kozo report --days 7` lists for a test factory. */
@@ -645,14 +646,18 @@ describe("the minimal path", () => {
       (request) =>
         request.agent === "triage" && triages++ === 0 ? [{ hang: true }] : [{ answer: plan }],
       judgeWith("accept"),
-      { factory: "budget: { daily_usd: 5 }\n" },
+      { factory: "concurrency: 3\nbudget: { daily_usd: 5 }\n" },
     );
     const first = await env.control.addItem({ title: "Low stock", class: "docs" });
     await env.control.addItem({ title: "Sold out", class: "docs" });
+    // The scheduler marks work active as it starts it, before the work's first await, so once
+    // a look has ended its decisions are all there to read.
+    const active = (env.scheduler as unknown as { active: Map<string, unknown> }).active;
     env.scheduler.tick();
     await eventually(() => env.agent.requests.length >= 1, "session 1 to start");
     env.scheduler.tick();
     await env.scheduler.planned();
+    expect([...active.keys()]).toEqual([first.ref]);
     expect(env.agent.requests).toHaveLength(1);
     await env.control.act(first.ref, { kind: "item", item: { repo: null, number: 1 } }, "pause", {
       now: true,
@@ -749,6 +754,12 @@ describe("the minimal path", () => {
       kind: "attention",
       reason: "the run changed refs outside its branch: refs/heads/sneaky",
     });
+    // A retry after the hold resumes where the run stopped.
+    expect(env.store.state.tasks[task]?.checkpoint?.node).toBe("implement");
+    expect(resumePoint(env.store.state, env.store.state.tasks[task] as TaskState)).toBe(
+      "implement",
+    );
+
     const run = env.store.state.tasks[task]?.runs.at(-1) ?? "";
     expect(env.store.state.runs[run]?.state).toBe("failed");
   }, 120_000);
@@ -783,15 +794,15 @@ describe("the minimal path", () => {
       ok: 0,
       summary: expect.stringContaining("the diff conflicts with the latest main"),
     });
+    // The task reached Handoff, final-verify sent it back to Building, and a new implement
+    // session ran from there.
     const moves = env.store.db
-      .query<{ to: string }, []>(
-        "select json_extract(line, '$.data.to') as \"to\" from events where type = 'stage.changed' and task is not null order by id",
+      .query<{ from: string; to: string }, []>(
+        "select json_extract(line, '$.data.from') as \"from\", json_extract(line, '$.data.to') as \"to\" from events where type = 'stage.changed' and task is not null order by id",
       )
-      .all()
-      .map((row) => row.to);
-    expect(moves).toContain("building");
-    expect(moves.slice(moves.indexOf("handoff"))).toContain("building");
-    expect(implemented).toBeGreaterThan(1);
+      .all();
+    expect(moves).toContainEqual({ from: "handoff", to: "building" });
+    expect(implemented).toBe(2);
   }, 120_000);
 
   test("MISCONFIGURED gates hold the task for attention with their reason", async () => {
@@ -821,6 +832,12 @@ describe("the minimal path", () => {
       kind: "attention",
       reason: "the fast gates are MISCONFIGURED: level-missing",
     });
+    // A retry after the hold resumes where the run stopped.
+    expect(env.store.state.tasks[task]?.checkpoint?.node).toBe("verify-deterministic");
+    expect(resumePoint(env.store.state, env.store.state.tasks[task] as TaskState)).toBe(
+      "verify-deterministic",
+    );
+
     expect(env.agent.requests.filter((request) => request.agent === "implement")).toHaveLength(1);
   }, 120_000);
 

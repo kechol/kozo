@@ -58,8 +58,8 @@ export class Notifier {
   /** How many reminders each waiting approval has had, by its reference and hold time. */
   private readonly reminded = new Map<string, number>();
   private unsubscribe: (() => void) | null = null;
-  // Events are followed one at a time, in the order they were appended.
-  private following: Promise<void> = Promise.resolve();
+  /** The notifications on their way, which `settled` waits for. */
+  private readonly pending = new Set<Promise<void>>();
 
   constructor(
     private readonly store: EventStore,
@@ -77,15 +77,16 @@ export class Notifier {
       told: spent / this.factory().budget.daily_usd,
     };
     this.unsubscribe = this.store.subscribe((event) => {
-      const next = this.following.then(() => this.follow(event));
-      this.following = next.catch(() => {});
-      void next;
+      const following: Promise<void> = this.follow(event)
+        .catch((error: unknown) => console.error(`kozod: a notification failed: ${error}`))
+        .finally(() => this.pending.delete(following));
+      this.pending.add(following);
     });
   }
 
   /** Resolves once every event appended so far has been followed. */
-  settled(): Promise<void> {
-    return this.following;
+  async settled(): Promise<void> {
+    await Promise.all(this.pending);
   }
 
   stop() {

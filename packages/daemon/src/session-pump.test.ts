@@ -99,6 +99,7 @@ describe("pumpSession", () => {
     await using dir = await tempDirectory();
     const store = await EventStore.open(kozoHome(dir.path));
     const { promise: stopped, resolve: stop } = Promise.withResolvers<void>();
+    let asked = false;
     const result = await pumpSession(
       store,
       {
@@ -107,12 +108,16 @@ describe("pumpSession", () => {
           await stopped;
           yield* [];
         })(),
-        stop,
+        stop() {
+          asked = true;
+          stop();
+        },
       },
       { item: "K-1", task: null, run_id: "r-0001" },
       0.001,
     );
-    expect(result.status).toBe("timed-out");
+    expect(asked).toBe(true);
+    expect(result).toEqual({ status: "timed-out", costUsd: 0 });
     store.close();
   });
 });
