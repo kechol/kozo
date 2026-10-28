@@ -113,6 +113,65 @@ export function costOf(db: Database, column: "item" | "task" | "run_id", ref: st
   );
 }
 
+/** The branch, head and report of the task's last final verification that passed. */
+export function lastHandoff(
+  db: Database,
+  task: string,
+): { branch: string; head: string; report: string } | null {
+  return db
+    .query<{ branch: string; head: string; report: string }, [string]>(
+      "select branch, head, report from handoffs where task = ? order by id desc limit 1",
+    )
+    .get(task);
+}
+
+/** The subjects of kozod's writes of `action` for an item, or for one of its tasks. */
+export function externalWrites(
+  db: Database,
+  item: string,
+  task: string | null,
+  action: string,
+): string[] {
+  return db
+    .query<{ subject: string }, [string, string | null, string | null, string]>(
+      "select subject from external_writes where item = ? and (task = ? or ? is null) and action = ? order by id",
+    )
+    .all(item, task, task, action)
+    .map((row) => row.subject);
+}
+
+/** Each task's pull request, as the last one kozod opened or updated for it. */
+export function pullsOf(db: Database, item: string): Map<string, string> {
+  const rows = db
+    .query<{ task: string; subject: string }, [string]>(
+      "select task, subject from external_writes where item = ? and action = 'pull' order by id",
+    )
+    .all(item);
+  return new Map(rows.map((row) => [row.task, row.subject]));
+}
+
+/** Whether kozod has held `task` for `reason` before. */
+export function heldBefore(db: Database, task: string, reason: string): boolean {
+  return (
+    db
+      .query<{ found: number }, [string, string]>(
+        "select 1 as found from holds where task = ? and reason = ? limit 1",
+      )
+      .get(task, reason) !== null
+  );
+}
+
+/** What the task's last node said when it did not pass, or null when it passed. */
+export function lastFailure(db: Database, task: string): string | null {
+  return (
+    db
+      .query<{ failure: string | null }, [string]>(
+        "select last_failure as failure from tasks where ref = ?",
+      )
+      .get(task)?.failure ?? null
+  );
+}
+
 /** Local midnight on the day of `now`, where the daily budget starts again. */
 export function midnightOf(now: Date): Date {
   const midnight = new Date(now);

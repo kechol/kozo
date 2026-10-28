@@ -7,7 +7,7 @@ import {
   recordOnlyTypes,
 } from "@kozo/core";
 
-export const indexSchemaVersion = 2;
+export const indexSchemaVersion = 3;
 
 const schema = `
 create table meta (key text primary key, value text not null);
@@ -22,8 +22,25 @@ create table tasks (
   scope text not null, depends_on text not null, stage text not null,
   hold text, hold_reason text, hold_since text,
   revisions integer not null, handoff_fixes integer not null, checkpoint text,
-  awaiting_merge integer not null, updated_at text not null
+  awaiting_merge integer not null, updated_at text not null,
+  -- What the task's last node said when it did not pass, for its next attempt; null after a pass.
+  last_failure text
 );
+create table handoffs (
+  id integer primary key, task text not null, head text not null, branch text not null,
+  report text not null
+);
+create index handoffs_task on handoffs (task, id);
+create table external_writes (
+  id integer primary key, item text not null, task text, target text not null,
+  action text not null, subject text not null
+);
+create index external_writes_item on external_writes (item, action, id);
+create table holds (
+  id integer primary key, item text not null, task text, kind text not null,
+  reason text not null, by text not null
+);
+create index holds_task on holds (task, id);
 create table runs (
   ref text primary key, item text not null, task text, parent text, agent text not null,
   model text not null, state text not null, started_at text not null, ended_at text
@@ -95,8 +112,38 @@ export class IndexDb {
         );
       id = Number(result.lastInsertRowid);
       if (!recordOnlyTypes.has(event.type)) this.project(event, state);
+      this.keep(event);
     })();
     return id;
+  }
+
+  /** Keeps the facts kozod looks up by item or task in tables of their own. */
+  private keep(event: Event) {
+    switch (event.type) {
+      case "handoff.ready":
+        this.db
+          .query("insert into handoffs (task, head, branch, report) values (?, ?, ?, ?)")
+          .run(event.task, event.data.head, event.data.branch, event.data.report);
+        break;
+      case "external.write":
+        this.db
+          .query(
+            "insert into external_writes (item, task, target, action, subject) values (?, ?, ?, ?, ?)",
+          )
+          .run(event.item, event.task, event.data.target, event.data.action, event.data.subject);
+        break;
+      case "hold.set":
+        this.db
+          .query("insert into holds (item, task, kind, reason, by) values (?, ?, ?, ?, ?)")
+          .run(event.item, event.task, event.data.hold, event.data.reason, event.data.by);
+        break;
+      case "node.exit":
+        if (event.task === null) break;
+        this.db
+          .query("update tasks set last_failure = ? where ref = ?")
+          .run(event.data.ok ? null : (event.data.summary ?? null), event.task);
+        break;
+    }
   }
 
   private project(event: Event, state: FactoryState) {
@@ -123,8 +170,16 @@ export class IndexDb {
         const task = state.tasks[ref];
         if (!task) continue;
         this.db
+          // An upsert, so that the last failure a node.exit left stays.
           .query(
-            `insert or replace into tasks values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `insert into tasks values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null)
+             on conflict (ref) do update set item = excluded.item, goal = excluded.goal,
+               done_when = excluded.done_when, scope = excluded.scope,
+               depends_on = excluded.depends_on, stage = excluded.stage, hold = excluded.hold,
+               hold_reason = excluded.hold_reason, hold_since = excluded.hold_since,
+               revisions = excluded.revisions, handoff_fixes = excluded.handoff_fixes,
+               checkpoint = excluded.checkpoint, awaiting_merge = excluded.awaiting_merge,
+               updated_at = excluded.updated_at`,
           )
           .run(
             task.ref,

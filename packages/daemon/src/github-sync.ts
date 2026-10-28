@@ -28,6 +28,7 @@ import { commentTag, pushConfirmed, upsertComment } from "./github.ts";
 import { installBody, quiet, statusBody } from "./github-report.ts";
 import { enqueue } from "./instructions.ts";
 import { readItemFile, requestText, writeItemFile } from "./item-file.ts";
+import { costOf, externalWrites, heldBefore, lastHandoff, pullsOf } from "./queries.ts";
 import { readCharter } from "./repository.ts";
 import { externalWrite, hold, move, note } from "./transitions.ts";
 import { detachedCheckout, removeCheckout, taskBranch, worktreePath } from "./worktrees.ts";
@@ -403,27 +404,12 @@ export class GitHubSync {
     }
   }
 
-  /** Whether kozod has held `task` for `reason` before. */
   private heldFor(task: string, reason: string): boolean {
-    return (
-      this.store.db
-        .query<{ found: number }, [string, string]>(
-          "select 1 as found from events where task = ? and type = 'hold.set' and json_extract(line, '$.data.reason') = ? limit 1",
-        )
-        .get(task, reason) !== null
-    );
+    return heldBefore(this.store.db, task, reason);
   }
 
-  /** The branch, head and report of the task's last final verification that passed. */
-  private ready(task: string): { branch: string; head: string; report: string } | null {
-    const row = this.store.db
-      .query<{ line: string }, [string]>(
-        "select line from events where task = ? and type = 'handoff.ready' order by id desc limit 1",
-      )
-      .get(task);
-    return row
-      ? (JSON.parse(row.line) as { data: { branch: string; head: string; report: string } }).data
-      : null;
+  private ready(task: string) {
+    return lastHandoff(this.store.db, task);
   }
 
   /**
@@ -627,38 +613,20 @@ Part of #${issue}`;
     await this.wrote(item, task, "handoff", head);
   }
 
-  /** The subjects of kozod's GitHub writes of `action` for an item or one of its tasks. */
   private written(item: string, task: string | null, action: string): string[] {
-    return this.store.db
-      .query<{ subject: string }, [string, string | null, string | null, string]>(
-        "select json_extract(line, '$.data.subject') as subject from events where type = 'external.write' and item = ? and (task = ? or ? is null) and json_extract(line, '$.data.action') = ?",
-      )
-      .all(item, task, task, action)
-      .map((row) => row.subject);
+    return externalWrites(this.store.db, item, task, action);
   }
 
   private async wrote(item: string, task: string | null, action: string, subject: string) {
     await externalWrite(this.store, { item, task }, "github", action, subject);
   }
 
-  /** Each task's pull request, as the last one kozod opened or updated for it. */
   private pulls(item: string): Map<string, string> {
-    const rows = this.store.db
-      .query<{ task: string; subject: string }, [string]>(
-        "select task, json_extract(line, '$.data.subject') as subject from events where type = 'external.write' and item = ? and json_extract(line, '$.data.action') = 'pull' order by id",
-      )
-      .all(item);
-    return new Map(rows.map((row) => [row.task, row.subject]));
+    return pullsOf(this.store.db, item);
   }
 
   private costOf(item: string): number {
-    return (
-      this.store.db
-        .query<{ usd: number }, [string]>(
-          "select coalesce(sum(json_extract(line, '$.cost.usd')), 0) as usd from events where item = ?",
-        )
-        .get(item)?.usd ?? 0
-    );
+    return costOf(this.store.db, "item", item);
   }
 
   /**

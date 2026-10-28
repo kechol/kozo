@@ -12,6 +12,7 @@ import {
 import { baseOf, branchTip, git, isAncestor } from "@kozo/verify";
 import { factoryGitEnvironment } from "@kozo/worker";
 import type { EventStore } from "./event-store.ts";
+import { lastHandoff } from "./queries.ts";
 import { readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
 import { hold, move } from "./transitions.ts";
@@ -124,12 +125,7 @@ export class Reconciler {
 
   /** The head that the task was last handed to the human with. */
   private verifiedHead(task: TaskState): string | null {
-    const row = this.store.db
-      .query<{ head: string }, [string]>(
-        "select json_extract(line, '$.data.head') as head from events where task = ? and type = 'handoff.ready' order by id desc limit 1",
-      )
-      .get(task.ref);
-    return row?.head ?? null;
+    return lastHandoff(this.store.db, task.ref)?.head ?? null;
   }
 
   private async check(task: TaskState) {

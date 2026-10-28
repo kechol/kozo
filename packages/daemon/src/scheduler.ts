@@ -13,7 +13,7 @@ import {
 } from "@kozo/core";
 import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
-import { costToday } from "./queries.ts";
+import { costToday, lastFailure } from "./queries.ts";
 import { type CharterResult, readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
 import type { Node } from "./task-run.ts";
@@ -70,14 +70,7 @@ export class Scheduler {
 
   /** The reason the last attempt of a task stopped short, to start the next one with. */
   private lastFailure(task: string): string | null {
-    const row = this.store.db
-      .query<{ line: string }, [string]>(
-        "select line from events where task = ? and type = 'node.exit' order by id desc limit 1",
-      )
-      .get(task);
-    if (!row) return null;
-    const event = JSON.parse(row.line) as { data: { ok: boolean; summary?: string } };
-    return event.data.ok ? null : (event.data.summary ?? null);
+    return lastFailure(this.store.db, task);
   }
 
   /**

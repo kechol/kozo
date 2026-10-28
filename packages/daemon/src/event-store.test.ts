@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { kozoHome, StateError, sha256 } from "@kozo/core";
 import { recordedLogs, tempDirectory } from "@kozo/testing";
 import { EventLogError, EventStore } from "./event-store.ts";
+import { lastFailure, lastHandoff, pullsOf } from "./queries.ts";
 
 const created = {
   type: "item.created",
@@ -96,7 +97,7 @@ describe("EventStore", () => {
     expect(store.state.items["K-1"]?.stage).toBe("complete");
     const db = store.db;
     expect(db.query("select value from meta where key = 'schema_version'").get()).toEqual({
-      value: "2",
+      value: "3",
     });
     expect(db.query("select ref, stage, shown_stage from items").all()).toEqual([
       { ref: "K-1", stage: "complete", shown_stage: "complete" },
@@ -130,6 +131,48 @@ describe("EventStore", () => {
     expect(reopened.db.query<{ n: number }, []>("select count(*) as n from events").get()?.n).toBe(
       34,
     );
+    reopened.close();
+  });
+
+  test("the index keeps handoffs, outside writes and a task's last failure, as rebuilt", async () => {
+    await using dir = await tempDirectory();
+    await cp(recordedLogs("replay-k1"), dir.path, { recursive: true });
+    const home = kozoHome(dir.path);
+    const store = await EventStore.open(home);
+    const task = { item: "K-1", task: "K-1/t1" };
+    await store.append({
+      ...task,
+      type: "external.write",
+      data: { target: "github", action: "pull", subject: "https://example.com/pull/1" },
+    });
+    await store.append({
+      ...task,
+      type: "handoff.ready",
+      node: "final-verify",
+      data: { branch: "kozo/x/K-1-t1", head: "abc1234", report: "items/K-1/handoff-t1.md" },
+    });
+    await store.append({
+      ...task,
+      type: "node.exit",
+      node: "final-verify",
+      data: { ok: false, summary: "the deep gates failed" },
+    });
+    // A later projection of the task keeps the failure the node left.
+    await store.append({ ...task, type: "note.added", data: { kind: "instruction", text: "x" } });
+    const read = (db: typeof store.db) => ({
+      pulls: [...pullsOf(db, "K-1")],
+      handoff: lastHandoff(db, "K-1/t1"),
+      failure: lastFailure(db, "K-1/t1"),
+    });
+    const expected = {
+      pulls: [["K-1/t1", "https://example.com/pull/1"]],
+      handoff: { branch: "kozo/x/K-1-t1", head: "abc1234", report: "items/K-1/handoff-t1.md" },
+      failure: "the deep gates failed",
+    };
+    expect(read(store.db)).toEqual(expected);
+    store.close();
+    const reopened = await EventStore.open(home);
+    expect(read(reopened.db)).toEqual(expected);
     reopened.close();
   });
 
