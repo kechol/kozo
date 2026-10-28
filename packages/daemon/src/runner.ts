@@ -391,7 +391,9 @@ export class Runner implements RunnerOps {
     // the plan agent sees them among the tasks so far.
     if (this.store.state.items[item.ref]?.stage !== "building") return;
     await this.store.append({ type: "plan.proposed", item: item.ref, data: { plan: item.plan } });
-    await move(this.store, { item: item.ref, task: null }, "planning", reason);
+    await move(this.store, { item: item.ref, task: null }, "planning", reason, {
+      from: "building",
+    });
   }
 
   /** Removes a closed task's worktree, and its branch when `deleteBranch`. */

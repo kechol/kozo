@@ -55,6 +55,9 @@ describe("transitions", () => {
     expect(await move(env.store, item, "triage", "no approval needed")).toBe(true);
     expect(await move(env.store, item, "triage", "again")).toBe(false);
     expect(env.store.state.items["K-1"]?.stage).toBe("triage");
+    // A move from a stage the subject has since left is stale and does nothing.
+    expect(await move(env.store, item, "complete", "stale", { from: "intake" })).toBe(false);
+    expect(env.store.state.items["K-1"]?.stage).toBe("triage");
   });
 
   test("a reason is kept to the 2,000 characters an event holds", async () => {

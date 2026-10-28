@@ -489,7 +489,7 @@ export class GitHubSync {
   }
 
   private async sendBack(item: string, task: string, by: "kozod" | "human", reason: string) {
-    await move(this.store, { item, task }, "building", reason, { by });
+    await move(this.store, { item, task }, "building", reason, { by, from: "handoff" });
   }
 
   private async holdTask(item: string, task: string, reason: string) {

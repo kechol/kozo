@@ -234,6 +234,7 @@ async function afterTriage(
     { item: itemRef, task: null },
     "planning",
     feature ? `${why}; the plan agent first works out its acceptance criteria with the owner` : why,
+    { from: "triage" },
   );
   // A feature's plan agent runs from Planning without a hold, and its plan then waits.
   if (!feature)

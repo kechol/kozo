@@ -174,6 +174,7 @@ export class Reconciler {
         { item: item.ref, task: task.ref },
         "reviewing",
         `a human committed to ${branch}`,
+        { from: "handoff" },
       );
     }
   }

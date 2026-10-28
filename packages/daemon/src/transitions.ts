@@ -97,17 +97,21 @@ export async function clearHold(
   return event !== null;
 }
 
-/** Moves the subject to `to` unless it is there already; resolves to whether it did. */
+/**
+ * Moves the subject to `to` unless it is there already, or, when `from` is given, unless it has
+ * left `from` since the caller looked; resolves to whether it did.
+ */
 export async function move(
   store: EventStore,
   subject: Subject,
   to: Stage,
   reason: string,
-  { by = "kozod", run }: { by?: Actor; run?: string } = {},
+  { by = "kozod", run, from }: { by?: Actor; run?: string; from?: Stage } = {},
 ): Promise<boolean> {
   const event = await store.appendIf((state) => {
     const current = stateOf(state, subject);
     if (!current || current.stage === to) return null;
+    if (from !== undefined && current.stage !== from) return null;
     return {
       type: "stage.changed",
       item: subject.item,

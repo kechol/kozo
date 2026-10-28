@@ -87,5 +87,6 @@ export async function completeTask(runner: Runner, taskRef: string): Promise<voi
     { item: item.ref, task: null },
     defective ? "triage" : "complete",
     defective ? "the check after the merge failed, a post-merge defect" : "every task is complete",
+    { from: owner.stage },
   );
 }
