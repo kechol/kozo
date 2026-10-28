@@ -96,7 +96,7 @@
 | instruction queue | The per-run file of human instructions that reach the agent at turn boundaries. | `queue.jsonl` | mailbox, message queue | - |
 | run | One agent attempt in a new session, identified as `r-<nnnn>`. | `run_id` | attempt, job, session | - |
 | run report | The JSON that the worker writes at the end of a run in the schema that the brief specifies. | `report.json` | - | - |
-| run state | The lifecycle state of a run: queued, running, paused, succeeded, failed, stopped or lost. | `run.*` | - | - |
+| run state | The lifecycle state of a run: running, succeeded, failed, stopped or lost. | `run.*` | - | - |
 | runtime | How workers run Claude Code: `sdk` through the Agent SDK in the worker, or `cli` as a `claude -p` process with the CLI bridge. | `runtime` in `factory.yml` | - | - |
 | task branch | The branch that holds one task's diff under the factory ID, whose creation claims the task. | `kozo/<factory ID>/<item>-t<n>` | - | - |
 | thread | The runs and instructions that belong to one task, with at most one running run at a time. | task reference | conversation | - |
