@@ -269,7 +269,16 @@ export function applyEvent(state: FactoryState, event: Event): void {
   if (event.run_id !== null && state.runs[event.run_id]?.sealed) {
     throw new StateError(`run ${event.run_id} is sealed`);
   }
+  applyChange(state, event);
   state.lastTs = event.ts;
+}
+
+/**
+ * The change an event makes to the state. Each case finishes its checks, which throw
+ * StateError, before its first write, so a refused event leaves the state as it was and the
+ * store can apply events in place.
+ */
+function applyChange(state: FactoryState, event: Event): void {
   const item = event.item === null ? undefined : state.items[event.item];
   const task = event.task === null ? undefined : state.tasks[event.task];
   const subjectOf = (target: "item" | "task") =>

@@ -637,3 +637,74 @@ describe("holds", () => {
     ).toThrow("K-1/t1 is rated normal, not low");
   });
 });
+
+describe("applyEvent in place", () => {
+  test("an event of any type that the state refuses leaves the state exactly as it was", () => {
+    const write = eventWriter();
+    const state = replay(planned(write));
+    const task = { item: "K-1", task: "K-1/t1" };
+    const item = { item: "K-1" };
+    const run = { item: "K-1", task: "K-1/t1", run_id: "r-0009" };
+    const refused: Event[] = [
+      write("factory.created", { factory_id: "a1b2c3" }),
+      write("factory.created", { factory_id: "a1b2c4" }),
+      write(
+        "item.created",
+        {
+          repository: "~/src/app",
+          title: "Again",
+          source: "local",
+          class: null,
+          approvals: "level",
+        },
+        item,
+      ),
+      write("item.reordered", { before: "K-1" }, item),
+      write(
+        "item.edited",
+        { title: "x", request_sha: "0".repeat(64), trusted: true },
+        { item: "K-9" },
+      ),
+      write(
+        "stage.changed",
+        { target: "task", from: "reviewing", to: "handoff", by: "kozod", reason: "x" },
+        task,
+      ),
+      write(
+        "stage.changed",
+        { target: "task", from: "building", to: "intake", by: "kozod", reason: "x" },
+        task,
+      ),
+      write("hold.cleared", { target: "task", hold: "attention", by: "human" }, task),
+      write(
+        "hold.set",
+        { target: "task", hold: "approval", by: "kozod", reason: "x", approval: "plan" },
+        task,
+      ),
+      write("note.added", { kind: "instruction", text: "x" }, { item: "K-1", task: "K-1/t9" }),
+      write("plan.proposed", { plan: { ...plan(), item: "K-2" } }, item),
+      write("plan.accepted", { plan: plan(), by: "human" }, item),
+      write("run.changed", { from: "running", to: "succeeded" }, run),
+      write("log.sealed", { run: "r-0009", lines: 1, last: "0".repeat(64) }),
+      write(
+        "branch.merged",
+        { branch: "kozo/x/K-1-t9", head: "abc", into: "main", commit: null, committer: null },
+        {
+          item: "K-1",
+          task: "K-1/t9",
+        },
+      ),
+      write("risk.raised", { from: "low", to: "high", reason: "x" }, task),
+      write("task.defect", { reason: "x" }, task),
+      write("task.returned", {}, { item: "K-1", task: "K-1/t9" }),
+      write("checkpoint", { head: null }, { item: "K-1", task: "K-1/t9" }),
+    ];
+    // The first factory.created is allowed and sets the ID that refuses the second.
+    applyEvent(state, refused[0] as Event);
+    for (const event of refused.slice(1)) {
+      const before = structuredClone(state);
+      expect(() => applyEvent(state, event)).toThrow(StateError);
+      expect({ type: event.type, state }).toEqual({ type: event.type, state: before });
+    }
+  });
+});

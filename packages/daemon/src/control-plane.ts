@@ -246,16 +246,13 @@ export class ControlPlane {
       await this.move("item", ref, "triage", "kozo approve");
       return { message: `approved the start of ${ref}; it goes to Triage` };
     }
-    if (!item.draft) throw new CommandError(409, `${ref} has no plan to approve`);
-    await this.store.append({
-      type: "plan.accepted",
-      item: ref,
-      data: { plan: item.draft, by: "human" },
-    });
+    const plan = item.draft;
+    if (!plan) throw new CommandError(409, `${ref} has no plan to approve`);
+    await this.store.append({ type: "plan.accepted", item: ref, data: { plan, by: "human" } });
     // After the acceptance, so that the tasks' runs take it as said about their plan.
     if (body.text) await this.note(ref, ref, "approval", body.text);
     return {
-      message: `approved the plan of ${ref}; ${item.draft.tasks.length} task(s) go to Building`,
+      message: `approved the plan of ${ref}; ${plan.tasks.length} task(s) go to Building`,
     };
   }
 

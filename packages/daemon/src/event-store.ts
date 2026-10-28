@@ -15,8 +15,8 @@ import {
   mergeLogs,
   parseEventLog,
   parseReference,
-  recordOnlyTypes,
   runFiles,
+  StateError,
   sealIssues,
   sha256,
   withoutTornLine,
@@ -216,6 +216,7 @@ export class EventStore {
   }
 
   private async write(event: NewEvent): Promise<Event> {
+    if (this.broken) throw this.broken;
     const log = event.run_id ?? "";
     const now = Math.max(Date.now(), this.lastMs + 1);
     const line = eventSchema.parse({
@@ -233,29 +234,47 @@ export class EventStore {
       type: event.type,
       data: event.data,
     });
-    // A record-only event changes nothing but lastTs, so a shallow copy is enough.
-    const recordOnly = recordOnlyTypes.has(line.type);
-    const next = recordOnly ? { ...this.current } : structuredClone(this.current);
-    applyEvent(next, line);
+    // applyEvent finishes its checks before it changes anything, so a refused event leaves the
+    // state as it was and is never written. Anything else that throws once the state may have
+    // changed leaves it ahead of the logs, and the store takes no more events.
+    try {
+      applyEvent(this.current, line);
+    } catch (error) {
+      if (error instanceof StateError) throw error;
+      throw this.break(error);
+    }
     const path =
       line.run_id === null ? this.home.eventsLog : runFiles(this.home, line.run_id).events;
     const text = JSON.stringify(line);
-    await mkdir(dirname(path), { recursive: true });
-    const file = await open(path, "a");
     try {
-      await file.write(`${text}\n`);
-      await file.sync();
-    } finally {
-      await file.close();
+      await mkdir(dirname(path), { recursive: true });
+      const file = await open(path, "a");
+      try {
+        await file.write(`${text}\n`);
+        await file.sync();
+      } finally {
+        await file.close();
+      }
+    } catch (error) {
+      throw this.break(error);
     }
-    this.current = next;
     this.lastMs = now;
     this.logs.set(log, { seq: line.seq + 1, last: sha256(text) });
     if (line.type === "run.started" && line.run_id) this.count(line.run_id);
     if (line.type === "item.created" && line.item) this.count(line.item);
-    const id = this.index.record(line, next, text);
+    const id = this.index.record(line, this.current, text);
     for (const listener of this.listeners) listener(line, id);
     return line;
+  }
+
+  /** Set once the state may be ahead of the logs; kozod must start again to replay them. */
+  private broken: EventLogError | null = null;
+
+  private break(error: unknown): EventLogError {
+    this.broken = new EventLogError(
+      `kozod's state may no longer match its event logs, so it records nothing more; start kozod again to replay them: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return this.broken;
   }
 
   /**
