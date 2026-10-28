@@ -1,7 +1,9 @@
 # How kozo checks a change in this repository. Replace each command with the repository's own.
 version: 1
 # Commands that start what the gates need and kozo's sandbox cannot run, such as a database
-# container. kozod runs them outside the sandbox before prepare, as they are on the default branch.
+# container. kozod runs them outside the sandbox before prepare, as they are on the default branch,
+# and again before every later run of the worktree, so each starts what is not running and leaves
+# running services alone, as `docker compose up -d` does.
 services: []
 # Commands that stop what services started, such as removing the database container. An eval runs
 # them, from the default branch, after each case.

@@ -28,7 +28,7 @@ import type { EventStore } from "./event-store.ts";
 import { askExplorer } from "./explorer.ts";
 import { writeHandoffReport } from "./handoff-report.ts";
 import type { Launcher } from "./launcher.ts";
-import { nodeSteps } from "./nodes.ts";
+import { nodeSteps, startServicesAgain } from "./nodes.ts";
 import { RunRecords } from "./run-records.ts";
 import {
   BlueprintRun,
@@ -283,6 +283,13 @@ export class Runner implements RunnerOps {
           : this.records.stopping
             ? "kozod stopped"
             : "a human stopped it";
+
+    // A run that starts past prepare resumes a prepared worktree, whose services may have
+    // stopped since.
+    if (blueprintNodes.indexOf(start) > blueprintNodes.indexOf("prepare")) {
+      const stopped = await startServicesAgain(blueprintRun);
+      if (stopped) return stopped;
+    }
 
     // Every node runs: verify-app decides from the risk tier, which a blueprint never lowers.
     for (const node of blueprintNodes.slice(blueprintNodes.indexOf(start))) {

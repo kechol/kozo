@@ -1017,6 +1017,48 @@ describe("the minimal path", () => {
     expect(env.agent.requests.map((request) => request.agent)).toEqual(["triage"]);
   }, 120_000);
 
+  test("every later run of a worktree starts its services again, from the merged code beside it", async () => {
+    await using marks = await tempDirectory();
+    const log = join(await realpath(marks.path), "services.log");
+    let reviews = 0;
+    let implemented = 0;
+    const revised: FakeStep[] = [
+      { write: { "src/stock-note.ts": "export const note = 1;\n" } },
+      { commit: "fix: answer the review" },
+      { use: "kozo_gates", input: { level: "full" } },
+      { use: "kozo_note", input: { choice: "Answered the review", reason: "It asked" } },
+      { answer: report },
+    ];
+    await using env = await factoryOf(
+      (request) => {
+        if (request.agent === "triage") return [{ answer: plan }];
+        implemented += 1;
+        return implemented === 1 ? implement() : revised;
+      },
+      // The first review sends the task back, so a second run resumes the prepared worktree.
+      {
+        async judge(request) {
+          reviews += 1;
+          return judgeWith(reviews === 1 ? "revise" : "accept").judge(request);
+        },
+      },
+      {
+        constraints: (text) =>
+          text.replace("version: 1\n", `version: 1\nservices: ["pwd >> '${log}'"]\n`),
+      },
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const task = `${ref}/t1`;
+    expect(env.store.state.tasks[task]).toMatchObject({ stage: "handoff", hold: null });
+    const worktree = await realpath(worktreePath(env.home, env.repo.path, task));
+    const ran = (await Bun.file(log).text()).trim().split("\n");
+    expect(ran).toEqual([worktree, `${worktree}.services`]);
+    expect(await Bun.file(join(`${worktree}.services`, "README.md")).exists()).toBe(false);
+  }, 120_000);
+
   test("services start outside the command sandbox before prepare, and a failing one holds the task", async () => {
     await using marks = await tempDirectory();
     const mark = join(await realpath(marks.path), "db-up");
