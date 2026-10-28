@@ -38,11 +38,11 @@ export const takeAction: Action = { verb: "take", label: "Take it over" };
 export function inboxActions(
   kind: "item" | "task",
   waiting: string,
-  reason: string | null,
+  approval: "start" | "plan" | null,
 ): Action[] {
   switch (waiting) {
     case "approval":
-      return reason === "plan approval"
+      return approval === "plan"
         ? [
             {
               verb: "approve",

@@ -1,4 +1,5 @@
 import type {
+  ApprovalKind,
   BlockedReason,
   FactoryState,
   HoldKind,
@@ -35,13 +36,21 @@ const runEnvelope = (state: Readonly<FactoryState>, run: string | undefined) =>
  * when the subject is gone or already as asked.
  */
 
-/** Holds the subject unless it is held already; resolves to whether it did. */
+/**
+ * Holds the subject unless it is held already; resolves to whether it did. An approval hold
+ * says which approval it waits for.
+ */
 export async function hold(
   store: EventStore,
   subject: Subject,
   hold: HoldKind,
   reason: string,
-  { by = "kozod", run, blocked }: { by?: Actor; run?: string; blocked?: BlockedReason } = {},
+  {
+    by = "kozod",
+    run,
+    blocked,
+    approval,
+  }: { by?: Actor; run?: string; blocked?: BlockedReason; approval?: ApprovalKind } = {},
 ): Promise<boolean> {
   const event = await store.appendIf((state) => {
     const current = stateOf(state, subject);
@@ -57,6 +66,7 @@ export async function hold(
         by,
         reason: cut(reason),
         ...(blocked ? { blocked } : {}),
+        ...(approval ? { approval } : {}),
       },
     };
   });

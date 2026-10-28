@@ -3,6 +3,7 @@ import type { Event, EventType, NoteKind } from "./event.ts";
 import type { Plan } from "./plan.ts";
 import type { ReviewVerdict } from "./verdict.ts";
 import {
+  type ApprovalKind,
   type Approvals,
   type HoldKind,
   type RiskTier,
@@ -16,6 +17,8 @@ export interface Hold {
   kind: HoldKind;
   reason: string;
   since: string;
+  /** Which approval an approval hold waits for. */
+  approval?: ApprovalKind;
 }
 
 export interface Note {
@@ -388,7 +391,12 @@ export function applyEvent(state: FactoryState, event: Event): void {
       if (!holdTargets[event.data.hold].includes(event.data.target)) {
         throw new StateError(`a ${event.data.target} cannot be held by ${event.data.hold}`);
       }
-      subject.hold = { kind: event.data.hold, reason: event.data.reason, since: event.ts };
+      subject.hold = {
+        kind: event.data.hold,
+        reason: event.data.reason,
+        since: event.ts,
+        ...(event.data.approval ? { approval: event.data.approval } : {}),
+      };
       subject.updatedAt = event.ts;
       return;
     }

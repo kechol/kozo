@@ -7,7 +7,7 @@ import {
   recordOnlyTypes,
 } from "@kozo/core";
 
-export const indexSchemaVersion = 3;
+export const indexSchemaVersion = 4;
 
 const schema = `
 create table meta (key text primary key, value text not null);
@@ -15,7 +15,8 @@ create table items (
   ref text primary key, repository text not null, title text not null, source text not null,
   stage text not null, shown_stage text not null,
   hold text, hold_reason text, hold_since text,
-  plan text, draft text, created_at text not null, updated_at text not null
+  plan text, draft text, created_at text not null, updated_at text not null,
+  hold_approval text
 );
 create table tasks (
   ref text primary key, item text not null, goal text not null, done_when text not null,
@@ -24,7 +25,8 @@ create table tasks (
   revisions integer not null, handoff_fixes integer not null, checkpoint text,
   awaiting_merge integer not null, updated_at text not null,
   -- What the task's last node said when it did not pass, for its next attempt; null after a pass.
-  last_failure text
+  last_failure text,
+  hold_approval text
 );
 create table handoffs (
   id integer primary key, task text not null, head text not null, branch text not null,
@@ -150,7 +152,7 @@ export class IndexDb {
     const item = event.item === null ? undefined : state.items[event.item];
     if (item) {
       this.db
-        .query(`insert or replace into items values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .query(`insert or replace into items values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(
           item.ref,
           item.repository,
@@ -165,6 +167,7 @@ export class IndexDb {
           json(item.draft),
           item.createdAt,
           item.updatedAt,
+          item.hold?.approval ?? null,
         );
       for (const ref of item.tasks) {
         const task = state.tasks[ref];
@@ -172,14 +175,14 @@ export class IndexDb {
         this.db
           // An upsert, so that the last failure a node.exit left stays.
           .query(
-            `insert into tasks values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null)
+            `insert into tasks values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null, ?)
              on conflict (ref) do update set item = excluded.item, goal = excluded.goal,
                done_when = excluded.done_when, scope = excluded.scope,
                depends_on = excluded.depends_on, stage = excluded.stage, hold = excluded.hold,
                hold_reason = excluded.hold_reason, hold_since = excluded.hold_since,
                revisions = excluded.revisions, handoff_fixes = excluded.handoff_fixes,
                checkpoint = excluded.checkpoint, awaiting_merge = excluded.awaiting_merge,
-               updated_at = excluded.updated_at`,
+               updated_at = excluded.updated_at, hold_approval = excluded.hold_approval`,
           )
           .run(
             task.ref,
@@ -197,6 +200,7 @@ export class IndexDb {
             json(task.checkpoint),
             awaitingMerge(state, task) ? 1 : 0,
             task.updatedAt,
+            task.hold?.approval ?? null,
           );
       }
     }

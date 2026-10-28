@@ -9,7 +9,6 @@ import {
   isClosed,
   type KozoHome,
   type NoteKind,
-  planApprovalReason,
   type Reference,
   runFiles,
   type Stage,
@@ -159,7 +158,7 @@ export class ControlPlane {
     }
     const subject = { item: ref, task: null };
     if (startNeeded(approvals, autonomyLevel(charter, file.class))) {
-      await hold(this.store, subject, "approval", startApprovalReason);
+      await hold(this.store, subject, "approval", startApprovalReason, { approval: "start" });
       return false;
     }
     await move(this.store, subject, "triage", "its autonomy level needs no start approval");
@@ -240,7 +239,7 @@ export class ControlPlane {
     const item = this.store.state.items[ref];
     if (subject.hold?.kind !== "approval" || !item)
       return { message: `${ref} is not waiting for an approval` };
-    const start = subject.hold.reason === startApprovalReason;
+    const start = subject.hold.approval === "start";
     await this.clearHold("item", ref, body.text);
     if (start) {
       if (body.text) await this.note(ref, ref, "approval", body.text);
@@ -262,7 +261,7 @@ export class ControlPlane {
 
   private async reject(ref: string, body: Body<"reject">): Promise<VerbResult> {
     const { subject } = this.subject(ref, "item");
-    if (subject.hold?.kind !== "approval" || subject.hold.reason !== planApprovalReason) {
+    if (subject.hold?.approval !== "plan") {
       return { message: `${ref} is not waiting for a plan approval` };
     }
     await this.clearHold("item", ref, body.reason);

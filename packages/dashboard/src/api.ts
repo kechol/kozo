@@ -60,6 +60,8 @@ export interface InboxRow {
   title: string;
   waiting: "approval" | "question" | "attention" | "merge";
   reason: string | null;
+  /** Which approval a row waiting for one waits for. */
+  approval: "start" | "plan" | null;
   since: string;
 }
 

@@ -10,15 +10,19 @@ const parsed = (row: Record<string, unknown> | null, columns: readonly string[])
   return row;
 };
 
-/** What waits for a human, oldest first: approvals, questions, attention and awaiting merge. */
+/**
+ * What waits for a human, oldest first: approvals, which say whether a start or a plan,
+ * questions, attention and awaiting merge.
+ */
 const inboxQuery = `
-  select 'item' as kind, ref, title, hold as waiting, hold_reason as reason, hold_since as since
+  select 'item' as kind, ref, title, hold as waiting, hold_reason as reason,
+         hold_approval as approval, hold_since as since
     from items where hold in ('approval', 'question', 'attention')
   union all
-  select 'task', t.ref, i.title, t.hold, t.hold_reason, t.hold_since
+  select 'task', t.ref, i.title, t.hold, t.hold_reason, t.hold_approval, t.hold_since
     from tasks t join items i on i.ref = t.item where t.hold in ('question', 'attention')
   union all
-  select 'task', t.ref, i.title, 'merge', null, t.updated_at
+  select 'task', t.ref, i.title, 'merge', null, null, t.updated_at
     from tasks t join items i on i.ref = t.item where t.awaiting_merge = 1
   order by since, ref`;
 

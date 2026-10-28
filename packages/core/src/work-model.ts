@@ -31,7 +31,11 @@ export type HoldKind = z.infer<typeof holdKindSchema>;
 export const approvalsSchema = z.enum(["level", "always"]);
 export type Approvals = z.infer<typeof approvalsSchema>;
 
-/** The reasons of the two approval holds, by which kozod tells a start from a plan approval. */
+/** Which approval an approval hold waits for: the item's start, or its plan. */
+export const approvalKindSchema = z.enum(["start", "plan"]);
+export type ApprovalKind = z.infer<typeof approvalKindSchema>;
+
+/** The reasons of the two approval holds, as people read them. */
 export const startApprovalReason = "start approval";
 export const planApprovalReason = "plan approval";
 

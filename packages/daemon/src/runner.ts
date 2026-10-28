@@ -180,7 +180,7 @@ export class Runner implements RunnerOps {
   async hold(
     item: string,
     task: string | null,
-    kind: "approval" | "question" | "attention",
+    kind: "question" | "attention",
     reason: string,
     run?: string,
     blocked?: BlockedReason,

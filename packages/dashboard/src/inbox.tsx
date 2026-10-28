@@ -32,7 +32,7 @@ export function Inbox({ api }: { api: Api }) {
             <p class="hint">Read the diff and merge the task branch yourself; kozo never merges.</p>
           ) : null}
           <div class="row actions">
-            {inboxActions(row.kind, row.waiting, row.reason).map((action) => (
+            {inboxActions(row.kind, row.waiting, row.approval).map((action) => (
               <ActionButton key={action.label} api={api} refName={row.ref} action={action} />
             ))}
             <span class="since">{ago(row.since)}</span>

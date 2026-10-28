@@ -48,7 +48,13 @@ describe("Notifier", () => {
     await env.store.append({
       type: "hold.set",
       item: "K-1",
-      data: { target: "item", hold: "approval", by: "kozod", reason: "start approval" },
+      data: {
+        target: "item",
+        hold: "approval",
+        by: "kozod",
+        reason: "start approval",
+        approval: "start",
+      },
     });
     await env.store.append({
       type: "hold.cleared",
@@ -121,7 +127,13 @@ describe("Notifier", () => {
     await env.store.append({
       type: "hold.set",
       item: "K-1",
-      data: { target: "item", hold: "approval", by: "kozod", reason: "plan approval" },
+      data: {
+        target: "item",
+        hold: "approval",
+        by: "kozod",
+        reason: "plan approval",
+        approval: "plan",
+      },
     });
     await env.notifier.settled();
     env.sent.length = 0;

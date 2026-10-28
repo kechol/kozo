@@ -73,7 +73,7 @@ export interface RunnerOps {
   hold(
     item: string,
     task: string | null,
-    hold: "approval" | "question" | "attention",
+    hold: "question" | "attention",
     reason: string,
     run?: string,
     blocked?: BlockedReason,

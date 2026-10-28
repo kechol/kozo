@@ -60,11 +60,11 @@ describe("inboxActions", () => {
     inboxActions(...args).map((action) => action.label);
 
   test("offers the verbs that settle what a row waits on, never a merge", () => {
-    expect(verbs("item", "approval", "start approval")).toEqual(["Approve start", "Cancel"]);
-    expect(verbs("item", "approval", "plan approval")).toEqual(["Approve plan", "Reject plan"]);
-    expect(verbs("item", "question", "ambiguous: which?")).toEqual(["Answer"]);
-    expect(verbs("task", "question", "ambiguous: which?")).toEqual(["Answer", "Take it over"]);
-    expect(verbs("task", "attention", "gates failed")).toEqual([
+    expect(verbs("item", "approval", "start")).toEqual(["Approve start", "Cancel"]);
+    expect(verbs("item", "approval", "plan")).toEqual(["Approve plan", "Reject plan"]);
+    expect(verbs("item", "question", null)).toEqual(["Answer"]);
+    expect(verbs("task", "question", null)).toEqual(["Answer", "Take it over"]);
+    expect(verbs("task", "attention", null)).toEqual([
       "Retry",
       "Take it over",
       "Close as done",
@@ -76,9 +76,9 @@ describe("inboxActions", () => {
   test("asks for the text a verb needs, under the field its body takes", () => {
     const [answer] = inboxActions("item", "question", null);
     expect(answer).toMatchObject({ verb: "say", text: { field: "text", required: true } });
-    const reject = inboxActions("item", "approval", "plan approval")[1];
+    const reject = inboxActions("item", "approval", "plan")[1];
     expect(reject).toMatchObject({ verb: "reject", text: { field: "reason", required: true } });
-    const cancel = inboxActions("item", "approval", "start approval")[1];
+    const cancel = inboxActions("item", "approval", "start")[1];
     expect(cancel).toMatchObject({ verb: "close", text: { field: "cancel" }, danger: true });
   });
 });

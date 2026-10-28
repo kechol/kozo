@@ -15,7 +15,6 @@ import {
   runFiles,
   sha256,
   stageSchema,
-  startApprovalReason,
   wrapRequest,
 } from "@kozo/core";
 import { baseOf, defaultBranch, git, installRepositoryTemplate, isAncestor } from "@kozo/verify";
@@ -210,8 +209,7 @@ export class GitHubSync {
         } else if (
           // An approval covers the text it saw, so none is taken in the pass that sees an edit.
           !(await this.followEdit(github, ref, issue)) &&
-          item.hold?.kind === "approval" &&
-          item.hold.reason === startApprovalReason &&
+          item.hold?.approval === "start" &&
           issue.labels.includes(acceptLabel) &&
           (await this.byWriter(github, issue.number))
         ) {
@@ -339,7 +337,7 @@ export class GitHubSync {
     const file = await readItemFile(this.home, ref);
     const title = issue.title.trim();
     if (file.title === title && file.body === issue.body) return false;
-    const waiting = item.hold?.kind === "approval" && item.hold.reason === startApprovalReason;
+    const waiting = item.hold?.approval === "start";
     // Another hold first needs the human; the edit is taken once it clears.
     if (item.hold && !waiting) return true;
     const trusted = writers.includes(await this.github.permission(github, issue.author));

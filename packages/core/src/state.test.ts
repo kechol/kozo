@@ -575,7 +575,13 @@ describe("holds", () => {
       ),
       write(
         "hold.set",
-        { target: "item", hold: "approval", by: "kozod", reason: "start approval" },
+        {
+          target: "item",
+          hold: "approval",
+          by: "kozod",
+          reason: "start approval",
+          approval: "start",
+        },
         item,
       ),
     ]);

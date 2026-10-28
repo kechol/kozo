@@ -74,7 +74,13 @@ const examples: Record<EventType, unknown> = {
     by: "kozod",
     reason: "test",
   },
-  "hold.set": { target: "item", hold: "approval", by: "kozod", reason: "plan approval" },
+  "hold.set": {
+    target: "item",
+    hold: "approval",
+    by: "kozod",
+    reason: "plan approval",
+    approval: "plan",
+  },
   "hold.cleared": { target: "item", hold: "approval", by: "human" },
   "note.added": { kind: "answer", text: "Show Sold out for zero." },
   "task.returned": {},
@@ -164,6 +170,16 @@ describe("parseEvent", () => {
     expect(
       issuesOf(line("hold.set", { target: "item", hold: "blocked", by: "kozod", reason: "x" }))[0],
     ).toStartWith("data.hold:");
+  });
+
+  test("an approval hold, and only one, says which approval it waits for", () => {
+    const approval = { target: "item", hold: "approval", by: "kozod", reason: "plan approval" };
+    expect(issuesOf(line("hold.set", approval))).toEqual([
+      "data.approval: An approval hold, and only one, says which approval it waits for",
+    ]);
+    const attention = { target: "item", hold: "attention", by: "kozod", reason: "x" };
+    expect(issuesOf(line("hold.set", { ...attention, approval: "plan" }))).toHaveLength(1);
+    expect(parseEvent(line("hold.set", { ...approval, approval: "start" })).ok).toBe(true);
   });
 
   test("the task must belong to the item", () => {

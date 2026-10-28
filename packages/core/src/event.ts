@@ -14,6 +14,7 @@ import { blockedReasonSchema } from "./run-report.ts";
 import { reviewVerdictSchema } from "./verdict.ts";
 import {
   agentNameSchema,
+  approvalKindSchema,
   approvalsSchema,
   holdKindSchema,
   riskTierSchema,
@@ -180,6 +181,8 @@ export const eventSchema = z
         reason: text,
         /** The `kozo_blocked` reason of the session whose block set the hold. */
         blocked: blockedReasonSchema.optional(),
+        /** Which approval an approval hold waits for; only an approval hold has one. */
+        approval: approvalKindSchema.optional(),
       }),
     ),
     event(
@@ -271,6 +274,16 @@ export const eventSchema = z
         code: "custom",
         path: ["run_id"],
         message: "A seal goes to kozod's own log",
+      });
+    }
+    if (
+      line.type === "hold.set" &&
+      (line.data.hold === "approval") !== (line.data.approval !== undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["data", "approval"],
+        message: "An approval hold, and only one, says which approval it waits for",
       });
     }
     const factoryWide = line.type.startsWith("factory.");
