@@ -186,6 +186,11 @@ export class GitHubSync {
       this.github.issues(github, label ? [label] : []),
       label ? this.github.issues(github, [pausedLabel]) : [],
     ]);
+    if (listed.length >= this.github.issueLimit) {
+      this.report(
+        `kozod: ${github} has ${this.github.issueLimit} or more open Issues, as many as kozod reads at once; the rest wait until fewer are open`,
+      );
+    }
     listed.push(...pausing);
     const open = new Map(listed.map((issue) => [issue.number, issue]));
     const closed = await this.readUnlisted(github, name, open);

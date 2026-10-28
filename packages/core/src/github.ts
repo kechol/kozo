@@ -53,6 +53,8 @@ export interface GitHubCheck {
  * Bodies are data from requests and runs, so implementations never put them on a command line.
  */
 export interface GitHub {
+  /** The most open Issues one call of `issues` returns. */
+  readonly issueLimit: number;
   /** Open Issues, optionally only those with every one of `labels`. */
   issues(repository: GitHubRepository, labels?: readonly string[]): Promise<GitHubIssue[]>;
   comments(repository: GitHubRepository, issue: number): Promise<GitHubComment[]>;

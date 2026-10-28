@@ -38,6 +38,7 @@ export interface FakeGitHub extends GitHub {
   labellers: Map<string, string>;
   /** Each login's permission, by `<repository> <login>`; anyone else has none. */
   permissions: Map<string, GitHubPermission>;
+  issueLimit: number;
   addIssue(repository: GitHubRepository, issue: Partial<GitHubIssue> & { title: string }): number;
   /** Makes the next `comment` or `push` lose its response, after or before the change. */
   lose(method: "comment" | "push", loss: Loss): void;
@@ -75,6 +76,7 @@ export function fakeGitHub(): FakeGitHub {
     checksOf: new Map(),
     bodies: new Map(),
     permissions: new Map(),
+    issueLimit: Number.POSITIVE_INFINITY,
     labellers: new Map(),
     addIssue(repository, issue) {
       const entry = repositoryOf(repository);
@@ -100,6 +102,7 @@ export function fakeGitHub(): FakeGitHub {
       return repositoryOf(repository)
         .issues.filter((issue) => issue.state === "open")
         .filter((issue) => labels.every((label) => issue.labels.includes(label)))
+        .slice(0, this.issueLimit)
         .map(copyOf);
     },
     async comments(repository, issue) {

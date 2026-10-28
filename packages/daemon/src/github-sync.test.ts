@@ -44,8 +44,12 @@ async function setup(label?: string) {
   const store = await EventStore.open(home);
   const control = new ControlPlane(home, store, definition);
   const github = fakeGitHub();
-  const sync = new GitHubSync(home, store, definition, control, github);
+  const reported: string[] = [];
+  const sync = new GitHubSync(home, store, definition, control, github, (line) =>
+    reported.push(line),
+  );
   return {
+    reported,
     home,
     repo: repo.path,
     git: repo.git,
@@ -179,6 +183,19 @@ describe("GitHubSync", () => {
       title: "Low stock",
       body: "Say only N left.",
     });
+  });
+
+  test("says when the open Issues reach what one listing returns", async () => {
+    await using env = await setup();
+    await env.sync.register();
+    env.github.issueLimit = 2;
+    for (const title of ["One", "Two", "Three"])
+      env.github.addIssue("me/shop", { title, createdAt: afterRegistration() });
+    await env.sync.poll();
+    expect(Object.keys(env.store.state.items)).toHaveLength(2);
+    expect(env.reported).toContain(
+      "kozod: me/shop has 2 or more open Issues, as many as kozod reads at once; the rest wait until fewer are open",
+    );
   });
 
   test("kozo:accept from a writer approves a start, and the labels follow the item", async () => {

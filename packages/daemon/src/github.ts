@@ -161,6 +161,7 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
     ).flat();
 
   return {
+    issueLimit: openIssueLimit,
     async issues(repository, labels = []) {
       const raw = await json<RawIssue[]>([
         "issue",
