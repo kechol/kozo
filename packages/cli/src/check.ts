@@ -42,6 +42,16 @@ const requiredFlags = [
   "--no-session-persistence",
 ];
 
+// The flags `runtime: cli` adds, running each agent as `claude --print`; judges and the verify
+// session keep the Agent SDK, so its flags stay required too. claude's help leaves out
+// --system-prompt-file, so it cannot be looked for there.
+const cliFlags = ["--print", "--verbose", "--settings", "--tools"];
+
+const hooksDetail: Record<Factory["runtime"], string> = {
+  sdk: "the worker registers the guard in code and loads no settings file",
+  cli: "claude loads only the settings file kozod writes, whose hooks hand every tool call to the worker's guard",
+};
+
 /**
  * `kozo check [path]`: checks what the factory needs without kozod. With a path, only the files
  * in that working tree, for CI and pre-commit hooks.
@@ -176,13 +186,10 @@ async function checkFactory(): Promise<Check[]> {
   for (const repository of definition?.factory.repositories ?? []) {
     checks.push(...(await repositoryChecks(repository.path, mode)));
   }
-  checks.push(...(await claudeChecks()));
-  checks.push({
-    name: "hooks",
-    status: "ok",
-    detail: "the worker registers the guard in code and loads no settings file",
-  });
-  checks.push(sandboxCheck(), await kozoSandboxCheck());
+  const runtime = definition?.factory.runtime ?? "sdk";
+  checks.push(...(await claudeChecks(runtime)));
+  checks.push({ name: "hooks", status: "ok", detail: hooksDetail[runtime] });
+  checks.push(sandboxCheck(), await kozoSandboxCheck(), processesCheck());
   return checks;
 }
 
@@ -215,7 +222,7 @@ async function runClaude(claude: string, args: string[]) {
   return { stdout, code };
 }
 
-async function claudeChecks(): Promise<Check[]> {
+async function claudeChecks(runtime: Factory["runtime"]): Promise<Check[]> {
   const claude = process.env.KOZO_CLAUDE ?? Bun.which("claude");
   if (!claude) return [{ name: "claude", status: "fail", detail: "claude is not on PATH" }];
   const version = await runClaude(claude, ["--version"]);
@@ -228,7 +235,8 @@ async function claudeChecks(): Promise<Check[]> {
     { name: "claude", status: "ok", detail: version.stdout.trim().split("\n")[0] ?? "" },
   ];
   const help = await runClaude(claude, ["--help"]);
-  const missing = requiredFlags.filter((flag) => !help.stdout.includes(flag));
+  const flags = runtime === "cli" ? [...requiredFlags, ...cliFlags] : requiredFlags;
+  const missing = flags.filter((flag) => !help.stdout.includes(flag));
   checks.push(
     missing.length === 0
       ? { name: "claude flags", status: "ok", detail: "every flag kozo uses is there" }
@@ -266,6 +274,17 @@ async function kozoSandboxCheck(): Promise<Check> {
     if (!(error instanceof SandboxUnavailable)) throw error;
     return { name: "kozo sandbox", status: "fail", detail: error.message };
   }
+}
+
+/** Whether kozod can list a session's processes, which it does before every session. */
+function processesCheck(): Check {
+  return Bun.which("lsof")
+    ? { name: "lsof", status: "ok", detail: "lists the processes a session leaves" }
+    : {
+        name: "lsof",
+        status: "fail",
+        detail: "lsof is not on PATH; kozod needs it to stop what a session leaves running",
+      };
 }
 
 /** The tools Claude Code's sandbox needs on this platform. */

@@ -127,11 +127,31 @@ esac
           () => "fail",
         ),
       ],
+      ["lsof", Bun.which("lsof") ? "ok" : "fail"],
     ]);
     expect(report.checks.find((entry) => entry.name === "claude flags")?.detail).toBe(
       "missing --no-session-persistence; update claude",
     );
     expect(child.stdout.toString()).not.toContain("someone@example.com");
+
+    // With runtime: cli, the flags of `claude --print` are required too, and the hooks line says
+    // where the guard sits.
+    await Bun.write(
+      join(home.path, "factory", "factory.yml"),
+      `runtime: cli\nrepositories:\n  - { path: ${repo.path} }\n`,
+    );
+    const cli = Bun.spawnSync(["bun", join(import.meta.dir, "main.ts"), "check", "--json"], {
+      env: { ...testGitEnvironment, KOZO_HOME: home.path, KOZO_CLAUDE: claude },
+    });
+    const checks = (
+      JSON.parse(cli.stdout.toString()) as { checks: { name: string; detail: string }[] }
+    ).checks;
+    expect(checks.find((entry) => entry.name === "claude flags")?.detail).toBe(
+      "missing --no-session-persistence, --print, --verbose, --settings, --tools; update claude",
+    );
+    expect(checks.find((entry) => entry.name === "hooks")?.detail).toContain(
+      "settings file kozod writes",
+    );
   });
 
   test("reads a repository at origin's default branch in GitHub mode, as kozod does", async () => {
