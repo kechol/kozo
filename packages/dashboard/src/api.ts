@@ -156,25 +156,66 @@ export class Api {
    * Follows a reference's events from the first on until `signal` aborts. The SSE endpoint is
    * read with fetch, since EventSource cannot send the token.
    */
-  async follow(ref: string, onEvent: (event: Event) => void, signal: AbortSignal) {
-    const response = await this.send(`/api/refs/${encodeURIComponent(ref)}/events`, { signal });
-    if (!response.ok || !response.body) throw new ApiError(response.status, "no event stream");
-    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-    let buffer = "";
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) return;
-      buffer += value;
-      for (let end = buffer.indexOf("\n\n"); end !== -1; end = buffer.indexOf("\n\n")) {
-        const block = buffer.slice(0, end);
-        buffer = buffer.slice(end + 2);
-        const data = block
-          .split("\n")
-          .filter((line) => line.startsWith("data:"))
-          .map((line) => line.slice(5).trimStart())
-          .join("\n");
-        if (data) onEvent(JSON.parse(data) as Event);
+  /**
+   * Follows the events of `ref` until `signal` aborts. When the stream ends or breaks, as when
+   * kozod starts again, it connects again after a pause that doubles up to `pauses.max`, from
+   * the last event it gave, so that none is missed or given twice. An answer that refuses the
+   * request, such as for a session that ended, ends the following.
+   */
+  async follow(
+    ref: string,
+    onEvent: (event: Event) => void,
+    signal: AbortSignal,
+    pauses = { first: 1_000, max: 30_000 },
+  ) {
+    let last = 0;
+    let pause = pauses.first;
+    while (!signal.aborted) {
+      try {
+        const response = await this.send(`/api/refs/${encodeURIComponent(ref)}/events`, {
+          signal,
+          ...(last > 0 ? { headers: { "last-event-id": String(last) } } : {}),
+        });
+        if (response.status >= 400 && response.status < 500)
+          throw new ApiError(response.status, "no event stream");
+        if (response.ok && response.body) {
+          pause = pauses.first;
+          await readEvents(response.body, (id, event) => {
+            last = id;
+            onEvent(event);
+          });
+        }
+      } catch (error) {
+        if (error instanceof ApiError || signal.aborted) throw error;
       }
+      if (signal.aborted) return;
+      await new Promise((resolve) => setTimeout(resolve, pause));
+      pause = Math.min(pause * 2, pauses.max);
+    }
+  }
+}
+
+/** Reads an event stream to its end, giving each event with its ID. */
+async function readEvents(
+  body: ReadableStream<BufferSource>,
+  onEvent: (id: number, event: Event) => void,
+) {
+  const reader = body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buffer += value;
+    for (let end = buffer.indexOf("\n\n"); end !== -1; end = buffer.indexOf("\n\n")) {
+      const lines = buffer.slice(0, end).split("\n");
+      buffer = buffer.slice(end + 2);
+      const field = (name: string) =>
+        lines
+          .filter((line) => line.startsWith(`${name}:`))
+          .map((line) => line.slice(name.length + 1).trimStart())
+          .join("\n");
+      const data = field("data");
+      if (data) onEvent(Number(field("id")) || 0, JSON.parse(data) as Event);
     }
   }
 }

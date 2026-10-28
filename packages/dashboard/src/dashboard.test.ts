@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { isClosed, stageSchema } from "@kozo/core";
 import { inboxActions } from "./actions.tsx";
-import { takeSession } from "./api.ts";
+import { Api, ApiError, takeSession } from "./api.ts";
 import { detailActions } from "./detail.tsx";
 import { ago, eventLine, isClosedStage, kindOf, moveTarget, routeOf, stages } from "./format.ts";
 
@@ -148,5 +148,42 @@ describe("detailActions", () => {
     expect(labels("task", "question")).toEqual(["Answer", "Retry", "Take it over", "Cancel"]);
     expect(labels("task", "paused")).toEqual(["Send", "Resume", "Cancel"]);
     expect(labels("task", "taken")).toEqual(["Give it back", "Cancel"]);
+  });
+});
+
+describe("Api.follow", () => {
+  const stream = (blocks: string[]) =>
+    new Response(new Blob(blocks).stream(), { headers: { "content-type": "text/event-stream" } });
+  const block = (id: number, type: string) =>
+    `id: ${id}\nevent: event\ndata: ${JSON.stringify({ type })}\n\n`;
+
+  test("connects again from the last event after the stream ends, until it is stopped", async () => {
+    const asked: (string | null)[] = [];
+    const seen: string[] = [];
+    const stop = new AbortController();
+    const api = new Api("token", async (_input, init) => {
+      asked.push(new Headers(init?.headers).get("last-event-id"));
+      if (asked.length === 1) return stream([block(1, "item.created"), block(2, "hold.set")]);
+      if (asked.length === 2) return new Response("kozod is starting", { status: 503 });
+      stop.abort();
+      return stream([block(3, "hold.cleared")]);
+    });
+    await api.follow("K-1", (event) => seen.push(event.type), stop.signal, { first: 1, max: 2 });
+    expect(asked).toEqual([null, "2", "2"]);
+    expect(seen).toEqual(["item.created", "hold.set", "hold.cleared"]);
+  });
+
+  test("ends when kozod refuses the request, as for a session that ended", async () => {
+    let calls = 0;
+    const api = new Api("token", async () => {
+      calls += 1;
+      return new Response("{}", { status: 401 });
+    });
+    const following = api.follow("K-1", () => {}, new AbortController().signal, {
+      first: 1,
+      max: 2,
+    });
+    await expect(following).rejects.toBeInstanceOf(ApiError);
+    expect(calls).toBe(1);
   });
 });
