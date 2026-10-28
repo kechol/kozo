@@ -10,6 +10,7 @@ import {
   sha256,
 } from "@kozo/core";
 import {
+  eventually,
   type FakeStep,
   fakeAgent,
   gitRepository,
@@ -579,7 +580,7 @@ describe("the minimal path", () => {
 
     env.scheduler.tick();
     const taskRef = `${ref}/t1`;
-    while (env.agent.requests.length < 3) await Bun.sleep(20);
+    await eventually(() => env.agent.requests.length >= 3, "session 3 to start");
     expect((await env.control.act(taskRef, task, "pause", { now: true })).message).toContain(
       "stopped r-",
     );
@@ -649,9 +650,9 @@ describe("the minimal path", () => {
     const first = await env.control.addItem({ title: "Low stock", class: "docs" });
     await env.control.addItem({ title: "Sold out", class: "docs" });
     env.scheduler.tick();
-    while (env.agent.requests.length < 1) await Bun.sleep(20);
+    await eventually(() => env.agent.requests.length >= 1, "session 1 to start");
     env.scheduler.tick();
-    await Bun.sleep(200);
+    await env.scheduler.planned();
     expect(env.agent.requests).toHaveLength(1);
     await env.control.act(first.ref, { kind: "item", item: { repo: null, number: 1 } }, "pause", {
       now: true,
@@ -772,10 +773,7 @@ describe("the minimal path", () => {
     await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
     env.scheduler.tick();
     const task = `${ref}/t1`;
-    for (let waited = 0; env.store.state.tasks[task]?.stage !== "handoff"; waited += 20) {
-      if (waited > 60_000) throw new Error("the task never reached Handoff");
-      await Bun.sleep(20);
-    }
+    await eventually(() => env.store.state.tasks[task]?.stage === "handoff", "the task in Handoff");
     expect(env.store.state.tasks[task]?.hold).toBeNull();
     expect(merges()).toEqual([]);
     await env.scheduler.idle();
@@ -1527,7 +1525,7 @@ describe("the minimal path", () => {
     await env.settle();
     await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
     env.scheduler.tick();
-    while (env.agent.requests.length < 2) await Bun.sleep(20);
+    await eventually(() => env.agent.requests.length >= 2, "session 2 to start");
     await env.control.act(
       `${ref}/t1`,
       { kind: "task", item: { repo: null, number: 1 }, task: 1 },
@@ -1953,10 +1951,7 @@ test("one unit is still counted", () => {
     await env.settle();
     await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
     env.scheduler.tick();
-    for (let waited = 0; !running(); waited += 50) {
-      if (waited > 60_000) throw new Error("the slow gate never started");
-      await Bun.sleep(50);
-    }
+    await eventually(running, "the slow gate to start");
     const task = `${ref}/t1`;
     const reference = { kind: "task", item: { repo: null, number: 1 }, task: 1 } as const;
     const stoppedRun = env.store.state.tasks[task]?.runs.at(-1) ?? "";
@@ -1970,10 +1965,7 @@ test("one unit is still counted", () => {
 
     await env.control.act(task, reference, "return", { text: "Looked, changed nothing" });
     env.scheduler.tick();
-    for (let waited = 0; !running(); waited += 50) {
-      if (waited > 60_000) throw new Error("the slow gate never started again");
-      await Bun.sleep(50);
-    }
+    await eventually(running, "the slow gate to start again");
     const resumed = env.store.state.tasks[task]?.runs.at(-1) ?? "";
     expect(resumed).not.toBe(stoppedRun);
     const nodes = env.store.db
@@ -2144,7 +2136,7 @@ test("one unit is still counted", () => {
     await env.settle();
     await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
     env.scheduler.tick();
-    while (env.agent.requests.length < 2) await Bun.sleep(20);
+    await eventually(() => env.agent.requests.length >= 2, "session 2 to start");
     const task = `${ref}/t1`;
     const said = await env.control.act(
       task,
@@ -2178,7 +2170,7 @@ test("one unit is still counted", () => {
     await env.settle();
     await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
     env.scheduler.tick();
-    while (env.agent.requests.length < 2) await Bun.sleep(20);
+    await eventually(() => env.agent.requests.length >= 2, "session 2 to start");
     const task = `${ref}/t1`;
     const reference = { kind: "task", item: { repo: null, number: 1 }, task: 1 } as const;
     await env.control.act(task, reference, "pause", {});

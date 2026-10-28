@@ -58,6 +58,8 @@ export class Notifier {
   /** How many reminders each waiting approval has had, by its reference and hold time. */
   private readonly reminded = new Map<string, number>();
   private unsubscribe: (() => void) | null = null;
+  // Events are followed one at a time, in the order they were appended.
+  private following: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly store: EventStore,
@@ -74,7 +76,16 @@ export class Notifier {
       spent,
       told: spent / this.factory().budget.daily_usd,
     };
-    this.unsubscribe = this.store.subscribe((event) => void this.follow(event));
+    this.unsubscribe = this.store.subscribe((event) => {
+      const next = this.following.then(() => this.follow(event));
+      this.following = next.catch(() => {});
+      void next;
+    });
+  }
+
+  /** Resolves once every event appended so far has been followed. */
+  settled(): Promise<void> {
+    return this.following;
   }
 
   stop() {

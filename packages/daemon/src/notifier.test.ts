@@ -42,9 +42,6 @@ async function setup(now: () => Date = () => new Date()) {
   };
 }
 
-// The listener runs as the event is appended; its notification settles a moment later.
-const settled = () => Bun.sleep(10);
-
 describe("Notifier", () => {
   test("tells of holds that wait on a human and of the factory pausing or refusing on its own", async () => {
     await using env = await setup();
@@ -74,7 +71,7 @@ describe("Notifier", () => {
       type: "factory.refused",
       data: { commit: "abc1234", issues: ["factory.yml: concurrency: Expected int"] },
     });
-    await settled();
+    await env.notifier.settled();
     expect(env.sent).toEqual([
       "K-1 waits for your approval: start approval",
       "the factory paused: three sessions in a row failed on the API",
@@ -109,7 +106,7 @@ describe("Notifier", () => {
         data: { usd: total, in: 0, out: 0, cache_read: 0 },
         cost: { usd, in: 0, out: 0, cache_read: 0 },
       });
-      await settled();
+      await env.notifier.settled();
     }
     expect(env.sent).toEqual([
       "kozo has spent 50 percent of the daily budget of 10 USD",
@@ -126,7 +123,7 @@ describe("Notifier", () => {
       item: "K-1",
       data: { target: "item", hold: "approval", by: "kozod", reason: "plan approval" },
     });
-    await settled();
+    await env.notifier.settled();
     env.sent.length = 0;
     const since = Date.parse(env.store.state.items["K-1"]?.hold?.since ?? "");
     const day = 24 * 60 * 60 * 1000;

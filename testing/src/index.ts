@@ -8,3 +8,4 @@ export * from "./fake-github.ts";
 export * from "./git-repository.ts";
 export * from "./replay.ts";
 export * from "./temp-directory.ts";
+export * from "./waits.ts";

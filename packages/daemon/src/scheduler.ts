@@ -300,6 +300,11 @@ export class Scheduler {
     return true;
   }
 
+  /** Resolves once the look for work running now, and any folded into it, has ended. */
+  async planned(): Promise<void> {
+    while (this.ticking) await this.ticking;
+  }
+
   /** Looks for work to start; calls while one look is running are folded into one more. */
   tick(): void {
     if (this.ticking) {

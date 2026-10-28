@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { sha256 } from "@kozo/core";
-import { fakeAgent, gitRepository } from "@kozo/testing";
+import { eventually, fakeAgent, gitRepository } from "@kozo/testing";
 import { z } from "zod";
 import { claudeAgent } from "./claude-agent.ts";
 import { claudeCliAgent } from "./claude-cli-agent.ts";
@@ -155,7 +155,10 @@ for (const implementation of implementations) {
       await using repo = await gitRepository();
       const { value, records, controller } = request(repo.path, "stop", implementation.model);
       const outcome = implementation.agent("stop").run(value);
-      while (!records.some((record) => record.type === "tool.call")) await Bun.sleep(50);
+      await eventually(
+        () => records.some((record) => record.type === "tool.call"),
+        "the first tool call",
+      );
       controller.abort();
       expect(await outcome).toMatchObject({ status: "stopped" });
     }, 180_000);

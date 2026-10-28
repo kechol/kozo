@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { AgentRecord, AgentRequest, Instruction } from "@kozo/worker";
 import { fakeAgent } from "./fake-agent.ts";
 import { gitRepository } from "./git-repository.ts";
+import { eventually } from "./waits.ts";
 
 function request(cwd: string, overrides: Partial<AgentRequest> = {}) {
   const records: AgentRecord[] = [];
@@ -61,7 +62,10 @@ describe("fakeAgent", () => {
     const { value, records, controller, queue } = request(repo.path);
     const outcome = agent.run(value);
     queue.push({ seq: 0, text: "Keep the old label for zero." });
-    await Bun.sleep(50);
+    await eventually(
+      () => records.some((record) => record.type === "instruction.delivered"),
+      "the instruction's delivery",
+    );
     controller.abort();
     expect(await outcome).toMatchObject({ status: "stopped" });
     expect(records.slice(1)).toEqual([

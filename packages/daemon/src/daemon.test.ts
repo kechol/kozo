@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { kozoHome } from "@kozo/core";
 import {
+  eventually,
   fakeAgent,
   gitRepository,
   goodChange,
@@ -127,9 +128,12 @@ describe("Daemon", () => {
         body: JSON.stringify(body),
       });
     await post("/api/items", { title: "Low stock", class: "docs" });
-    while (first.store.state.items["K-1"]?.hold?.reason !== "plan approval") await Bun.sleep(20);
+    await eventually(
+      () => first.store.state.items["K-1"]?.hold?.reason === "plan approval",
+      "the plan approval",
+    );
     await post("/api/refs/K-1/approve", {});
-    while (first.store.state.items["K-1"]?.stage !== "building") await Bun.sleep(20);
+    await eventually(() => first.store.state.items["K-1"]?.stage === "building", "K-1 in Building");
     // Each API write tags its own events; what the scheduler starts afterwards is untagged.
     const calls = first.store.db
       .query<{ type: string; call: string | null }, []>(
@@ -145,7 +149,10 @@ describe("Daemon", () => {
       "plan.accepted",
     ]);
     expect(calls.find((event) => event.type === "run.started")?.call).toBeNull();
-    while (first.store.state.tasks["K-1/t1"]?.checkpoint?.node !== "implement") await Bun.sleep(20);
+    await eventually(
+      () => first.store.state.tasks["K-1/t1"]?.checkpoint?.node === "implement",
+      "the checkpoint at implement",
+    );
     await first.stop();
 
     const second = await Daemon.start({
@@ -176,12 +183,12 @@ describe("Daemon", () => {
     try {
       const runs = Object.values(second.store.state.runs);
       expect(runs.find((run) => run.agent === "implement")?.state).toBe("stopped");
-      while (
-        second.store.state.tasks["K-1/t1"]?.stage === "building" &&
-        !second.store.state.tasks["K-1/t1"]?.hold
-      ) {
-        await Bun.sleep(50);
-      }
+      await eventually(
+        () =>
+          second.store.state.tasks["K-1/t1"]?.stage !== "building" ||
+          Boolean(second.store.state.tasks["K-1/t1"]?.hold),
+        "the resumed run to move or hold K-1/t1",
+      );
       const resumed = Object.values(second.store.state.runs)
         .filter((run) => run.agent === "implement")
         .at(-1);

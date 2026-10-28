@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { inTime } from "@kozo/testing";
 import { Outbox } from "@kozo/verify";
 import { EgressProxy, hostAllowed } from "./egress.ts";
 
@@ -21,7 +22,7 @@ async function exchange(port: number, request: string, after = "") {
     },
   });
   socket.write(request);
-  await Promise.race([closed, Bun.sleep(1000)]);
+  await inTime(closed, "the proxy to close the connection");
   socket.end();
   return received;
 }
@@ -119,7 +120,7 @@ describe("EgressProxy", () => {
       socket.write(`${target}Proxy-Authorization: Basic ${btoa(`kozo:${token}`)}\r\n\r\n`);
       await opened;
       access.revoke();
-      expect(await Promise.race([closed.then(() => "closed"), Bun.sleep(1000)])).toBe("closed");
+      await inTime(closed, "the tunnel to close once its token is revoked");
     } finally {
       proxy.stop();
       upstream.stop(true);
@@ -165,7 +166,7 @@ describe("EgressProxy", () => {
       socket.write(
         `CONNECT 127.0.0.1:${upstream.port} HTTP/1.1\r\nProxy-Authorization: Basic ${btoa(`kozo:${token}`)}\r\n\r\n`,
       );
-      await Promise.race([closed, Bun.sleep(10_000)]);
+      await inTime(closed, "the tunnel to close after the upstream's last byte");
       const established = "HTTP/1.1 200 Connection Established\r\n\r\n".length;
       expect(received).toBe(established + body.length);
     } finally {

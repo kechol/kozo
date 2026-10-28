@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { type FakeStep, fakeAgent, gitRepository, suiteBase, testConfine } from "@kozo/testing";
+import {
+  eventually,
+  type FakeStep,
+  fakeAgent,
+  gitRepository,
+  suiteBase,
+  testConfine,
+} from "@kozo/testing";
 import { runSession, type WorkerMessage, type WorkerSpec } from "./session.ts";
 import { workerMain } from "./worker-main.ts";
 
@@ -161,23 +168,28 @@ describe("runSession", () => {
     await using _ = repo;
     const line = (text: string) => JSON.stringify({ v: 1, ts: new Date().toISOString(), text });
     await Bun.write(spec.queue, `${line("Keep zero as Sold out.")}\n`);
-    const pending = play({ ...spec, gates: null, requireNote: false }, [
-      { awaitInstruction: true },
-      { awaitInstruction: true },
-      { answer: {} },
-    ]);
-    await Bun.sleep(100);
+    const messages: WorkerMessage[] = [];
+    const pending = runSession(
+      { ...spec, gates: null, requireNote: false },
+      fakeAgent([{ awaitInstruction: true }, { awaitInstruction: true }, { answer: {} }]),
+      (message) => messages.push(message),
+      new AbortController().signal,
+      testConfine,
+    );
+    const delivered = () =>
+      messages.flatMap((message) =>
+        "record" in message && message.record.type === "instruction.delivered"
+          ? [message.record.data]
+          : [],
+      );
+    // The second instruction is queued only once the first has reached the agent.
+    await eventually(() => delivered().length === 1, "the first instruction's delivery");
     await Bun.write(
       spec.queue,
       `${line("Keep zero as Sold out.")}\n${line("And 1 says Only 1 left.")}\n`,
     );
-    const { messages } = await pending;
-    const delivered = messages.flatMap((message) =>
-      "record" in message && message.record.type === "instruction.delivered"
-        ? [message.record.data]
-        : [],
-    );
-    expect(delivered).toEqual([
+    await pending;
+    expect(delivered()).toEqual([
       { queue_seq: 0, text: "Keep zero as Sold out." },
       { queue_seq: 1, text: "And 1 says Only 1 left." },
     ]);
