@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdir, open, readdir } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
   factoryTemplate,
@@ -173,6 +173,22 @@ export async function up(args: readonly string[], out: Lines): Promise<number> {
   return ExitCode.failure;
 }
 
+/**
+ * Whether `pid` is kozod: the kozod answering on the API names it as its own, or, for one that
+ * does not answer, the process's executable is kozod.
+ */
+async function isKozod(pid: number): Promise<boolean> {
+  try {
+    const client = await connect();
+    const status = await client.get("/api/status");
+    if (status.body.pid === pid) return true;
+  } catch (error) {
+    if (!(error instanceof KozodUnavailable)) throw error;
+  }
+  const ps = Bun.spawnSync(["ps", "-o", "comm=", "-p", String(pid)]);
+  return basename(ps.stdout.toString().trim()) === "kozod";
+}
+
 export async function down(args: readonly string[], out: Lines): Promise<number> {
   const { values } = parseArgs({ args: [...args], options: { json: { type: "boolean" } } });
   const home = kozoHome();
@@ -183,6 +199,10 @@ export async function down(args: readonly string[], out: Lines): Promise<number>
   const file = Bun.file(home.pidFile);
   if (!(await file.exists())) return report("kozod is not running");
   const pid = Number((await file.text()).trim());
+  // After a crash the pid may be another process's, which must not get the signal.
+  if (!(await isKozod(pid))) {
+    return report(`kozod is not running; ${home.pidFile} names pid ${pid}, which is not kozod`);
+  }
   try {
     process.kill(pid, "SIGTERM");
   } catch {

@@ -139,6 +139,9 @@ describe("the daily commands", () => {
     expect(stopped).toMatchObject({ stdout: "kozod is down" });
     expect((await kozo("down")).stdout).toBe("kozod is not running");
     expect((await kozo("ls")).code).toBe(1);
+    // A pid file left by a crash may name another process, which keeps running.
+    await Bun.write(join(home.path, "kozod.pid"), `${process.pid}\n`);
+    expect((await kozo("down")).stdout).toEndWith(`names pid ${process.pid}, which is not kozod`);
   }, 60_000);
 });
 

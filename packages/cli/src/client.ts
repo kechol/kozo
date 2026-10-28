@@ -22,14 +22,21 @@ export function apiPortFromEnvironment(): number {
   return Number(process.env.KOZO_PORT ?? apiPort);
 }
 
-/** Sends the token only after the server proves it holds the same token. */
-async function checkServer(base: string, token: string) {
+/**
+ * Sends the token only after the server proves it holds the same token. A kozod that does not
+ * answer within `timeoutMs` counts as down, so a hung one cannot hang every command.
+ */
+async function checkServer(base: string, token: string, timeoutMs: number) {
   const nonce = randomBytes(32).toString("hex");
   let proof: unknown;
   try {
-    const response = await fetch(`${base}/api/hello?nonce=${nonce}`);
+    const response = await fetch(`${base}/api/hello?nonce=${nonce}`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     proof = ((await response.json()) as { proof?: unknown }).proof;
-  } catch {
+  } catch (error) {
+    if ((error as Error).name === "TimeoutError")
+      throw new KozodUnavailable(`kozod did not answer within ${timeoutMs / 1000} seconds`);
     throw new KozodUnavailable("kozod is not running; start it with kozo up");
   }
   if (!secretMatches(typeof proof === "string" ? proof : "", helloProof(token, nonce))) {
@@ -40,14 +47,14 @@ async function checkServer(base: string, token: string) {
 }
 
 /** A client of the local API, authenticated with the home's token. */
-export async function connect(home = kozoHome()): Promise<Client> {
+export async function connect(home = kozoHome(), helloTimeoutMs = 5_000): Promise<Client> {
   const tokenFile = Bun.file(home.apiToken);
   if (!(await tokenFile.exists())) {
     throw new KozodUnavailable("kozod has not run in this home yet; start it with kozo up");
   }
   const token = (await tokenFile.text()).trim();
   const base = `http://127.0.0.1:${apiPortFromEnvironment()}`;
-  await checkServer(base, token);
+  await checkServer(base, token, helloTimeoutMs);
   const request = async (path: string, init: RequestInit = {}) => {
     try {
       return await fetch(`${base}${path}`, {
@@ -58,10 +65,16 @@ export async function connect(home = kozoHome()): Promise<Client> {
       throw new KozodUnavailable("kozod is not running; start it with kozo up");
     }
   };
-  const answer = async (response: Response): Promise<Answer> => ({
-    status: response.status,
-    body: (await response.json()) as Answer["body"],
-  });
+  const answer = async (response: Response): Promise<Answer> => {
+    const text = await response.text();
+    try {
+      return { status: response.status, body: JSON.parse(text) as Answer["body"] };
+    } catch {
+      throw new KozodUnavailable(
+        `kozod answered ${response.status} with something that is not JSON`,
+      );
+    }
+  };
   return {
     home,
     base,

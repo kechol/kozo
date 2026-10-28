@@ -176,6 +176,8 @@ export function createApi({
 
   app.get("/api/status", (c) => {
     return c.json({
+      // `kozo down` signals the pid in kozod.pid only once kozod names it as its own.
+      pid: process.pid,
       mode,
       paused: store.state.paused,
       pausedReason: store.state.pausedReason,
