@@ -37,6 +37,7 @@ import {
   type RunEnd,
   type RunnerOps,
 } from "./task-run.ts";
+import { clearHold, hold, move } from "./transitions.ts";
 import { releaseTask } from "./worktrees.ts";
 
 export interface RunnerDeps {
@@ -179,37 +180,17 @@ export class Runner implements RunnerOps {
   async hold(
     item: string,
     task: string | null,
-    hold: "approval" | "question" | "attention",
+    kind: "approval" | "question" | "attention",
     reason: string,
     run?: string,
     blocked?: BlockedReason,
   ) {
-    const subject = task === null ? this.store.state.items[item] : this.store.state.tasks[task];
-    if (!subject || subject.hold) return;
-    await this.store.append({
-      type: "hold.set",
-      item,
-      task,
-      ...(run ? { run_id: run, parent_run: this.store.state.runs[run]?.parent ?? null } : {}),
-      data: {
-        target: task === null ? "item" : "task",
-        hold,
-        by: "kozod",
-        reason: reason.slice(0, 2000),
-        ...(blocked ? { blocked } : {}),
-      },
-    });
+    await hold(this.store, { item, task }, kind, reason, { run, blocked });
   }
 
   async moveTask(task: TaskState, to: Stage, run: string | null, reason: string) {
-    const current = this.store.state.tasks[task.ref];
-    if (!current || current.stage === to) return;
-    await this.store.append({
-      type: "stage.changed",
-      item: current.item,
-      task: current.ref,
-      ...(run ? { run_id: run } : {}),
-      data: { target: "task", from: current.stage, to, by: "kozod", reason: reason.slice(0, 2000) },
+    await move(this.store, { item: task.item, task: task.ref }, to, reason, {
+      ...(run ? { run } : {}),
     });
   }
 
@@ -400,13 +381,7 @@ export class Runner implements RunnerOps {
       if (ref !== taskRef) void this.stopWork(ref);
       const task = this.store.state.tasks[ref];
       if (!task) continue;
-      if (task.hold)
-        await this.store.append({
-          type: "hold.cleared",
-          item: item.ref,
-          task: ref,
-          data: { target: "task", hold: task.hold.kind, by: "kozod" },
-        });
+      await clearHold(this.store, { item: item.ref, task: ref });
       await this.moveTask(task, "cancelled", null, reason);
       await this.release(ref, true);
     }
@@ -414,11 +389,7 @@ export class Runner implements RunnerOps {
     // the plan agent sees them among the tasks so far.
     if (this.store.state.items[item.ref]?.stage !== "building") return;
     await this.store.append({ type: "plan.proposed", item: item.ref, data: { plan: item.plan } });
-    await this.store.append({
-      type: "stage.changed",
-      item: item.ref,
-      data: { target: "item", from: "building", to: "planning", by: "kozod", reason },
-    });
+    await move(this.store, { item: item.ref, task: null }, "planning", reason);
   }
 
   /** Removes a closed task's worktree, and its branch when `deleteBranch`. */

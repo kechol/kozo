@@ -29,6 +29,7 @@ import { installBody, quiet, statusBody } from "./github-report.ts";
 import { enqueue } from "./instructions.ts";
 import { readItemFile, requestText, writeItemFile } from "./item-file.ts";
 import { readCharter } from "./repository.ts";
+import { externalWrite, hold, move, note } from "./transitions.ts";
 import { detachedCheckout, removeCheckout, taskBranch, worktreePath } from "./worktrees.ts";
 
 /** The label a human adds to an Issue to approve its start. */
@@ -306,18 +307,12 @@ export class GitHubSync {
     const writer =
       closer !== null && writers.includes(await this.github.permission(github, closer));
     if (!writer && !(cancelled && closer === author)) {
-      if (!item.hold) {
-        await this.store.append({
-          type: "hold.set",
-          item: item.ref,
-          data: {
-            target: "item",
-            hold: "attention",
-            by: "kozod",
-            reason: `${closer ?? "someone"} closed the Issue but may not ${cancelled ? "cancel" : "complete"} it; kozo close decides`,
-          },
-        });
-      }
+      await hold(
+        this.store,
+        { item: item.ref, task: null },
+        "attention",
+        `${closer ?? "someone"} closed the Issue but may not ${cancelled ? "cancel" : "complete"} it; kozo close decides`,
+      );
       return;
     }
     await this.control.closeWork(
@@ -351,16 +346,12 @@ export class GitHubSync {
       await this.github.label(github, issue.number, { remove: [acceptLabel] });
     }
     if (!trusted && !waiting) {
-      await this.store.append({
-        type: "hold.set",
-        item: ref,
-        data: {
-          target: "item",
-          hold: "attention",
-          by: "kozod",
-          reason: `${issue.author}, who may not write, edited the request after it started; kozo retry takes the new text`,
-        },
-      });
+      await hold(
+        this.store,
+        { item: ref, task: null },
+        "attention",
+        `${issue.author}, who may not write, edited the request after it started; kozo retry takes the new text`,
+      );
     }
     const edited = { ...file, title, body: issue.body };
     // The record comes before the file, so that no request text runs read goes unrecorded.
@@ -483,15 +474,12 @@ export class GitHubSync {
     );
     for (const review of requested.reverse()) {
       if (!writers.includes(await this.github.permission(github, review.author))) continue;
-      await this.store.append({
-        type: "note.added",
-        item,
-        task,
-        data: {
-          kind: "instruction",
-          text: review.body.trim() || `${review.author} requested changes`,
-        },
-      });
+      await note(
+        this.store,
+        { item, task },
+        "instruction",
+        review.body.trim() || `${review.author} requested changes`,
+      );
       await this.sendBack(item, task, "human", `${review.author} requested changes on ${pull.url}`);
       return;
     }
@@ -507,32 +495,21 @@ export class GitHubSync {
       await this.holdTask(item, task, `CI failed after ${fixes} fixes: ${failed.join(", ")}`);
       return;
     }
-    await this.store.append({
-      type: "note.added",
-      item,
-      task,
-      data: { kind: "check", text: `The CI checks ${failed.join(", ")} failed on ${head}.` },
-    });
+    await note(
+      this.store,
+      { item, task },
+      "check",
+      `The CI checks ${failed.join(", ")} failed on ${head}.`,
+    );
     await this.sendBack(item, task, "kozod", `CI failed: ${failed.join(", ")}`);
   }
 
   private async sendBack(item: string, task: string, by: "kozod" | "human", reason: string) {
-    await this.store.append({
-      type: "stage.changed",
-      item,
-      task,
-      data: { target: "task", from: "handoff", to: "building", by, reason: reason.slice(0, 2000) },
-    });
+    await move(this.store, { item, task }, "building", reason, { by });
   }
 
   private async holdTask(item: string, task: string, reason: string) {
-    if (this.store.state.tasks[task]?.hold) return;
-    await this.store.append({
-      type: "hold.set",
-      item,
-      task,
-      data: { target: "task", hold: "attention", by: "kozod", reason },
-    });
+    await hold(this.store, { item, task }, "attention", reason);
   }
 
   /** Closes the Issue as completed once kozod has checked its item complete. */
@@ -661,12 +638,7 @@ Part of #${issue}`;
   }
 
   private async wrote(item: string, task: string | null, action: string, subject: string) {
-    await this.store.append({
-      type: "external.write",
-      item,
-      task,
-      data: { target: "github", action, subject },
-    });
+    await externalWrite(this.store, { item, task }, "github", action, subject);
   }
 
   /** Each task's pull request, as the last one kozod opened or updated for it. */

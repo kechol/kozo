@@ -187,6 +187,22 @@ export class EventStore {
     });
   }
 
+  /**
+   * Appends the event `decide` makes of the state, or nothing when it makes none, inside the
+   * store's queue, so that no other event comes between the look at the state and the append.
+   */
+  appendIf(decide: (state: Readonly<FactoryState>) => NewEvent | null): Promise<Event | null> {
+    return this.serial(async () => {
+      const event = decide(this.current);
+      if (event === null) return null;
+      const line = await this.write(event);
+      if (line.type === "run.changed" && isRunOver(line.data.to) && line.run_id !== null) {
+        await this.seal(line.run_id);
+      }
+      return line;
+    });
+  }
+
   private async seal(run: string) {
     const info = this.current.runs[run];
     const log = this.logs.get(run);

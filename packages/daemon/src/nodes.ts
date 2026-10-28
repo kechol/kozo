@@ -31,6 +31,7 @@ import { checkNotes } from "./instructions.ts";
 import { handoffReportPath, readItemFile, requestText } from "./item-file.ts";
 import { firstCodeChange, firstNonTestChange, layersFor, onlyDependencyFiles } from "./risk.ts";
 import { type BlueprintRun, describe, type Node, type RunEnd, tail } from "./task-run.ts";
+import { externalWrite } from "./transitions.ts";
 import { takePorts } from "./worktree-ports.ts";
 import { atMergedCommit, claimTask } from "./worktrees.ts";
 
@@ -59,11 +60,14 @@ const claim: NodeStep = async (run, current) => {
     });
   }
   if (claimed.created) {
-    await runner.store.append({
-      ...run.envelope,
-      type: "external.write",
-      data: { target: "local", action: "branch", subject: run.branch },
-    });
+    await externalWrite(
+      runner.store,
+      { item: run.item.ref, task: run.task.ref },
+      "local",
+      "branch",
+      run.branch,
+      run.run,
+    );
   }
   await run.exit("claim", true);
 };

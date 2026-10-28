@@ -23,6 +23,7 @@ import { checkPlan } from "./plan-checks.ts";
 import type { Runner } from "./runner.ts";
 import type { Envelope } from "./session-pump.ts";
 import { describe, type Repository } from "./task-run.ts";
+import { move } from "./transitions.ts";
 import { detachedCheckout, removeCheckout, triageCheckoutPath } from "./worktrees.ts";
 
 // A draft that fails its checks gets one more session, told why, before a human looks.
@@ -225,19 +226,12 @@ async function afterTriage(
     approvals === "always"
       ? "the request has no trusted requester, so its plan always needs an approval"
       : `the plan needs an approval at ${level}`;
-  await runner.store.append({
-    type: "stage.changed",
-    item: itemRef,
-    data: {
-      target: "item",
-      from: "triage",
-      to: "planning",
-      by: "kozod",
-      reason: feature
-        ? `${why}; the plan agent first works out its acceptance criteria with the owner`
-        : why,
-    },
-  });
+  await move(
+    runner.store,
+    { item: itemRef, task: null },
+    "planning",
+    feature ? `${why}; the plan agent first works out its acceptance criteria with the owner` : why,
+  );
   // A feature's plan agent runs from Planning without a hold, and its plan then waits.
   if (!feature) await runner.hold(itemRef, null, "approval", planApprovalReason);
 }

@@ -28,6 +28,7 @@ import { type ItemFile, itemPath, writeItemFile } from "./item-file.ts";
 import { costToday } from "./queries.ts";
 import { readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
+import { clearHold, hold, move, note } from "./transitions.ts";
 import { hasWorktree, taskBranch, worktreePath } from "./worktrees.ts";
 
 type Body<V extends Verb> = z.infer<(typeof verbBodySchemas)[V]>;
@@ -156,25 +157,12 @@ export class ControlPlane {
       await rm(itemPath(this.home, ref), { force: true });
       throw error;
     }
+    const subject = { item: ref, task: null };
     if (startNeeded(approvals, autonomyLevel(charter, file.class))) {
-      await this.store.append({
-        type: "hold.set",
-        item: ref,
-        data: { target: "item", hold: "approval", by: "kozod", reason: startApprovalReason },
-      });
+      await hold(this.store, subject, "approval", startApprovalReason);
       return false;
     }
-    await this.store.append({
-      type: "stage.changed",
-      item: ref,
-      data: {
-        target: "item",
-        from: "intake",
-        to: "triage",
-        by: "kozod",
-        reason: "its autonomy level needs no start approval",
-      },
-    });
+    await move(this.store, subject, "triage", "its autonomy level needs no start approval");
     return true;
   }
 
@@ -222,51 +210,29 @@ export class ControlPlane {
   }
 
   private async clearHold(kind: "item" | "task", ref: string, reason?: string) {
-    const { subject, item, task } = this.subject(ref, kind);
-    if (!subject.hold) return;
-    await this.store.append({
-      type: "hold.cleared",
-      item,
-      task,
-      data: { target: kind, hold: subject.hold.kind, by: "human", ...(reason ? { reason } : {}) },
-    });
+    const { item, task } = this.subject(ref, kind);
+    await clearHold(this.store, { item, task }, { by: "human", reason });
   }
 
   private async setHold(
     kind: "item" | "task",
     ref: string,
-    hold: "paused" | "taken",
+    held: "paused" | "taken",
     reason: string,
   ) {
     const { item, task } = this.subject(ref, kind);
-    await this.store.append({
-      type: "hold.set",
-      item,
-      task,
-      data: { target: kind, hold, by: "human", reason },
-    });
+    await hold(this.store, { item, task }, held, reason, { by: "human" });
   }
 
   /** Keeps what a human said about an item or a task for the runs that follow. */
   private async note(item: string, target: string, kind: NoteKind, text: string) {
-    await this.store.append({
-      type: "note.added",
-      item,
-      task: target === item ? null : target,
-      data: { kind, text },
-    });
+    await note(this.store, { item, task: target === item ? null : target }, kind, text);
   }
 
   /** Moves an item or a task as a human asked, with the command that asked as the reason. */
   private async move(kind: "item" | "task", ref: string, to: Stage, reason: string) {
-    const { subject, item, task } = this.subject(ref, kind);
-    if (subject.stage === to) return;
-    await this.store.append({
-      type: "stage.changed",
-      item,
-      task,
-      data: { target: kind, from: subject.stage, to, by: "human", reason },
-    });
+    const { item, task } = this.subject(ref, kind);
+    await move(this.store, { item, task }, to, reason, { by: "human" });
   }
 
   private async approve(ref: string, body: Body<"approve">): Promise<VerbResult> {
@@ -302,16 +268,12 @@ export class ControlPlane {
     await this.clearHold("item", ref, body.reason);
     await this.note(ref, ref, "rejection", body.reason);
     if ((this.store.state.items[ref]?.rejections ?? 0) >= 2) {
-      await this.store.append({
-        type: "hold.set",
-        item: ref,
-        data: {
-          target: "item",
-          hold: "attention",
-          by: "kozod",
-          reason: "the plan was rejected twice; kozo retry drafts it again from Triage",
-        },
-      });
+      await hold(
+        this.store,
+        { item: ref, task: null },
+        "attention",
+        "the plan was rejected twice; kozo retry drafts it again from Triage",
+      );
       return { message: `rejected the plan of ${ref} a second time; it waits for your attention` };
     }
     return {

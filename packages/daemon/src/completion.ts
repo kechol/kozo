@@ -5,6 +5,7 @@ import { itemDirectory } from "./item-file.ts";
 import { layersFor } from "./risk.ts";
 import type { Runner } from "./runner.ts";
 import { tail } from "./task-run.ts";
+import { move, note } from "./transitions.ts";
 import { releaseTask, worktreePath } from "./worktrees.ts";
 
 /**
@@ -37,15 +38,12 @@ export async function completeTask(runner: Runner, taskRef: string): Promise<voi
   );
   const defect = `the ${level} gates failed on ${repository.branch} after the merge`;
   const recordDefect = async () => {
-    await runner.store.append({
-      type: "note.added",
-      item: item.ref,
-      task: taskRef,
-      data: {
-        kind: "check",
-        text: `After the merge, the ${level} gates on ${repository.branch} failed, so DONE_WHEN is not met:\n${tail(output)}`,
-      },
-    });
+    await note(
+      runner.store,
+      { item: item.ref, task: taskRef },
+      "check",
+      `After the merge, the ${level} gates on ${repository.branch} failed, so DONE_WHEN is not met:\n${tail(output)}`,
+    );
     await runner.store.append({
       type: "task.defect",
       item: item.ref,
@@ -84,17 +82,10 @@ export async function completeTask(runner: Runner, taskRef: string): Promise<voi
   // Issue is never closed, in between.
   const defective = result.status !== "pass";
   if (defective) await recordDefect();
-  await runner.store.append({
-    type: "stage.changed",
-    item: item.ref,
-    data: {
-      target: "item",
-      from: owner.stage,
-      to: defective ? "triage" : "complete",
-      by: "kozod",
-      reason: defective
-        ? "the check after the merge failed, a post-merge defect"
-        : "every task is complete",
-    },
-  });
+  await move(
+    runner.store,
+    { item: item.ref, task: null },
+    defective ? "triage" : "complete",
+    defective ? "the check after the merge failed, a post-merge defect" : "every task is complete",
+  );
 }

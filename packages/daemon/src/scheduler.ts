@@ -17,6 +17,7 @@ import { costToday } from "./queries.ts";
 import { type CharterResult, readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
 import type { Node } from "./task-run.ts";
+import { clearHold, hold } from "./transitions.ts";
 
 /**
  * Where a task's next run starts: at verify-deterministic for a task a human gave back, at the
@@ -98,19 +99,12 @@ export class Scheduler {
         const subject = target === "item" ? state.items[ref] : state.tasks[ref];
         if (!subject || subject.hold || isClosed(subject.stage)) return;
         const item = target === "item" ? ref : (state.tasks[ref]?.item ?? ref);
-        await this.store
-          .append({
-            type: "hold.set",
-            item,
-            task: target === "task" ? ref : null,
-            data: {
-              target,
-              hold: "attention",
-              by: "kozod",
-              reason: `kozod could not run it: ${message}`.slice(0, 2000),
-            },
-          })
-          .catch(() => {});
+        await hold(
+          this.store,
+          { item, task: target === "task" ? ref : null },
+          "attention",
+          `kozod could not run it: ${message}`,
+        ).catch(() => {});
       })
       .finally(() => {
         release();
@@ -160,33 +154,20 @@ export class Scheduler {
       const state = this.store.state;
       const open = task.depends_on.filter((ref) => state.tasks[ref]?.stage !== "complete");
       const cancelled = open.filter((ref) => state.tasks[ref]?.stage === "cancelled");
-      const envelope = { item: task.item, task: task.ref };
-      if (task.hold?.kind === "dependency" && (open.length === 0 || cancelled.length > 0)) {
-        await this.store.append({
-          ...envelope,
-          type: "hold.cleared",
-          data: { target: "task", hold: "dependency", by: "kozod" },
-        });
+      const subject = { item: task.item, task: task.ref };
+      if (open.length === 0 || cancelled.length > 0)
+        await clearHold(this.store, subject, { kind: "dependency" });
+      if (open.length === 0) continue;
+      if (cancelled.length > 0) {
+        await hold(
+          this.store,
+          subject,
+          "attention",
+          `${cancelled.join(", ")} was cancelled, so ${task.ref} cannot start; close it or plan it again`,
+        );
+      } else {
+        await hold(this.store, subject, "dependency", `waits for ${open.join(", ")} to complete`);
       }
-      if (this.store.state.tasks[task.ref]?.hold || open.length === 0) continue;
-      await this.store.append({
-        ...envelope,
-        type: "hold.set",
-        data:
-          cancelled.length > 0
-            ? {
-                target: "task",
-                hold: "attention",
-                by: "kozod",
-                reason: `${cancelled.join(", ")} was cancelled, so ${task.ref} cannot start; close it or plan it again`,
-              }
-            : {
-                target: "task",
-                hold: "dependency",
-                by: "kozod",
-                reason: `waits for ${open.join(", ")} to complete`,
-              },
-      });
     }
   }
 
@@ -229,12 +210,7 @@ export class Scheduler {
       if (task.hold?.kind !== "capacity" || this.active.has(task.ref)) continue;
       const repository = this.store.state.items[task.item]?.repository ?? "";
       if ((await stopOf(repository)) !== null) continue;
-      await this.store.append({
-        type: "hold.cleared",
-        item: task.item,
-        task: task.ref,
-        data: { target: "task", hold: "capacity", by: "kozod" },
-      });
+      await clearHold(this.store, { item: task.item, task: task.ref }, { kind: "capacity" });
     }
 
     await this.holdForDependencies();
@@ -271,12 +247,7 @@ export class Scheduler {
       const repository = this.store.state.items[task.item]?.repository ?? "";
       const stop = await stopOf(repository);
       if (stop !== null) {
-        await this.store.append({
-          type: "hold.set",
-          item: task.item,
-          task: task.ref,
-          data: { target: "task", hold: "capacity", by: "kozod", reason: stop },
-        });
+        await hold(this.store, { item: task.item, task: task.ref }, "capacity", stop);
         continue;
       }
       const from = resumePoint(this.store.state, task);

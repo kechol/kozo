@@ -14,6 +14,7 @@ import { factoryGitEnvironment } from "@kozo/worker";
 import type { EventStore } from "./event-store.ts";
 import { readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
+import { hold, move } from "./transitions.ts";
 import { taskBranch } from "./worktrees.ts";
 
 /** The stable patch IDs of the patches that `git <args>` prints, each with its commit. */
@@ -139,19 +140,12 @@ export class Reconciler {
     const { branch: target, ref } = await baseOf(repository, this.mode());
     const tip = await branchTip(repository, branch);
     if (tip === null) {
-      if (!task.hold) {
-        await this.store.append({
-          type: "hold.set",
-          item: item.ref,
-          task: task.ref,
-          data: {
-            target: "task",
-            hold: "attention",
-            by: "kozod",
-            reason: `${branch} was deleted without a merge`,
-          },
-        });
-      }
+      await hold(
+        this.store,
+        { item: item.ref, task: task.ref },
+        "attention",
+        `${branch} was deleted without a merge`,
+      );
       return;
     }
     if (await contains(repository, `refs/heads/${branch}`, ref)) {
@@ -179,18 +173,12 @@ export class Reconciler {
       .split("\n")
       .some((email) => email !== "" && email !== factoryGitEnvironment.GIT_AUTHOR_EMAIL);
     if (human && !task.hold) {
-      await this.store.append({
-        type: "stage.changed",
-        item: item.ref,
-        task: task.ref,
-        data: {
-          target: "task",
-          from: "handoff",
-          to: "reviewing",
-          by: "kozod",
-          reason: `a human committed to ${branch}`,
-        },
-      });
+      await move(
+        this.store,
+        { item: item.ref, task: task.ref },
+        "reviewing",
+        `a human committed to ${branch}`,
+      );
     }
   }
 
