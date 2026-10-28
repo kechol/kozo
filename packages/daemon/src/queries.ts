@@ -206,3 +206,70 @@ export function activeRuns(db: Database): number {
       ?.n ?? 0
   );
 }
+
+/** What an item's own events, its triage and planning, have cost. */
+export function itemOwnCost(db: Database, item: string): number {
+  return (
+    db
+      .query<{ usd: number }, [string]>(
+        "select coalesce(sum(json_extract(line, '$.cost.usd')), 0) as usd from events where item = ? and task is null",
+      )
+      .get(item)?.usd ?? 0
+  );
+}
+
+/** The events since `since` that the retrospective reads its failures from, oldest first. */
+export function failureEvents(db: Database, since: string) {
+  return db
+    .query<
+      {
+        ts: string;
+        type: string;
+        ref: string;
+        verdict: string | null;
+        text: string | null;
+        from: string | null;
+        to: string | null;
+        blocked: string | null;
+      },
+      [string]
+    >(
+      `select ts, type, coalesce(task, item) as ref,
+            json_extract(line, '$.data.verdict') as verdict,
+            coalesce(json_extract(line, '$.data.summary'), json_extract(line, '$.data.text'),
+                     json_extract(line, '$.data.reason')) as text,
+            json_extract(line, '$.data.from') as "from", json_extract(line, '$.data.to') as "to",
+            json_extract(line, '$.data.blocked') as blocked
+       from events
+      where ts >= ? and type in ('review.verdict', 'task.returned', 'stage.changed', 'hold.set')
+      order by ts, id`,
+    )
+    .all(since);
+}
+
+/** The review verdicts given since `since`. */
+export function reviewVerdicts(db: Database, since: string): { verdict: string }[] {
+  return db
+    .query<{ verdict: string }, [string]>(
+      "select json_extract(line, '$.data.verdict') as verdict from events where type = 'review.verdict' and ts >= ?",
+    )
+    .all(since);
+}
+
+/** The nodes a run entered and left, in order, with how each ended. */
+export function nodeEvents(db: Database, run: string) {
+  return db
+    .query<{ type: string; node: string; ok: number | null; summary: string | null }, [string]>(
+      "select type, json_extract(line, '$.node') as node, json_extract(line, '$.data.ok') as ok, json_extract(line, '$.data.summary') as summary from events where run_id = ? and type in ('node.enter', 'node.exit') order by id",
+    )
+    .all(run);
+}
+
+/** The Charter commit an item's first run started from. */
+export function firstCharterCommit(db: Database, item: string): string | undefined {
+  return db
+    .query<{ start: string }, [string]>(
+      "select json_extract(line, '$.data.charter_commit') as start from events where item = ? and type = 'run.started' order by id limit 1",
+    )
+    .get(item)?.start;
+}

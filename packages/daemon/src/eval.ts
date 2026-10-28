@@ -34,7 +34,7 @@ import type { EgressProxy } from "./egress.ts";
 import { EventStore } from "./event-store.ts";
 import { readItemFile } from "./item-file.ts";
 import type { Launcher } from "./launcher.ts";
-import { costBetween } from "./queries.ts";
+import { costBetween, firstCharterCommit } from "./queries.ts";
 import { Reconciler } from "./reconcile.ts";
 import { Runner } from "./runner.ts";
 import { Scheduler } from "./scheduler.ts";
@@ -72,11 +72,7 @@ export async function evalCaseOf(
   const outcome = reachedOutcome(state, item)?.outcome ?? null;
   if (outcome === null)
     throw new CommandError(409, `${item.ref} has reached no outcome an eval case can expect yet`);
-  const start = store.db
-    .query<{ start: string }, [string]>(
-      "select json_extract(line, '$.data.charter_commit') as start from events where item = ? and type = 'run.started' order by id limit 1",
-    )
-    .get(item.ref)?.start;
+  const start = firstCharterCommit(store.db, item.ref);
   if (!start) throw new CommandError(409, `${item.ref} has no run to start from`);
   const file = await readItemFile(home, item.ref);
   const merged = tasks.findLast((task) => task.merged?.commit)?.merged?.commit;

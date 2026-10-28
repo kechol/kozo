@@ -11,7 +11,7 @@ import {
 } from "@kozo/core";
 import { isInside } from "@kozo/verify";
 import type { EventStore } from "./event-store.ts";
-import { costOf } from "./queries.ts";
+import { costOf, nodeEvents } from "./queries.ts";
 
 /** A blueprint node of a task's latest run, as far as the run got. */
 export interface NodeProgress {
@@ -81,13 +81,7 @@ export async function taskRecords(home: KozoHome, store: EventStore, taskRef: st
     .filter((record) => record.decisions)
     .map((record) => ({ run: record.run, text: record.decisions }));
   const latest = records.at(-1)?.run ?? null;
-  const steps = latest
-    ? store.db
-        .query<{ type: string; node: string; ok: number | null; summary: string | null }, [string]>(
-          "select type, json_extract(line, '$.node') as node, json_extract(line, '$.data.ok') as ok, json_extract(line, '$.data.summary') as summary from events where run_id = ? and type in ('node.enter', 'node.exit') order by id",
-        )
-        .all(latest)
-    : [];
+  const steps = latest ? nodeEvents(store.db, latest) : [];
   const progress = new Map<string, NodeProgress>();
   for (const step of steps) {
     progress.set(step.node, {

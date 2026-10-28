@@ -9,7 +9,15 @@ import {
   waitsOnOwner,
   workClassSchema,
 } from "@kozo/core";
-import { costBetween, costOf, costToday, midnightOf } from "./queries.ts";
+import {
+  costBetween,
+  costOf,
+  costToday,
+  failureEvents,
+  itemOwnCost,
+  midnightOf,
+  reviewVerdicts,
+} from "./queries.ts";
 import { readCharter } from "./repository.ts";
 
 export type ReportView = "summary" | "review" | "cost";
@@ -31,12 +39,7 @@ const share = (part: number, whole: number) => (whole === 0 ? null : part / whol
 
 /** A diff's cost: its runs, children included, and an equal share of its item's own cost. */
 function diffCost(db: Database, state: FactoryState, task: TaskState): number {
-  const own =
-    db
-      .query<{ usd: number }, [string]>(
-        "select coalesce(sum(json_extract(line, '$.cost.usd')), 0) as usd from events where item = ? and task is null",
-      )
-      .get(task.item)?.usd ?? 0;
+  const own = itemOwnCost(db, task.item);
   const tasks = state.items[task.item]?.tasks.length ?? 1;
   return costOf(db, "task", task.ref) + own / Math.max(tasks, 1);
 }
@@ -54,31 +57,7 @@ export interface Failure {
  * first.
  */
 function failures(db: Database, state: FactoryState, since: string): Failure[] {
-  const rows = db
-    .query<
-      {
-        ts: string;
-        type: string;
-        ref: string;
-        verdict: string | null;
-        text: string | null;
-        from: string | null;
-        to: string | null;
-        blocked: string | null;
-      },
-      [string]
-    >(
-      `select ts, type, coalesce(task, item) as ref,
-              json_extract(line, '$.data.verdict') as verdict,
-              coalesce(json_extract(line, '$.data.summary'), json_extract(line, '$.data.text'),
-                       json_extract(line, '$.data.reason')) as text,
-              json_extract(line, '$.data.from') as "from", json_extract(line, '$.data.to') as "to",
-              json_extract(line, '$.data.blocked') as blocked
-         from events
-        where ts >= ? and type in ('review.verdict', 'task.returned', 'stage.changed', 'hold.set')
-        order by ts, id`,
-    )
-    .all(since);
+  const rows = failureEvents(db, since);
   // A defect is the state's, so that the list and the defect rate count the same ones.
   const defects = Object.values(state.tasks).flatMap((task): Failure[] => {
     if (task.defectAt === null || task.defectAt < since) return [];
@@ -111,11 +90,7 @@ function metrics(db: Database, state: FactoryState, since: string) {
   const merged = Object.values(state.tasks).filter(
     (task) => task.merged !== null && task.merged.at >= since,
   );
-  const reviews = db
-    .query<{ verdict: string }, [string]>(
-      "select json_extract(line, '$.data.verdict') as verdict from events where type = 'review.verdict' and ts >= ?",
-    )
-    .all(since);
+  const reviews = reviewVerdicts(db, since);
   const waits = merged.flatMap((task) =>
     task.handedOffAt && task.merged
       ? [(Date.parse(task.merged.at) - Date.parse(task.handedOffAt)) / (60 * 60 * 1000)]
