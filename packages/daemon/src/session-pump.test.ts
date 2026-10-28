@@ -103,8 +103,9 @@ describe("pumpSession", () => {
       store,
       {
         // A worker that ends its messages only once it is told to stop, as a real one does.
-        messages: (async function* () {
+        messages: (async function* (): AsyncGenerator<WorkerMessage> {
           await stopped;
+          yield* [];
         })(),
         stop,
       },
