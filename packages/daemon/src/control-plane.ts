@@ -158,7 +158,9 @@ export class ControlPlane {
       await hold(this.store, subject, "approval", startApprovalReason, { approval: "start" });
       return false;
     }
-    await move(this.store, subject, "triage", "its autonomy level needs no start approval");
+    await move(this.store, subject, "triage", "its autonomy level needs no start approval", {
+      from: "intake",
+    });
     return true;
   }
 

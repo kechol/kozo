@@ -7,6 +7,7 @@ import {
 import { baseOf, defuseSections, git, modelFor, SessionError } from "@kozo/verify";
 import type { EventStore } from "./event-store.ts";
 import { readItemFile, requestText } from "./item-file.ts";
+import { recentLines } from "./queries.ts";
 import { readCharter } from "./repository.ts";
 import { type Runner, RunnerError } from "./runner.ts";
 import { runRecords } from "./task-records.ts";
@@ -54,23 +55,17 @@ export async function explorerRecords(
     }),
     "",
     `EVENTS OF ${taskRef ?? itemRef}, the last ${recentEvents}`,
-    ...store.db
-      .query<{ ts: string; line: string }, [string, string | null, string | null]>(
-        `select ts, line from events where item = ? and (task = ? or ? is null) order by id desc limit ${recentEvents}`,
-      )
-      .all(itemRef, taskRef, taskRef)
-      .reverse()
-      .map(({ ts, line }) => {
-        const event = JSON.parse(line) as {
-          type: string;
-          run_id: string | null;
-          task: string | null;
-          node: string | null;
-          data: unknown;
-        };
-        const where = [event.run_id, event.task, event.node].filter(Boolean).join(" ");
-        return `${ts} ${event.type} ${where}: ${JSON.stringify(event.data).slice(0, 300)}`;
-      }),
+    ...recentLines(store.db, itemRef, taskRef, recentEvents).map(({ ts, line }) => {
+      const event = JSON.parse(line) as {
+        type: string;
+        run_id: string | null;
+        task: string | null;
+        node: string | null;
+        data: unknown;
+      };
+      const where = [event.run_id, event.task, event.node].filter(Boolean).join(" ");
+      return `${ts} ${event.type} ${where}: ${JSON.stringify(event.data).slice(0, 300)}`;
+    }),
   ];
   const task = taskRef ? state.tasks[taskRef] : undefined;
   if (task) {

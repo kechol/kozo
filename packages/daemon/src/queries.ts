@@ -273,3 +273,18 @@ export function firstCharterCommit(db: Database, item: string): string | undefin
     )
     .get(item)?.start;
 }
+
+/** The last `count` event lines of an item, or of one of its tasks, oldest first. */
+export function recentLines(
+  db: Database,
+  item: string,
+  task: string | null,
+  count: number,
+): { ts: string; line: string }[] {
+  return db
+    .query<{ ts: string; line: string }, [string, string | null, string | null, number]>(
+      "select ts, line from events where item = ? and (task = ? or ? is null) order by id desc limit ?",
+    )
+    .all(item, task, task, count)
+    .reverse();
+}
