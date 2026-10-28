@@ -165,7 +165,7 @@ describe("EventStore", () => {
       failure: lastFailure(db, "K-1/t1"),
     });
     const expected = {
-      pulls: [["K-1/t1", "https://example.com/pull/1"]],
+      pulls: [["K-1/t1", "https://example.com/pull/1"]] as [string, string][],
       handoff: { branch: "kozo/x/K-1-t1", head: "abc1234", report: "items/K-1/handoff-t1.md" },
       failure: "the deep gates failed",
     };
