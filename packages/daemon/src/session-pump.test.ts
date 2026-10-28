@@ -94,4 +94,24 @@ describe("pumpSession", () => {
     expect(stopped).toBe(true);
     store.close();
   });
+
+  test("a session past its time limit is stopped and ends as timed out", async () => {
+    await using dir = await tempDirectory();
+    const store = await EventStore.open(kozoHome(dir.path));
+    const { promise: stopped, resolve: stop } = Promise.withResolvers<void>();
+    const result = await pumpSession(
+      store,
+      {
+        // A worker that ends its messages only once it is told to stop, as a real one does.
+        messages: (async function* () {
+          await stopped;
+        })(),
+        stop,
+      },
+      { item: "K-1", task: null, run_id: "r-0001" },
+      0.001,
+    );
+    expect(result.status).toBe("timed-out");
+    store.close();
+  });
 });

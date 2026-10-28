@@ -728,6 +728,123 @@ describe("the minimal path", () => {
     expect(await env.repo.git("branch", "--list", "kozo/*")).not.toBe("");
   }, 120_000);
 
+  test("a run that changes a ref outside its branch holds its task for attention", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage"
+        ? [{ answer: plan }]
+        : [{ awaitInstruction: true }, ...implement()],
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    env.scheduler.tick();
+    await eventually(() => env.agent.requests.length >= 2, "the implement session to start");
+    const task = `${ref}/t1`;
+    const reference = { kind: "task", item: { repo: null, number: 1 }, task: 1 } as const;
+    // Something in the session's reach creates a branch of its own while the session runs.
+    await env.repo.git("branch", "sneaky", "main");
+    await env.control.act(task, reference, "say", { text: "Go on." });
+    await env.scheduler.idle();
+    expect(env.store.state.tasks[task]?.hold).toMatchObject({
+      kind: "attention",
+      reason: "the run changed refs outside its branch: refs/heads/sneaky",
+    });
+    const run = env.store.state.tasks[task]?.runs.at(-1) ?? "";
+    expect(env.store.state.runs[run]?.state).toBe("failed");
+  }, 120_000);
+
+  test("a final rebase that conflicts with the default branch sends the task back to Building", async () => {
+    let implemented = 0;
+    await using env = await factoryOf(
+      (request) =>
+        request.agent === "triage"
+          ? [{ answer: plan }]
+          : implemented++ === 0
+            ? implement()
+            : [{ fail: "stop here", kind: "limit" }],
+      {
+        // While review reads the diff, a human changes the same lines on main.
+        async judge(request) {
+          await env.repo.commit({ "src/stock.ts": "export const conflicting = true;\n" }, "human");
+          return judgeWith("accept").judge(request);
+        },
+      },
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const exits = env.store.db
+      .query<{ ok: number; summary: string }, []>(
+        "select json_extract(line, '$.data.ok') as ok, json_extract(line, '$.data.summary') as summary from events where type = 'node.exit' and json_extract(line, '$.node') = 'final-verify'",
+      )
+      .all();
+    expect(exits[0]).toMatchObject({
+      ok: 0,
+      summary: expect.stringContaining("the diff conflicts with the latest main"),
+    });
+    const moves = env.store.db
+      .query<{ to: string }, []>(
+        "select json_extract(line, '$.data.to') as \"to\" from events where type = 'stage.changed' and task is not null order by id",
+      )
+      .all()
+      .map((row) => row.to);
+    expect(moves).toContain("building");
+    expect(moves.slice(moves.indexOf("handoff"))).toContain("building");
+    expect(implemented).toBeGreaterThan(1);
+  }, 120_000);
+
+  test("MISCONFIGURED gates hold the task for attention with their reason", async () => {
+    const lowPlan = {
+      ...plan,
+      plan: { ...plan.plan, risk: "low", tasks: [{ ...plan.plan.tasks[0], scope: ["docs/**"] }] },
+    };
+    const docs: FakeStep[] = [
+      { write: { "docs/stock.md": "Stock labels say Only N left.\n" } },
+      { commit: "docs: describe the low stock label" },
+      { use: "kozo_gates", input: { level: "full" } },
+      { use: "kozo_note", input: { choice: "Documented it", reason: "Docs only" } },
+      { answer: { ...report, tests: [] } },
+    ];
+    // The low task's checks run the fast level, which these constraints lack.
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: lowPlan }] : docs),
+      judgeWith("accept"),
+      { constraints: (text) => text.replace("  fast: [lint, test]\n", "") },
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const task = `${ref}/t1`;
+    expect(env.store.state.tasks[task]?.hold).toMatchObject({
+      kind: "attention",
+      reason: "the fast gates are MISCONFIGURED: level-missing",
+    });
+    expect(env.agent.requests.filter((request) => request.agent === "implement")).toHaveLength(1);
+  }, 120_000);
+
+  test("a codemod that fails holds the task before its implement session", async () => {
+    const codemodPlan = {
+      ...plan,
+      plan: { ...plan.plan, tasks: [{ ...plan.plan.tasks[0], codemod: "exit 3" }] },
+    };
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: codemodPlan }] : implement(),
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const task = `${ref}/t1`;
+    expect(env.store.state.tasks[task]?.hold).toMatchObject({
+      kind: "attention",
+      reason: "the codemod exit 3 exited with 3",
+    });
+    expect(env.store.state.tasks[task]?.checkpoint?.node).toBe("implement");
+    expect(env.agent.requests.filter((request) => request.agent === "implement")).toHaveLength(0);
+  }, 120_000);
+
   test("a MISCONFIGURED prove holds the task at once instead of retrying", async () => {
     await using env = await factoryOf(
       (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
