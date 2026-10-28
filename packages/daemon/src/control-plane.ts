@@ -357,8 +357,20 @@ export class ControlPlane {
     if (subject.hold && subject.hold.kind !== "attention" && subject.hold.kind !== "question") {
       throw new CommandError(409, `${ref} is held by ${subject.hold.kind}`);
     }
+    // A task kozod held in Handoff once its fix rounds were spent goes back to Building with its
+    // rounds given back, since the same check would hold it again. Its other holds there, for a
+    // pull request closed unmerged or a check after the merge, keep their own retries.
+    const sendBack =
+      kind === "task" &&
+      subject.stage === "handoff" &&
+      subject.hold?.kind === "attention" &&
+      (await this.fixRoundsSpent(ref));
     if (body.text) await this.note(item, ref, "instruction", body.text);
     await this.clearHold(kind, ref, body.text);
+    if (sendBack) {
+      await this.move("task", ref, "building", "kozo retry");
+      return { message: `retrying ${ref} from Building with its fix rounds given back` };
+    }
     if (kind === "item" && subject.stage === "planning")
       await this.move("item", ref, "triage", "kozo retry");
     return {
@@ -367,6 +379,19 @@ export class ControlPlane {
           ? `retrying ${ref} from its last checkpoint`
           : `retrying ${ref} from its plan`,
     };
+  }
+
+  /** Whether an unmerged task has used every fix round its repository's Charter gives. */
+  private async fixRoundsSpent(ref: string): Promise<boolean> {
+    const task = this.store.state.tasks[ref];
+    const item = task ? this.store.state.items[task.item] : undefined;
+    if (!task || !item || task.merged) return false;
+    const charter = await readCharter(
+      item.repository,
+      this.definition.current.factory.mode,
+      this.store.state,
+    );
+    return charter.ok && task.handoffFixes >= charter.charter.limits.ci_fix_rounds;
   }
 
   /**

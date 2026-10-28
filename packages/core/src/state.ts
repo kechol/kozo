@@ -405,6 +405,15 @@ export function applyEvent(state: FactoryState, event: Event): void {
       if (subject.hold?.kind !== event.data.hold) {
         throw new StateError(`${subject.ref} is not held by ${event.data.hold}`);
       }
+      // A human who settles kozod's hold of a task in Handoff, by a retry or a take, grants it
+      // the fix rounds afresh.
+      if (
+        event.data.target === "task" &&
+        task?.stage === "handoff" &&
+        event.data.hold === "attention" &&
+        event.data.by === "human"
+      )
+        task.handoffFixes = 0;
       subject.hold = null;
       subject.updatedAt = event.ts;
       return;

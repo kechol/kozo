@@ -914,6 +914,61 @@ describe("the minimal path", () => {
     expect(merges()).toEqual([expect.objectContaining({ ref: task })]);
   }, 120_000);
 
+  test("a retry of a task held for spent fix rounds gives the rounds back", async () => {
+    let implemented = 0;
+    const again = (n: number): FakeStep[] => [
+      // One file rewritten each round, so the diff stays within the Charter's files.
+      { write: { "src/round.ts": `export const round = ${n};\n` } },
+      { commit: `fix: round ${n}` },
+      { use: "kozo_gates", input: { level: "full" } },
+      { use: "kozo_note", input: { choice: "Tried again", reason: "The deep gate failed" } },
+      { answer: report },
+    ];
+    // A deep gate that never passes fails every final verification.
+    await using env = await factoryOf(
+      (request) => {
+        if (request.agent === "triage") return [{ answer: plan }];
+        implemented += 1;
+        return implemented === 1 ? implement() : again(implemented);
+      },
+      judgeWith("accept"),
+      {
+        constraints: (text) =>
+          text
+            .replace("gates:\n", "gates:\n  never:\n    run: exit 1\n")
+            .replace("deep: [lint, test]", "deep: [lint, test, never]"),
+      },
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const task = `${ref}/t1`;
+    const reference = { kind: "task", item: { repo: null, number: 1 }, task: 1 } as const;
+    // The Charter's two fix rounds are spent: the first attempt and two more.
+    expect(implemented).toBe(3);
+    // A copy, since matching with an asymmetric matcher may leave it in the object matched.
+    expect(structuredClone(env.store.state.tasks[task])).toMatchObject({
+      stage: "handoff",
+      handoffFixes: 2,
+      hold: { kind: "attention", reason: expect.stringContaining("after 2 fixes") },
+    });
+
+    const retried = await env.control.act(task, reference, "retry", {});
+    expect(retried.message).toContain("fix rounds given back");
+    expect(env.store.state.tasks[task]).toMatchObject({
+      stage: "building",
+      handoffFixes: 0,
+      sentBack: true,
+    });
+    await env.settle();
+    // The task used the rounds it was given again, in new implement sessions, and kozod held
+    // it once more when they failed too.
+    expect(implemented).toBeGreaterThan(3);
+    expect(env.store.state.tasks[task]?.handoffFixes).toBe(2);
+    expect(env.store.state.tasks[task]?.hold?.kind).toBe("attention");
+  }, 240_000);
+
   test("tasks awaiting a merge at the Charter's limit stop new triage and hold waiting tasks", async () => {
     await using env = await factoryOf(
       (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
