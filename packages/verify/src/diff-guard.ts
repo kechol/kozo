@@ -41,8 +41,11 @@ export type DiffGuardResult =
       /** The tip of the base ref, from which the Charter and constraints were read. */
       documentsAt: string;
       files: ChangedFile[];
+      /** The lines changed in the files that count toward the limits, generated ones left out. */
       lines: number;
       limits: { lines: number; files: number };
+      /** The generated files changed and their lines, which the limits leave out. */
+      generated: { files: number; lines: number };
       violations: Violation[];
     }
   | { status: "MISCONFIGURED"; reason: BaseDocumentsProblem }
@@ -72,12 +75,16 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
 
   const diff = await diffCommand(cwd);
   const files = await changedFiles(cwd, diff, mergeBase, headCommit);
-  const lines = files.reduce((sum, file) => sum + file.lines, 0);
+  const isGenerated = globMatcher(constraints.generated);
+  const counted = files.filter((file) => !isGenerated(file.path));
+  const sum = (some: readonly ChangedFile[]) => some.reduce((total, file) => total + file.lines, 0);
+  const lines = sum(counted);
+  const generated = { files: files.length - counted.length, lines: sum(files) - lines };
   const limits = { lines: charter.limits.max_changed_lines, files: charter.limits.max_files };
   const violations: Violation[] = [];
   if (lines > limits.lines) violations.push({ kind: "lines", changed: lines, limit: limits.lines });
-  if (files.length > limits.files) {
-    violations.push({ kind: "files", changed: files.length, limit: limits.files });
+  if (counted.length > limits.files) {
+    violations.push({ kind: "files", changed: counted.length, limit: limits.files });
   }
 
   const inScope = scope && globMatcher(scope);
@@ -140,7 +147,16 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
 
   for (const violation of violations) log(`kozo: ${describe(violation)}\n`);
   const status = violations.length === 0 ? "pass" : "fail";
-  return { status, base: mergeBase, documentsAt: baseTip, files, lines, limits, violations };
+  return {
+    status,
+    base: mergeBase,
+    documentsAt: baseTip,
+    files,
+    lines,
+    limits,
+    generated,
+    violations,
+  };
 }
 
 function scriptsOf(text: string | null): Record<string, string> {
@@ -188,7 +204,9 @@ export function diffGuardLine(result: DiffGuardResult): string {
   if (result.status === "MISCONFIGURED") fields.push(`reason=${result.reason}`);
   if (result.status === "pass" || result.status === "fail") {
     fields.push(`lines=${result.lines}/${result.limits.lines}`);
-    fields.push(`files=${result.files.length}/${result.limits.files}`);
+    fields.push(`files=${result.files.length - result.generated.files}/${result.limits.files}`);
+    if (result.generated.files > 0)
+      fields.push(`generated=${result.generated.files}files,${result.generated.lines}lines`);
     const kinds = [...new Set(result.violations.map((violation) => violation.kind))];
     if (kinds.length > 0) fields.push(`violations=${kinds.join(",")}`);
   }

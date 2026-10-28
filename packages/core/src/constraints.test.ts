@@ -48,7 +48,7 @@ describe("parseConstraints", () => {
     expect(result.value.levels.full).toEqual(["typecheck", "lint", "unit", "integration", "build"]);
   });
 
-  test("services, teardown, ports and prepare may be left out", () => {
+  test("services, teardown, ports, prepare and generated may be left out", () => {
     const result = parseConstraints(
       "version: 1\ntests: ['**/*.test.ts']\ngates:\n  lint:\n    run: bun run check\nlevels:\n  fast: [lint]\n",
     );
@@ -61,6 +61,7 @@ describe("parseConstraints", () => {
         ports: 0,
         prepare: [],
         tests: ["**/*.test.ts"],
+        generated: [],
         gates: { lint: { run: "bun run check" } },
         levels: { fast: ["lint"] },
         prove: [],

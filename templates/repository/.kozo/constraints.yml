@@ -15,6 +15,10 @@ ports: 0
 prepare: []
 # Globs of the repository's test files; kozo tells tests from other files by these alone.
 tests: ["**/*.test.*", "**/test_*.py", "**/*_test.go"]
+# Globs of files a tool writes, which count apart from the Charter's line and file limits; scope,
+# protected paths, review and prove still see them. For example:
+# generated: ["bun.lock", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"]
+generated: []
 gates:
   lint:
     run: echo "replace with the lint command" && exit 1

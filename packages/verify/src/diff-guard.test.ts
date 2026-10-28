@@ -69,6 +69,31 @@ describe("runDiffGuard", () => {
     expect(line).toBe("KOZO_DIFF_GUARD: status=fail lines=14/10 files=4/3 violations=lines,files");
   });
 
+  test("generated files count apart from the limits, and every other check still sees them", async () => {
+    const repo = await gitRepository();
+    await using _ = repo;
+    const base = await repo.commit({
+      [charterPath]: charter,
+      [constraintsPath]: `${constraints}generated: ["**/*.lock", "gen/**"]\n`,
+      "src/cart.ts": "export const cart = 1;\n",
+    });
+    const lock = Array.from({ length: 30 }, (_, index) => `line ${index}`).join("\n");
+    await repo.commit({
+      "src/cart.ts": "export const cart = 2;\n",
+      "bun.lock": `${lock}\n`,
+      "web/yarn.lock": `${lock}\n`,
+      "gen/api.ts": `${lock}\n`,
+    });
+    const passed = await guard(repo.path, base, ["src/**", "gen/**", "**/*.lock"]);
+    expect(passed.result.status).toBe("pass");
+    expect(passed.line).toBe(
+      "KOZO_DIFF_GUARD: status=pass lines=2/10 files=1/3 generated=3files,90lines",
+    );
+    // A generated file outside the scope is still out of it.
+    const scoped = await guard(repo.path, base, ["src/**"]);
+    expect(kinds(scoped.result)).toEqual(["out-of-scope", "out-of-scope", "out-of-scope"]);
+  });
+
   test("files outside the scope are violations", async () => {
     const { repo, base } = await repository();
     await using _ = repo;
