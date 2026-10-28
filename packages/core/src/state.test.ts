@@ -7,7 +7,6 @@ import {
   afterReview,
   applyEvent,
   autonomyLevel,
-  expiredApprovals,
   highestTask,
   inOrder,
   itemStage,
@@ -562,33 +561,6 @@ describe("holds", () => {
       ),
     ]);
     expect(state.tasks["K-1/t1"]).toMatchObject({ stage: "handoff", hold: null });
-  });
-
-  test("an approval held for seven days has expired", () => {
-    const write = eventWriter("2026-10-01T00:00:00.000Z");
-    const item = { item: "K-1" };
-    const state = replay([
-      write(
-        "item.created",
-        { repository: "~/src/app", title: "Fix", source: "local", class: null, approvals: "level" },
-        item,
-      ),
-      write(
-        "hold.set",
-        {
-          target: "item",
-          hold: "approval",
-          by: "kozod",
-          reason: "start approval",
-          approval: "start",
-        },
-        item,
-      ),
-    ]);
-    expect(expiredApprovals(state, new Date("2026-10-07T23:59:00.000Z"))).toEqual([]);
-    expect(expiredApprovals(state, new Date("2026-10-08T00:00:01.000Z")).map((i) => i.ref)).toEqual(
-      ["K-1"],
-    );
   });
 
   test("a hold, a pause or an open dependency keeps a task from starting", () => {

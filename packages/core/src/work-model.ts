@@ -39,15 +39,7 @@ export type ApprovalKind = z.infer<typeof approvalKindSchema>;
 export const startApprovalReason = "start approval";
 export const planApprovalReason = "plan approval";
 
-export const runStateSchema = z.enum([
-  "queued",
-  "running",
-  "paused",
-  "succeeded",
-  "failed",
-  "stopped",
-  "lost",
-]);
+export const runStateSchema = z.enum(["running", "succeeded", "failed", "stopped", "lost"]);
 export type RunState = z.infer<typeof runStateSchema>;
 
 export const riskTierSchema = z.enum(["low", "normal", "high"]);

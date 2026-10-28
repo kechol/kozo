@@ -142,9 +142,8 @@ export class Notifier {
   async remind() {
     const state: FactoryState = this.store.state;
     const now = this.now().getTime();
-    const waiting = [...Object.values(state.items), ...Object.values(state.tasks)].filter(
-      (subject) => subject.hold?.kind === "approval",
-    );
+    // Only an item waits for an approval.
+    const waiting = Object.values(state.items).filter((item) => item.hold?.kind === "approval");
     const keyOf = (subject: (typeof waiting)[number]) => `${subject.ref} ${subject.hold?.since}`;
     // An approval given, or one closed, needs no more reminders.
     const still = new Set(waiting.map(keyOf));

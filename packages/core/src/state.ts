@@ -437,7 +437,6 @@ function applyChange(state: FactoryState, event: Event): void {
         text: event.data.text,
       });
       if (event.data.kind === "rejection" && event.task === null) subject.rejections += 1;
-      // A failed check before the merge, such as CI's, is not a defect of merged code.
       return;
     }
     case "plan.proposed": {
@@ -592,7 +591,8 @@ function applyChange(state: FactoryState, event: Event): void {
   }
 }
 
-// Attention is a task's hold, and also what an item's approval turns into once it expires.
+// What each hold may hold: approval waits on an item's start or plan, and a task's work alone
+// waits for capacity or is taken.
 const holdTargets: Record<HoldKind, readonly ("item" | "task")[]> = {
   approval: ["item"],
   question: ["item", "task"],
@@ -604,8 +604,7 @@ const holdTargets: Record<HoldKind, readonly ("item" | "task")[]> = {
 };
 
 const runEdges: Partial<Record<RunState, readonly RunState[]>> = {
-  running: ["paused", "succeeded", "failed", "stopped", "lost"],
-  paused: ["running", "stopped"],
+  running: ["succeeded", "failed", "stopped", "lost"],
 };
 
 export function isRunOver(state: RunState): boolean {
@@ -715,16 +714,6 @@ export const waitsOnOwner = (
   hold: Hold | null,
 ): hold is Hold & { kind: "question" | "attention" } =>
   hold?.kind === "question" || hold?.kind === "attention";
-
-export const approvalExpiryDays = 7;
-
-/** The items whose approval hold has waited `approvalExpiryDays` or longer at `now`. */
-export function expiredApprovals(state: FactoryState, now: Date): ItemState[] {
-  const limit = now.getTime() - approvalExpiryDays * dayMs;
-  return Object.values(state.items).filter(
-    (item) => item.hold?.kind === "approval" && Date.parse(item.hold.since) <= limit,
-  );
-}
 
 /** The items in the order kozod starts their work, and their tasks in that order, by plan. */
 export function inOrder(state: FactoryState): { items: ItemState[]; tasks: TaskState[] } {

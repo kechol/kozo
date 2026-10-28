@@ -32,8 +32,6 @@ import { hasWorktree, taskBranch, worktreePath } from "./worktrees.ts";
 
 type Body<V extends Verb> = z.infer<(typeof verbBodySchemas)[V]>;
 
-/** The reason of the paused hold that `kozo take` sets, which `kozo return` alone clears. */
-
 const normalTitle = (title: string) => title.trim().replace(/\s+/g, " ").toLowerCase();
 
 /**

@@ -202,10 +202,7 @@ export function costToday(db: Database, now: Date): number {
 
 export function activeRuns(db: Database): number {
   return (
-    db
-      .query<{ n: number }, []>(
-        "select count(*) as n from runs where state in ('running', 'paused')",
-      )
-      .get()?.n ?? 0
+    db.query<{ n: number }, []>("select count(*) as n from runs where state = 'running'").get()
+      ?.n ?? 0
   );
 }
