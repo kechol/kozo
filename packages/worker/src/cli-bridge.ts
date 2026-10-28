@@ -97,7 +97,7 @@ export function listenBridge(
 }
 
 /** Sends one request to the worker's bridge and returns its value. */
-async function ask(path: string, token: string, request: BridgeRequest): Promise<unknown> {
+export async function ask(path: string, token: string, request: BridgeRequest): Promise<unknown> {
   const decoder = new TextDecoder();
   let received = "";
   let out: Outbox | null = null;
