@@ -284,11 +284,23 @@ export class Runner implements RunnerOps {
             ? "kozod stopped"
             : "a human stopped it";
 
+    // A human's stop ends a command with CommandStopped; the next run resumes at `node`.
+    const stoppedAt = async (node: typeof start, error: unknown) => {
+      if (!(error instanceof CommandStopped)) throw error;
+      const now = this.store.state.tasks[taskRef];
+      if (now && !isClosed(now.stage)) await blueprintRun.checkpoint(node);
+      return await blueprintRun.stopHere("stopped", stopReason(now));
+    };
+
     // A run that starts past prepare resumes a prepared worktree, whose services may have
     // stopped since.
     if (blueprintNodes.indexOf(start) > blueprintNodes.indexOf("prepare")) {
-      const stopped = await startServicesAgain(blueprintRun);
-      if (stopped) return stopped;
+      try {
+        const ended = await startServicesAgain(blueprintRun);
+        if (ended) return ended;
+      } catch (error) {
+        return await stoppedAt(start, error);
+      }
     }
 
     // Every node runs: verify-app decides from the risk tier, which a blueprint never lowers.
@@ -305,10 +317,7 @@ export class Runner implements RunnerOps {
         const ended = await nodeSteps[node](blueprintRun, current);
         if (ended) return ended;
       } catch (error) {
-        if (!(error instanceof CommandStopped)) throw error;
-        const now = this.store.state.tasks[taskRef];
-        if (now && !isClosed(now.stage)) await blueprintRun.checkpoint(node);
-        return await blueprintRun.stopHere("stopped", stopReason(now));
+        return await stoppedAt(node, error);
       }
     }
     return await blueprintRun.stopHere("succeeded");

@@ -2276,6 +2276,62 @@ test("one unit is still counted", () => {
     expect(env.store.state.runs[resumed]?.state).toBe("stopped");
   }, 120_000);
 
+  test("a take while a resumed run starts its services again stops the run where it resumed", async () => {
+    await using marks = await tempDirectory();
+    const mark = join(marks.path, "resumed");
+    const slow = "sleep 43";
+    const slowServices = "sleep 53";
+    const lowPlan = {
+      ...plan,
+      plan: {
+        ...plan.plan,
+        risk: "low",
+        tasks: [{ ...plan.plan.tasks[0], scope: ["docs/**"] }],
+      },
+    };
+    const docs: FakeStep[] = [
+      { write: { "docs/stock.md": "Stock labels say Only N left from 1 to 3 units.\n" } },
+      { commit: "docs: describe the low stock label" },
+      { use: "kozo_gates", input: { level: "full" } },
+      { use: "kozo_note", input: { choice: "Documented it", reason: "Docs only" } },
+      { answer: { ...report, tests: [] } },
+    ];
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: lowPlan }] : docs),
+      judgeWith("accept"),
+      {
+        constraints: (text) =>
+          text
+            .replace(
+              "version: 1\n",
+              `version: 1\nservices: ["if [ -f '${mark}' ]; then ${slowServices}; fi"]\n`,
+            )
+            .replace("gates:\n", `gates:\n  slow:\n    run: ${slow}\n`)
+            .replace("fast: [lint, test]", "fast: [slow, lint, test]"),
+      },
+    );
+    const running = (pattern: string) =>
+      Bun.spawnSync(["pgrep", "-f", pattern]).stdout.toString().trim() !== "";
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    env.scheduler.tick();
+    await eventually(() => running(slow), "the slow gate to start");
+    const task = `${ref}/t1`;
+    const reference = { kind: "task", item: { repo: null, number: 1 }, task: 1 } as const;
+    await env.control.act(task, reference, "take", {});
+
+    await Bun.write(mark, "");
+    await env.control.act(task, reference, "return", { text: "Looked, changed nothing" });
+    env.scheduler.tick();
+    await eventually(() => running(slowServices), "the services to start again");
+    const resumed = env.store.state.tasks[task]?.runs.at(-1) ?? "";
+    await env.control.act(task, reference, "take", {});
+    expect(running(slowServices)).toBe(false);
+    expect(env.store.state.runs[resumed]?.state).toBe("stopped");
+    expect(env.store.state.tasks[task]?.checkpoint?.node).toBe("verify-deterministic");
+  }, 120_000);
+
   test("kozo say --ask answers from the records in an explorer run and leaves the task as it was", async () => {
     const prompts: string[] = [];
     const accepting = judgeWith("accept");
