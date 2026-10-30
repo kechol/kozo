@@ -1,12 +1,13 @@
 import { signal } from "@preact/signals";
+import { useEffect, useRef } from "preact/hooks";
 import { AddItem } from "./add-item.tsx";
 import type { Api } from "./api.ts";
 import { Board } from "./board.tsx";
 import { DetailView } from "./detail.tsx";
-import { routeOf } from "./format.ts";
+import { routeOf, titleOf } from "./format.ts";
 import { Header } from "./header.tsx";
 import { Inbox } from "./inbox.tsx";
-import { notice, status } from "./store.ts";
+import { inbox, notice, status } from "./store.ts";
 
 const route = signal(routeOf(window.location.hash));
 window.addEventListener("hashchange", () => {
@@ -15,27 +16,49 @@ window.addEventListener("hashchange", () => {
 
 export function App({ api }: { api: Api }) {
   const shown = notice.value;
-  const page = route.value.page;
+  const current = route.value;
+  const waiting = inbox.value.length;
+  const main = useRef<HTMLElement>(null);
+  const first = useRef(true);
+
+  useEffect(() => {
+    document.title = titleOf(current, waiting);
+  }, [current, waiting]);
+
+  // A new view takes focus, so that keyboard and screen reader users start reading it.
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    main.current?.focus();
+  }, [current]);
+
   return (
     <>
-      <Header api={api} page={page} />
+      <Header api={api} page={current.page} />
       {shown ? (
         <p role="status" class={shown.failed ? "notice failed" : "notice"}>
           {shown.text}
         </p>
       ) : null}
-      <main>
-        {route.value.page === "detail" ? (
-          <DetailView key={route.value.ref} api={api} refName={route.value.ref} />
-        ) : page === "board" ? (
+      <main ref={main} tabIndex={-1}>
+        {current.page === "detail" ? (
+          <DetailView key={current.ref} api={api} refName={current.ref} />
+        ) : current.page === "board" ? (
           <>
-            <h2>Board</h2>
+            <div class="page-head">
+              <h1>Board</h1>
+            </div>
             {status.value?.mode === "local" ? <AddItem api={api} /> : null}
             <Board api={api} />
           </>
         ) : (
           <>
-            <h2>Inbox</h2>
+            <div class="page-head">
+              <h1>Inbox</h1>
+              {waiting > 0 ? <p>{waiting} waiting for you, oldest first</p> : null}
+            </div>
             <Inbox api={api} />
           </>
         )}

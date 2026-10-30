@@ -9,7 +9,16 @@ import {
 import { inboxActions } from "./actions.tsx";
 import { Api, ApiError, takeSession } from "./api.ts";
 import { detailActions } from "./detail.tsx";
-import { ago, eventLine, isClosedStage, kindOf, moveTarget, routeOf, stages } from "./format.ts";
+import {
+  ago,
+  eventLine,
+  isClosedStage,
+  kindOf,
+  moveTarget,
+  routeOf,
+  stages,
+  titleOf,
+} from "./format.ts";
 import { Icon, iconNames, toneIcon } from "./icons.tsx";
 import { type Tone, toneOf, tones } from "./tone.ts";
 
@@ -97,6 +106,12 @@ describe("format", () => {
     const closed: string[] = stageSchema.options.filter((stage) => isClosed(stage));
     expect(listed).toEqual(stageSchema.options);
     expect<string[]>(listed.filter(isClosedStage)).toEqual(closed);
+  });
+
+  test("titles the tab with the view, and with how many wait while any do", () => {
+    expect(titleOf({ page: "inbox" }, 3)).toBe("(3) Inbox · kozo");
+    expect(titleOf({ page: "board" }, 0)).toBe("Board · kozo");
+    expect(titleOf({ page: "detail", ref: "K-5/t1" }, 1)).toBe("(1) K-5/t1 · kozo");
   });
 
   test("routes the inbox, the board and a reference's detail", () => {

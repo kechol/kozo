@@ -54,9 +54,9 @@ export function Board({ api }: { api: Api }) {
           const column = cards.map((card) => card.ref);
           return (
             <section key={stage} class="column" aria-label={stage}>
-              <h3>
-                {stage} <span class="count">{cards.length}</span>
-              </h3>
+              <h2>
+                {stage} <span class="column-count">{cards.length}</span>
+              </h2>
               {shown.map((card, index) =>
                 showItems ? (
                   <ItemCard

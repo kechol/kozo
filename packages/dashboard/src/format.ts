@@ -29,6 +29,12 @@ export function routeOf(hash: string): Route {
 
 export const detailHash = (ref: string) => `#/ref/${encodeURIComponent(ref)}`;
 
+/** The tab's title for a view, with how many wait in the inbox, so a background tab shows it. */
+export function titleOf(route: Route, waiting: number): string {
+  const view = route.page === "detail" ? route.ref : route.page === "board" ? "Board" : "Inbox";
+  return `${waiting > 0 ? `(${waiting}) ` : ""}${view} · kozo`;
+}
+
 /** The kind of a reference as kozo writes them: `r-0042`, `K-12/t1` or `app#212/t2`, else an item. */
 export function kindOf(ref: string): "item" | "task" | "run" {
   if (/^r-\d+$/.test(ref)) return "run";

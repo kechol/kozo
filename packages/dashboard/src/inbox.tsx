@@ -28,7 +28,7 @@ export function Inbox({ api }: { api: Api }) {
             </a>
             <Badge tone={toneOf("waiting", row.waiting)}>{label[row.waiting] ?? row.waiting}</Badge>
           </div>
-          <h3>{row.title}</h3>
+          <h2>{row.title}</h2>
           {row.reason ? <p class="reason">{row.reason}</p> : null}
           {row.waiting === "merge" ? (
             <p class="hint">Read the diff and merge the task branch yourself; kozo never merges.</p>

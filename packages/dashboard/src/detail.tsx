@@ -135,7 +135,7 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
     <article class="detail">
       <header class="detail-head">
         <p class="ref">{refName}</p>
-        <h2>{String(subject.title ?? subject.goal ?? `${subject.agent} run`)}</h2>
+        <h1>{String(subject.title ?? subject.goal ?? `${subject.agent} run`)}</h1>
         <p class="row meta">
           <span>{String(subject.shown_stage ?? subject.stage ?? subject.state)}</span>
           {hold ? <Badge tone={toneOf("hold", hold)}>{hold}</Badge> : null}
@@ -161,7 +161,7 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
 function PlanView({ plan, title }: { plan: Plan; title: string }) {
   return (
     <section class="card">
-      <h3>{title}</h3>
+      <h2>{title}</h2>
       <p class="meta">
         {plan.class}, {plan.risk} risk
       </p>
@@ -200,7 +200,7 @@ function ItemBody({ detail }: { detail: Detail }) {
       {item.plan ? <PlanView plan={item.plan} title="Plan" /> : null}
       {detail.tasks && detail.tasks.length > 0 ? (
         <section class="card">
-          <h3>Tasks</h3>
+          <h2>Tasks</h2>
           <ul class="plain">
             {detail.tasks.map((task) => (
               <li key={String(task.ref)} class="row">
@@ -245,7 +245,7 @@ function TaskBody({ api, refName, detail }: { api: Api; refName: string; detail:
   return (
     <>
       <section class="card">
-        <h3>Done when</h3>
+        <h2>Done when</h2>
         <ul>
           {task.done_when.map((condition) => (
             <li key={condition}>{condition}</li>
@@ -256,7 +256,7 @@ function TaskBody({ api, refName, detail }: { api: Api; refName: string; detail:
       </section>
       {records ? (
         <section class="card">
-          <h3>Blueprint{records.latest ? ` in ${records.latest}` : ""}</h3>
+          <h2>Blueprint{records.latest ? ` in ${records.latest}` : ""}</h2>
           <ol class="nodes">
             {records.nodes.map((node) => (
               <li
@@ -272,7 +272,7 @@ function TaskBody({ api, refName, detail }: { api: Api; refName: string; detail:
       ) : null}
       {records?.report ? (
         <section class="card">
-          <h3>Run report of {records.report.run}</h3>
+          <h2>Run report of {records.report.run}</h2>
           <p>{String(records.report.report.summary)}</p>
           <ul>
             {records.report.report.changes.map((change) => (
@@ -295,10 +295,10 @@ function TaskBody({ api, refName, detail }: { api: Api; refName: string; detail:
       ) : null}
       {records?.review ? (
         <section class="card">
-          <h3>
+          <h2>
             Review: {String(records.review.verdict.verdict)}{" "}
             <span class="meta">in {records.review.run}</span>
-          </h3>
+          </h2>
           <p>{String(records.review.verdict.summary)}</p>
           <ul>
             {records.review.verdict.findings.map((finding) => (
@@ -312,10 +312,10 @@ function TaskBody({ api, refName, detail }: { api: Api; refName: string; detail:
       ) : null}
       {records?.verify ? (
         <section class="card">
-          <h3>
+          <h2>
             Verify: {String(records.verify.verdict.result)}{" "}
             <span class="meta">in {records.verify.run}</span>
-          </h3>
+          </h2>
           <p>{String(records.verify.verdict.summary)}</p>
           <ul class="plain">
             {records.verify.verdict.conditions.map((condition) => (
@@ -339,7 +339,7 @@ function TaskBody({ api, refName, detail }: { api: Api; refName: string; detail:
       ) : null}
       {records && records.decisions.length > 0 ? (
         <section class="card">
-          <h3>Decision log</h3>
+          <h2>Decision log</h2>
           {records.decisions.map((log) => (
             <div key={log.run}>
               <p class="meta">{log.run}</p>
@@ -349,7 +349,7 @@ function TaskBody({ api, refName, detail }: { api: Api; refName: string; detail:
         </section>
       ) : null}
       <section class="card">
-        <h3>Diff</h3>
+        <h2>Diff</h2>
         {diff ? (
           <>
             <DiffView text={diff.diff} />
@@ -428,7 +428,7 @@ function Evidence({ api, run, path }: { api: Api; run: string; path: string }) {
 function Runs({ runs }: { runs: Row[] }) {
   return (
     <section class="card">
-      <h3>Runs</h3>
+      <h2>Runs</h2>
       <ul class="plain">
         {runs.map((run) => (
           <li key={String(run.ref)} class="row">
@@ -448,7 +448,7 @@ function Runs({ runs }: { runs: Row[] }) {
 function Timeline({ events }: { events: Event[] }) {
   return (
     <section class="card">
-      <h3>Events</h3>
+      <h2>Events</h2>
       {events.length === 0 ? <p class="empty">No events yet.</p> : null}
       <ol class="timeline">
         {events.map((event) => (
