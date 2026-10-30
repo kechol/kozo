@@ -184,7 +184,7 @@ describe("EventStore", () => {
     const last = text.pop() ?? "";
     await Bun.write(
       home.eventsLog,
-      [...text, last.replace('"to":"complete"', '"to":"handoff"')].join("\n"),
+      `${[...text, last.replace('"to":"complete"', '"to":"handoff"')].join("\n")}\n`,
     );
     await expect(EventStore.open(home)).rejects.toThrow("the event logs do not replay");
   });
@@ -209,6 +209,17 @@ describe("EventStore", () => {
     expect(await Bun.file(home.eventsLog).text()).toBe(whole);
     await reopened.append({ ...created, item: "K-2" });
     reopened.close();
+    expect((await lines(home.eventsLog)).map((event) => event.seq)).toEqual([0, 1, 2]);
+
+    // A line whole but for its newline was cut short too, and was never applied.
+    const written = await Bun.file(home.eventsLog).text();
+    await Bun.write(home.eventsLog, written.slice(0, -1));
+    const quiet = spyOn(console, "error").mockImplementation(() => {});
+    const again = await EventStore.open(home);
+    quiet.mockRestore();
+    expect(again.state.items["K-2"]).toBeUndefined();
+    await again.append({ ...created, item: "K-3" });
+    again.close();
     expect((await lines(home.eventsLog)).map((event) => event.seq)).toEqual([0, 1, 2]);
 
     const kept = await Bun.file(home.eventsLog).text();
