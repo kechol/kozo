@@ -72,7 +72,7 @@ export async function completeTask(runner: Runner, taskRef: string): Promise<voi
     deleteBranch: false,
   });
   const owner = runner.store.state.items[item.ref];
-  if (!owner || !owner.tasks.every(closed)) return;
+  if (!owner?.tasks.every(closed)) return;
   // A defect sends the item straight back to Triage, so it never looks complete, and its
   // Issue is never closed, in between.
   const defective = result.status !== "pass";
