@@ -396,11 +396,12 @@ export class Runner implements RunnerOps {
     }
     const reason = `${taskRef} cannot be done within its scope, so the item is split again: ${question}`;
     for (const ref of stopped) {
-      if (ref !== taskRef) void this.stopWork(ref);
       const task = this.store.state.tasks[ref];
       if (!task) continue;
       await clearHold(this.store, { item: item.ref, task: ref });
       await this.moveTask(task, "cancelled", null, reason);
+      // As a close does: the run stops for the cancel, and the worktree goes once it has ended.
+      if (ref !== taskRef) await this.stopWork(ref);
       await this.release(ref, true);
     }
     // A second block while the item is already back in Planning only cancels its own tasks;
