@@ -1,15 +1,10 @@
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import {
-  type ItemState,
-  type RunReport,
-  runFiles,
-  type TaskState,
-  type VerdictFile,
-} from "@kozo/core";
+import type { ItemState, TaskState } from "@kozo/core";
 import { GitError, git } from "@kozo/verify";
 import { handoffReportPath } from "./item-file.ts";
 import type { Runner } from "./runner.ts";
+import { type RunRecord, runRecords } from "./task-records.ts";
 import { taskBranch } from "./worktrees.ts";
 
 /** What the handoff report of a task is made of, read from its runs and its worktree. */
@@ -17,10 +12,8 @@ export interface HandoffInputs {
   itemRef: string;
   item: Pick<ItemState, "title" | "tasks"> | undefined;
   task: TaskState;
-  /** The run report, verdicts and decision log of each implement run, oldest first. */
-  reports: (RunReport | null)[];
-  verdicts: VerdictFile[];
-  decisionLogs: string[];
+  /** What each implement run left, oldest first. */
+  runs: RunRecord[];
   /** `git diff --stat` of the task branch against its base. */
   stat: string;
   branch: string;
@@ -33,20 +26,21 @@ export function handoffReport({
   itemRef,
   item,
   task,
-  reports,
-  verdicts,
-  decisionLogs,
+  runs,
   stat,
   branch,
   reproduce,
 }: HandoffInputs): string {
-  const report = reports.findLast((entry) => entry !== null) ?? null;
+  const report = runs.findLast((run) => run.report !== null)?.report ?? null;
   const outOfScope = report?.out_of_scope ?? [];
   const verdict = {
-    review: verdicts.findLast((entry) => entry.review)?.review,
-    verify: verdicts.findLast((entry) => entry.verify)?.verify,
+    review: runs.findLast((run) => run.verdict.review)?.verdict.review,
+    verify: runs.findLast((run) => run.verdict.verify)?.verdict.verify,
   };
-  const decisions = decisionLogs.join("").trim();
+  const decisions = runs
+    .map((run) => run.decisions)
+    .filter(Boolean)
+    .join("\n");
   return [
     `# ${task.ref}: ${task.goal}`,
     "",
@@ -96,29 +90,7 @@ export async function writeHandoffReport(
   reproduce: boolean,
 ) {
   // A task resumed in a new run left its report and verdicts in the runs before it.
-  const runs = task.runs
-    .filter((ref) => runner.store.state.runs[ref]?.agent === "implement")
-    .map((ref) => runFiles(runner.home, ref));
-  const reports: (RunReport | null)[] = [];
-  const verdicts: VerdictFile[] = [];
-  const decisionLogs: string[] = [];
-  for (const files of runs) {
-    reports.push(
-      await Bun.file(files.report)
-        .json()
-        .catch(() => null),
-    );
-    verdicts.push(
-      await Bun.file(files.verdict)
-        .json()
-        .catch(() => ({})),
-    );
-    decisionLogs.push(
-      await Bun.file(files.decisions)
-        .text()
-        .catch(() => ""),
-    );
-  }
+  const runs = await runRecords(runner.home, runner.store.state, task);
   const stat = await git(worktree, ["diff", "--stat", `${base}...HEAD`]).catch((error) =>
     error instanceof GitError ? "" : Promise.reject(error),
   );
@@ -126,9 +98,7 @@ export async function writeHandoffReport(
     itemRef,
     item: runner.store.state.items[itemRef],
     task,
-    reports,
-    verdicts,
-    decisionLogs,
+    runs,
     stat,
     branch: taskBranch(runner.store.factoryId, task.ref),
     reproduce,

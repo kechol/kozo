@@ -12,14 +12,20 @@ describe("handoffReport", () => {
       itemRef: "K-1",
       item: { title: "Low stock", tasks: ["K-1/t1"] },
       task,
-      reports: [
-        { summary: "first try", changes: [], tests: [], out_of_scope: [] },
-        null,
-      ] as Parameters<typeof handoffReport>[0]["reports"],
-      verdicts: [{}, { review: { verdict: "accept", summary: "Fine." } }] as Parameters<
-        typeof handoffReport
-      >[0]["verdicts"],
-      decisionLogs: ["- kept one function\n", ""],
+      runs: [
+        {
+          run: "r-0001",
+          report: { summary: "first try", changes: [], tests: [], out_of_scope: [] },
+          verdict: {},
+          decisions: "- kept one function",
+        },
+        {
+          run: "r-0002",
+          report: null,
+          verdict: { review: { verdict: "accept", summary: "Fine." } },
+          decisions: "",
+        },
+      ] as Parameters<typeof handoffReport>[0]["runs"],
       stat: " src/stock.ts | 2 +-\n",
       branch: "kozo/k3x9q2/K-1-t1",
       reproduce: true,
