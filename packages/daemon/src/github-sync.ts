@@ -657,11 +657,14 @@ Part of #${issue}`;
       this.report(`kozod: ${ref} is not taken: ${charter.reason}`);
       return;
     }
-    const registered = this.store.state.repositories[github]?.registeredAt ?? "";
+    const registered = this.store.state.repositories[github]?.registeredAt;
     const permission = await this.github.permission(github, issue.author);
-    // Compared as times, since GitHub's timestamps and kozod's differ in their fractions.
+    // Compared as times, since GitHub's timestamps and kozod's differ in their fractions. With
+    // no registration to compare with, no Issue is trusted.
     const trusted =
-      writers.includes(permission) && Date.parse(issue.createdAt) >= Date.parse(registered);
+      registered !== undefined &&
+      writers.includes(permission) &&
+      Date.parse(issue.createdAt) >= Date.parse(registered);
     await this.control.admit(
       ref,
       { repository: path, class: null, title: issue.title.trim(), body: issue.body },
