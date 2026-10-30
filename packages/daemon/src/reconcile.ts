@@ -152,9 +152,11 @@ export class Reconciler {
       );
       return;
     }
-    const pulled = await this.mergeCommitOf(repository, branch);
+    const contained = await contains(repository, `refs/heads/${branch}`, ref);
+    // The pull request's merge commit is only needed to find a merge or to record one.
+    const pulled = task.merged && contained ? null : await this.mergeCommitOf(repository, branch);
     const viaPull = pulled !== null && (await isAncestor(repository, pulled, ref));
-    if (viaPull || (await contains(repository, `refs/heads/${branch}`, ref))) {
+    if (viaPull || contained) {
       if (!task.merged) {
         await this.store.append({
           type: "branch.merged",
