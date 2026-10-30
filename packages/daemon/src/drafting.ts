@@ -32,6 +32,11 @@ const draftRounds = 2;
 /** A plan as the triage and plan agents write it, without the fields kozod adds. */
 const draftOf = ({ version: _version, item: _item, ...draft }: Plan) => draft;
 
+const holdForPlanApproval = (runner: Runner, itemRef: string) =>
+  hold(runner.store, { item: itemRef, task: null }, "approval", planApprovalReason, {
+    approval: "plan",
+  });
+
 /** Runs `agent` on the item in a read-only checkout until kozod takes a draft or holds it. */
 export async function draftItem(runner: Runner, itemRef: string, agent: "triage" | "plan") {
   const item = runner.store.state.items[itemRef];
@@ -59,10 +64,7 @@ export async function draftItem(runner: Runner, itemRef: string, agent: "triage"
       }
       if (drafted.plan && agent === "triage")
         await afterTriage(runner, itemRef, drafted.plan, repository.charter, file.class);
-      else if (drafted.plan)
-        await hold(runner.store, { item: itemRef, task: null }, "approval", planApprovalReason, {
-          approval: "plan",
-        });
+      else if (drafted.plan) await holdForPlanApproval(runner, itemRef);
       return;
     }
   } catch (error) {
@@ -156,7 +158,7 @@ async function draftPlan(
       await runner.hold(itemRef, null, "attention", `${agent} ${describe(result)}`, run);
     await runner.endRun(
       run,
-      result.status === "lost" ? "lost" : result.status === "stopped" ? "stopped" : "failed",
+      result.status === "lost" || result.status === "stopped" ? result.status : "failed",
       describe(result),
     );
     return { plan: null };
@@ -237,10 +239,7 @@ async function afterTriage(
     { from: "triage" },
   );
   // A feature's plan agent runs from Planning without a hold, and its plan then waits.
-  if (!feature)
-    await hold(runner.store, { item: itemRef, task: null }, "approval", planApprovalReason, {
-      approval: "plan",
-    });
+  if (!feature) await holdForPlanApproval(runner, itemRef);
 }
 
 /**
