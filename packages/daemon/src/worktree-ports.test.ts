@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { tempDirectory } from "@kozo/testing";
-import { takePorts, worktreeEnvironment } from "./worktree-ports.ts";
+import { releasePorts, takePorts, worktreeEnvironment } from "./worktree-ports.ts";
 
 describe("takePorts", () => {
   test("takes distinct free ports once and keeps them for the worktree's life", async () => {
@@ -27,6 +27,15 @@ describe("takePorts", () => {
     const all = taken.flat();
     expect(all).toHaveLength(60);
     expect(new Set(all).size).toBe(60);
+  });
+
+  test("forgets a released worktree's ports", async () => {
+    await using dir = await tempDirectory();
+    const worktree = join(dir.path, "shop-K-1-t1");
+    await takePorts(worktree, 2);
+    await releasePorts(worktree);
+    expect(await Bun.file(`${worktree}.ports`).exists()).toBe(false);
+    expect(await worktreeEnvironment(worktree)).toEqual({ KOZO_TASK_ID: "shop-k-1-t1" });
   });
 
   test("names a worktree without ports, in letters a container project accepts", async () => {

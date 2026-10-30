@@ -2,6 +2,7 @@ import { mkdir, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { type KozoHome, parseReference, sha256 } from "@kozo/core";
 import { branchTip, GitError, git, isAncestor } from "@kozo/verify";
+import { releasePorts } from "./worktree-ports.ts";
 
 function taskParts(task: string) {
   const reference = parseReference(task);
@@ -134,7 +135,7 @@ export async function releaseTask(
   }
   await git(repository, ["worktree", "prune"]);
   await rm(`${worktree}.prepared`, { force: true });
-  await rm(`${worktree}.ports`, { force: true });
+  await releasePorts(worktree);
   if (deleteBranch && (await branchTip(repository, branch)) !== null) {
     await git(repository, ["branch", "-D", branch]);
   }

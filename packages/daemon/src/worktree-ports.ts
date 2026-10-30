@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import { basename } from "node:path";
 
 /** Where kozod keeps a worktree's ports: beside it, not in it, to keep it clean. */
@@ -30,6 +31,12 @@ export async function takePorts(worktree: string, count: number): Promise<number
     for (const listener of listeners) listener.stop(true);
   }
   return ports;
+}
+
+/** Gives the ports of a worktree that is gone back to this kozod, which may hand them out again. */
+export async function releasePorts(worktree: string): Promise<void> {
+  for (const port of await readPorts(worktree)) handedOut.delete(port);
+  await rm(portsFile(worktree), { force: true });
 }
 
 async function readPorts(worktree: string): Promise<number[]> {
