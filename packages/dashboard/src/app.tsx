@@ -7,7 +7,8 @@ import { DetailView } from "./detail.tsx";
 import { routeOf, titleOf } from "./format.ts";
 import { Header } from "./header.tsx";
 import { Inbox } from "./inbox.tsx";
-import { inbox, notice, status } from "./store.ts";
+import { inbox, status } from "./store.ts";
+import { Toasts } from "./toasts.tsx";
 
 const route = signal(routeOf(window.location.hash));
 window.addEventListener("hashchange", () => {
@@ -15,7 +16,6 @@ window.addEventListener("hashchange", () => {
 });
 
 export function App({ api }: { api: Api }) {
-  const shown = notice.value;
   const current = route.value;
   const waiting = inbox.value.length;
   const main = useRef<HTMLElement>(null);
@@ -37,11 +37,6 @@ export function App({ api }: { api: Api }) {
   return (
     <>
       <Header api={api} page={current.page} />
-      {shown ? (
-        <p role="status" class={shown.failed ? "notice failed" : "notice"}>
-          {shown.text}
-        </p>
-      ) : null}
       <main ref={main} tabIndex={-1}>
         {current.page === "detail" ? (
           <DetailView key={current.ref} api={api} refName={current.ref} />
@@ -63,6 +58,7 @@ export function App({ api }: { api: Api }) {
           </>
         )}
       </main>
+      <Toasts />
     </>
   );
 }

@@ -20,6 +20,7 @@ import {
   titleOf,
 } from "./format.ts";
 import { Icon, iconNames, toneIcon } from "./icons.tsx";
+import { dismiss, notify, toastLimit, toasts } from "./store.ts";
 import { type Tone, toneOf, tones } from "./tone.ts";
 
 const code = "ab".repeat(32);
@@ -247,5 +248,17 @@ describe("Icon", () => {
     const all: Tone[] = ["info", "progress", "warning", "negative", "positive", "done", "neutral"];
     for (const tone of all) expect(iconNames).toContain(toneIcon[tone]);
     expect(new Set(Object.values(toneIcon)).size).toBe(all.length);
+  });
+});
+
+describe("toasts", () => {
+  test("keeps the newest few, and a failure until it is dismissed", () => {
+    toasts.value = [];
+    const failure = notify("kozod refused it", true);
+    for (const text of ["one", "two", "three"]) notify(text, false);
+    expect(toasts.value).toHaveLength(toastLimit);
+    expect(toasts.value.map((toast) => toast.text)).toEqual(["kozod refused it", "two", "three"]);
+    dismiss(failure);
+    expect(toasts.value.map((toast) => toast.text)).toEqual(["two", "three"]);
   });
 });

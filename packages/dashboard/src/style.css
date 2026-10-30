@@ -481,18 +481,6 @@ select:focus-visible {
   color: var(--negative-fg);
 }
 
-.notice {
-  max-width: var(--width-page);
-  margin: var(--space-3) auto 0;
-  padding: var(--space-2) var(--space-4);
-  border-left: 3px solid var(--positive-solid);
-  background: var(--surface);
-}
-
-.notice.failed {
-  border-color: var(--negative-solid);
-}
-
 .card {
   background: var(--surface);
   border: 1px solid var(--divider);
@@ -840,4 +828,54 @@ pre.text {
 
 .unmet {
   color: var(--negative-fg);
+}
+
+.toasts {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: var(--layer-toast);
+  display: grid;
+  gap: var(--space-2);
+  width: min(380px, calc(100vw - 2 * var(--space-4)));
+}
+
+.toast-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-floating);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+
+.toast-mark {
+  display: flex;
+  margin-top: 1px;
+  color: var(--positive-solid);
+}
+
+.toast.failed .toast-mark {
+  color: var(--negative-solid);
+}
+
+.toast p {
+  flex: 1;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.toast button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin-top: -3px;
 }

@@ -7,8 +7,40 @@ export const items = signal<ItemRow[]>([]);
 export const tasks = signal<TaskRow[]>([]);
 /** Why the last refresh failed, such as kozod being down, or null. */
 export const problem = signal<string | null>(null);
-/** What the last action answered, shown until the next one. */
-export const notice = signal<{ text: string; failed: boolean } | null>(null);
+/** What an action answered, as the toast region shows it. */
+export interface Toast {
+  id: number;
+  text: string;
+  failed: boolean;
+}
+
+/**
+ * The toasts shown now, oldest first, at most `toastLimit` of them; past it the oldest answer
+ * goes first, and a failure only when nothing else is left.
+ */
+export const toasts = signal<Toast[]>([]);
+
+export const toastLimit = 3;
+/** How long an answer that succeeded stays; a failure stays until it is dismissed. */
+export const toastMs = 5000;
+let lastToast = 0;
+
+/** Shows an action's answer as a toast. */
+export function notify(text: string, failed: boolean): number {
+  const id = ++lastToast;
+  const next = [...toasts.value, { id, text, failed }];
+  while (next.length > toastLimit) {
+    const oldest = next.findIndex((toast) => !toast.failed);
+    next.splice(oldest === -1 ? 0 : oldest, 1);
+  }
+  toasts.value = next;
+  if (!failed) setTimeout(() => dismiss(id), toastMs);
+  return id;
+}
+
+export function dismiss(id: number): void {
+  toasts.value = toasts.value.filter((toast) => toast.id !== id);
+}
 
 /** Reads the status and every list once; a failure keeps the last good values. */
 export async function refresh(api: Api): Promise<void> {
@@ -49,10 +81,10 @@ export function poll(api: Api, ms = 3000): () => void {
 /** Runs one action, shows its answer and refreshes, so the page shows what it changed. */
 export async function run(api: Api, action: () => Promise<{ message: string }>): Promise<boolean> {
   try {
-    notice.value = { text: (await action()).message, failed: false };
+    notify((await action()).message, false);
     return true;
   } catch (error) {
-    notice.value = { text: (error as Error).message, failed: true };
+    notify((error as Error).message, true);
     return false;
   } finally {
     await refresh(api);
