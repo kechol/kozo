@@ -95,13 +95,6 @@ export class RunRecords {
     for (const session of this.sessions.values()) session.stop();
   }
 
-  /** Stops a run's session now; the run ends as stopped. Returns whether one was running. */
-  private stopSession(run: string): boolean {
-    const session = this.sessions.get(run);
-    session?.stop();
-    return session !== undefined;
-  }
-
   /**
    * Stops the work running for a task or an item now: its session, and the command a blueprint
    * run of the task is running, after which the run ends as stopped at its node. Resolves once
@@ -109,7 +102,7 @@ export class RunRecords {
    */
   async stopWork(ref: string): Promise<string | null> {
     const session = this.sessionFor(ref);
-    if (session) this.stopSession(session);
+    if (session) this.sessions.get(session)?.stop();
     const work = this.building.get(ref);
     if (!work) return session;
     const run = Object.values(this.store.state.runs).find(

@@ -52,9 +52,8 @@ export async function completeTask(runner: Runner, taskRef: string): Promise<voi
     });
   };
   // A task cancelled when the item was split again, or by a human, waits for nothing.
-  const last = item.tasks.every(
-    (ref) => ref === taskRef || isClosed(runner.store.state.tasks[ref]?.stage ?? "cancelled"),
-  );
+  const closed = (ref: string) => isClosed(runner.store.state.tasks[ref]?.stage ?? "cancelled");
+  const last = item.tasks.every((ref) => ref === taskRef || closed(ref));
   // Before the item's last task the item cannot go back to Triage, so the task waits, and
   // with it every task that depends on it, until a human retries the check or closes it.
   if (result.status !== "pass" && !last) {
@@ -73,11 +72,7 @@ export async function completeTask(runner: Runner, taskRef: string): Promise<voi
     deleteBranch: false,
   });
   const owner = runner.store.state.items[item.ref];
-  if (
-    !owner ||
-    owner.tasks.some((ref) => !isClosed(runner.store.state.tasks[ref]?.stage ?? "cancelled"))
-  )
-    return;
+  if (!owner || !owner.tasks.every(closed)) return;
   // A defect sends the item straight back to Triage, so it never looks complete, and its
   // Issue is never closed, in between.
   const defective = result.status !== "pass";
