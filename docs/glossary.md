@@ -61,6 +61,7 @@
 | diff | The one change set that a task delivers, as a task branch in local mode or as a pull request in GitHub mode. | - | changeset, patch | - |
 | DONE_WHEN | The checkable completion condition of an item or a task, checked again at Complete. | `done_when`, `DONE_WHEN` | definition of done | - |
 | external event | A change made outside kozo, such as a merge, a closed pull request or an edited request, that kozod reconciles every minute. | - | - | - |
+| generated file | A file the constraints' generated globs name, such as a lockfile, whose changed lines and count diff-guard keeps apart from the Charter's limits while every other check sees it. | `generated` | - | - |
 | hold | The reason, kept apart from the stage, why an item or a task is not moving, with at most one per item or task. | `hold`, `kozo:needs-*` | block, wait | - |
 | item | A request from a human or an automation that kozo splits into one or more tasks. | `K-<n>`, `<repo>#<n>` | job, ticket | - |
 | item order | The order in which kozod starts the work of items and lists them: the order they arrived in, until a human moves one. | `order`, `kozo reorder`, `item.reordered` | priority, rank | - |
@@ -70,7 +71,6 @@
 | question | The hold that waits for a human answer after `kozo_blocked`, an escalate verdict or a needed protected-path change. | `question`, `kozo say` | - | - |
 | reference | The text that names an item, a task or a run in commands, events and the local API: `K-<n>` or `<repo>#<n>` for an item, `<item>/t<n>` for a task and `r-<nnnn>` for a run. | `Reference` | handle | - |
 | scope | The path globs of a task outside which its diff may not change files. | `scope`, `--scope` | - | - |
-| generated file | A file the constraints' generated globs name, such as a lockfile, whose changed lines and count diff-guard keeps apart from the Charter's limits while every other check sees it. | `generated` | - | - |
 | split again | Cancelling a task that cannot be done within its scope, with the open tasks that depend on it, and sending its item from Building back to Planning, where the plan agent splits the remaining work. | `splitAgain` | re-plan, resplit | - |
 | stage | The position of an item or a task in the flow: Intake, Triage, Planning, Building, Reviewing, Handoff, Complete or Cancelled. | `stage`, `kozo:<stage>` | phase, status, step | - |
 | taken | The hold on a task that a human took over, which only `kozo return` clears. | `taken` | - | - |
