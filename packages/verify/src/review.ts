@@ -87,16 +87,14 @@ async function review(options: ReviewOptions, spend: Spend): Promise<ReviewRecor
 }
 
 // How much of a diff the judge reads: enough for any change a task makes by hand, while a
-// lockfile or a generated file would fill the session with lines nobody wrote.
+// lockfile or a generated file would fill the session with lines nobody wrote. A lockfile is
+// read like any file, since a changed source or checksum in it is a change to what runs.
 const fileLimit = 400;
 const totalLimit = 4_000;
-const lockFiles =
-  /(^|\/)(bun\.lockb?|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|go\.sum|Cargo\.lock|poetry\.lock|uv\.lock|Pipfile\.lock|Gemfile\.lock|composer\.lock)$/;
 
 /**
  * The part of a unified diff the judge reads: each file's diff up to 400 lines and 4,000 lines in
- * all, with lockfiles left out, and a line for each file cut or left out saying what was not
- * shown.
+ * all, and a line for each file cut or left out saying what was not shown.
  */
 export function capDiff(diff: string): { diff: string; unseen: string[] } {
   const files = diff.split(/^(?=diff --git )/m).filter((file) => file.trim() !== "");
@@ -109,10 +107,6 @@ export function capDiff(diff: string): { diff: string; unseen: string[] } {
     const added = lines.filter((line) => line.startsWith("+") && !line.startsWith("+++")).length;
     const removed = lines.filter((line) => line.startsWith("-") && !line.startsWith("---")).length;
     const size = `+${added} -${removed}`;
-    if (lockFiles.test(path)) {
-      unseen.push(`${path} (${size}): a lockfile, not shown`);
-      continue;
-    }
     if (left === 0) {
       unseen.push(`${path} (${size}): not shown, past the ${totalLimit} lines in all`);
       continue;

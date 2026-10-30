@@ -80,7 +80,8 @@ describe("runReview", () => {
     const { result } = await review(repo.path, base, judge);
     expect(result.status).toBe("reviewed");
     const prompt = requests[0]?.prompt ?? "";
-    expect(prompt).toContain("- bun.lock (+1 -0): a lockfile, not shown");
+    expect(prompt).toContain("diff --git a/bun.lock b/bun.lock");
+    expect(prompt).not.toContain("bun.lock (+1 -0)");
     expect(prompt).toMatch(
       /- src\/table\.ts \(\+500 -0\): only its first 400 of \d+ diff lines shown/,
     );
@@ -151,22 +152,21 @@ describe("capDiff", () => {
     ]);
   });
 
-  test("cuts a long file and leaves a lockfile out", () => {
+  test("cuts a long file and shows a lockfile like any file", () => {
     const { diff, unseen } = capDiff(
       `${[fileDiff("bun.lock", 50), fileDiff("src/long.ts", 450), fileDiff("src/ok.ts", 10)].join("\n")}\n`,
     );
-    expect(diff).not.toContain("bun.lock");
+    expect(diff).toContain("diff --git a/bun.lock b/bun.lock");
     expect(diff).toContain("+line 395");
     expect(diff).not.toContain("+line 396");
     expect(diff).toContain("diff --git a/src/ok.ts b/src/ok.ts");
-    expect(unseen).toEqual([
-      "bun.lock (+46 -0): a lockfile, not shown",
-      "src/long.ts (+446 -0): only its first 400 of 450 diff lines shown",
-    ]);
+    expect(unseen).toEqual(["src/long.ts (+446 -0): only its first 400 of 450 diff lines shown"]);
     const prompt = reviewPrompt("Goal", ["Done"], diff, [], unseen);
     const instructions = prompt.slice(0, prompt.indexOf("</instructions>"));
     expect(instructions).toContain("NOT SHOWN:");
-    expect(instructions).toContain("- bun.lock (+46 -0): a lockfile, not shown");
+    expect(instructions).toContain(
+      "- src/long.ts (+446 -0): only its first 400 of 450 diff lines shown",
+    );
   });
 });
 
