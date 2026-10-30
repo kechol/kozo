@@ -148,9 +148,10 @@ export class Scheduler {
       const open = task.depends_on.filter((ref) => state.tasks[ref]?.stage !== "complete");
       const cancelled = open.filter((ref) => state.tasks[ref]?.stage === "cancelled");
       const subject = { item: task.item, task: task.ref };
-      if (open.length === 0 || cancelled.length > 0)
+      // Looking at the state first keeps tasks already as asked out of the store's queue.
+      if ((open.length === 0 || cancelled.length > 0) && task.hold?.kind === "dependency")
         await clearHold(this.store, subject, { kind: "dependency" });
-      if (open.length === 0) continue;
+      if (open.length === 0 || this.store.state.tasks[task.ref]?.hold) continue;
       if (cancelled.length > 0) {
         await hold(
           this.store,
