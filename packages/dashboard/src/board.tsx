@@ -1,5 +1,6 @@
 import { signal } from "@preact/signals";
 import type { Api, ItemRow, TaskRow } from "./api.ts";
+import { Badge } from "./badge.tsx";
 import { detailHash, isClosedStage, moveTarget, stages } from "./format.ts";
 import { items, run, tasks } from "./store.ts";
 import { toneOf } from "./tone.ts";
@@ -103,14 +104,14 @@ function ItemCard({
           {item.ref}
         </a>
         {item.level ? (
-          <span class="level" title="autonomy level">
+          <Badge tone="neutral" icon={null} label="autonomy level">
             {item.level}
-          </span>
+          </Badge>
         ) : null}
       </div>
       <p class="title">{item.title}</p>
       <div class="row meta">
-        {item.hold ? <span class={`badge ${toneOf("hold", item.hold)}`}>{item.hold}</span> : null}
+        {item.hold ? <Badge tone={toneOf("hold", item.hold)}>{item.hold}</Badge> : null}
         {item.class ? <span>{item.class}</span> : null}
         {own.length > 0 ? (
           <span>
@@ -122,7 +123,7 @@ function ItemCard({
         <div class="row reorder">
           <button
             type="button"
-            class="quiet small"
+            class="ghost small"
             aria-label={`Move ${item.ref} up`}
             disabled={up === undefined}
             onClick={() => up !== undefined && move(up)}
@@ -131,7 +132,7 @@ function ItemCard({
           </button>
           <button
             type="button"
-            class="quiet small"
+            class="ghost small"
             aria-label={`Move ${item.ref} down`}
             disabled={down === undefined}
             onClick={() => down !== undefined && move(down)}
@@ -152,7 +153,7 @@ function TaskCard({ task }: { task: TaskRow }) {
       </a>
       <p class="title">{task.goal}</p>
       <div class="row meta">
-        {task.hold ? <span class={`badge ${toneOf("hold", task.hold)}`}>{task.hold}</span> : null}
+        {task.hold ? <Badge tone={toneOf("hold", task.hold)}>{task.hold}</Badge> : null}
         {task.revisions > 0 ? <span>{task.revisions} revisions</span> : null}
       </div>
     </article>

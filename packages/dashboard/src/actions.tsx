@@ -116,6 +116,8 @@ export function ActionButton({
     }
   };
   const kind = action.danger ? "danger" : "";
+  // Inside its field, the verb is what the field is for, so it takes the strongest style.
+  const confirm = action.danger ? "danger-solid" : "primary";
   if (!action.text) {
     return (
       <button type="button" class={kind} disabled={busy} onClick={submit}>
@@ -147,10 +149,10 @@ export function ActionButton({
         onInput={(event) => setText((event.target as HTMLTextAreaElement).value)}
       />
       <div class="row">
-        <button type="submit" class={kind} disabled={busy || missing}>
+        <button type="submit" class={confirm} disabled={busy || missing}>
           {action.label}
         </button>
-        <button type="button" class="quiet" onClick={() => setOpen(false)}>
+        <button type="button" class="ghost" onClick={() => setOpen(false)}>
           Back
         </button>
       </div>

@@ -1,5 +1,6 @@
 import { ActionButton, inboxActions } from "./actions.tsx";
 import type { Api } from "./api.ts";
+import { Badge } from "./badge.tsx";
 import { ago, detailHash } from "./format.ts";
 import { inbox } from "./store.ts";
 import { toneOf } from "./tone.ts";
@@ -25,9 +26,7 @@ export function Inbox({ api }: { api: Api }) {
             <a href={detailHash(row.ref)} class="ref">
               {row.ref}
             </a>
-            <span class={`badge ${toneOf("waiting", row.waiting)}`}>
-              {label[row.waiting] ?? row.waiting}
-            </span>
+            <Badge tone={toneOf("waiting", row.waiting)}>{label[row.waiting] ?? row.waiting}</Badge>
           </div>
           <h3>{row.title}</h3>
           {row.reason ? <p class="reason">{row.reason}</p> : null}

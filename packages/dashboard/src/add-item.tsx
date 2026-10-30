@@ -65,7 +65,11 @@ export function AddItem({ api }: { api: Api }) {
             </option>
           ))}
         </select>
-        <button type="submit" disabled={!title || (repositories.length > 1 && !repository)}>
+        <button
+          type="submit"
+          class="primary md"
+          disabled={!title || (repositories.length > 1 && !repository)}
+        >
           Add
         </button>
       </div>

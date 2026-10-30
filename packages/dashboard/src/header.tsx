@@ -27,7 +27,6 @@ export function Header({ api, page }: { api: Api; page: string }) {
           <span>{usd(current.costTodayUsd)} today</span>
           <button
             type="button"
-            class="quiet"
             onClick={() =>
               void run(api, () =>
                 api.post(current.paused ? "/api/factory/resume" : "/api/factory/pause"),

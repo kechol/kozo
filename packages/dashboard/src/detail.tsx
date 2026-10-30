@@ -2,6 +2,7 @@ import type { Event } from "@kozo/core";
 import { useEffect, useState } from "preact/hooks";
 import { type Action, ActionButton, cancelAction, retryAction, takeAction } from "./actions.tsx";
 import type { Api } from "./api.ts";
+import { Badge } from "./badge.tsx";
 import { ago, detailHash, eventLine, kindOf, usd } from "./format.ts";
 import { toneOf } from "./tone.ts";
 
@@ -137,7 +138,7 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
         <h2>{String(subject.title ?? subject.goal ?? `${subject.agent} run`)}</h2>
         <p class="row meta">
           <span>{String(subject.shown_stage ?? subject.stage ?? subject.state)}</span>
-          {hold ? <span class={`badge ${toneOf("hold", hold)}`}>{hold}</span> : null}
+          {hold ? <Badge tone={toneOf("hold", hold)}>{hold}</Badge> : null}
           {reason ? <span class="reason">{reason}</span> : null}
           {detail.cost_usd !== undefined ? <span>cost {usd(detail.cost_usd)}</span> : null}
         </p>
@@ -208,9 +209,7 @@ function ItemBody({ detail }: { detail: Detail }) {
                 </a>
                 <span class="meta">{String(task.stage)}</span>
                 {task.hold ? (
-                  <span class={`badge ${toneOf("hold", String(task.hold))}`}>
-                    {String(task.hold)}
-                  </span>
+                  <Badge tone={toneOf("hold", String(task.hold))}>{String(task.hold)}</Badge>
                 ) : null}
                 <span>{String(task.goal)}</span>
               </li>
@@ -359,7 +358,7 @@ function TaskBody({ api, refName, detail }: { api: Api; refName: string; detail:
             ) : null}
           </>
         ) : (
-          <button type="button" class="quiet" onClick={showDiff}>
+          <button type="button" onClick={showDiff}>
             Show the diff
           </button>
         )}
