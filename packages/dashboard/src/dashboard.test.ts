@@ -10,7 +10,8 @@ import { inboxActions } from "./actions.tsx";
 import { Api, ApiError, takeSession } from "./api.ts";
 import { detailActions } from "./detail.tsx";
 import { ago, eventLine, isClosedStage, kindOf, moveTarget, routeOf, stages } from "./format.ts";
-import { toneOf, tones } from "./tone.ts";
+import { Icon, iconNames, toneIcon } from "./icons.tsx";
+import { type Tone, toneOf, tones } from "./tone.ts";
 
 const code = "ab".repeat(32);
 
@@ -214,5 +215,22 @@ describe("toneOf", () => {
   test("leaves what it does not know, or nothing, neutral", () => {
     expect(toneOf("hold", null)).toBe("neutral");
     expect(toneOf("gates", "unknown")).toBe("neutral");
+  });
+});
+
+describe("Icon", () => {
+  test("draws every glyph as a decoration hidden from assistive technology", () => {
+    for (const name of iconNames) {
+      const svg = Icon({ name });
+      expect(svg.type).toBe("svg");
+      expect(svg.props["aria-hidden"]).toBe("true");
+      expect(svg.props.children).toBeDefined();
+    }
+  });
+
+  test("gives every tone a glyph, so that no state is told by colour alone", () => {
+    const all: Tone[] = ["info", "progress", "warning", "negative", "positive", "done", "neutral"];
+    for (const tone of all) expect(iconNames).toContain(toneIcon[tone]);
+    expect(new Set(Object.values(toneIcon)).size).toBe(all.length);
   });
 });

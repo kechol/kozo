@@ -673,3 +673,8 @@ pre.text {
 .unmet {
   color: var(--negative-fg);
 }
+
+.icon {
+  flex: none;
+  vertical-align: -3px;
+}
