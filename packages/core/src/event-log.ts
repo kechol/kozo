@@ -46,8 +46,9 @@ export function parseEventLog(text: string, name: string): ParseResult<EventLog>
 
 /**
  * The text of a log without a last line that a crash cut short, one that ends without its
- * newline, or null when it has none. No state ever applied such a line, even one whole but for
- * the newline, since an event is applied only after its whole line is written and synced.
+ * newline, or null when it has none. Such a line, even one whole but for the newline, is of an
+ * append that never returned: the crash took the state it changed with it, and nothing outside
+ * kozod saw it.
  */
 export function withoutTornLine(text: string): string | null {
   if (text === "" || text.endsWith("\n")) return null;
