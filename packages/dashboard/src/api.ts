@@ -23,6 +23,11 @@ export async function takeSession(
   return storage.getItem(tokenKey);
 }
 
+/** Forgets the tab's session token once kozod no longer takes it. */
+export function endSession(storage: Pick<Storage, "removeItem">): void {
+  storage.removeItem(tokenKey);
+}
+
 /** Trades a code for a session token with kozod, or null when kozod refuses it. */
 export async function tradeCode(code: string): Promise<string | null> {
   const response = await fetch("/api/dashboard/session", {

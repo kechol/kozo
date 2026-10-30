@@ -20,7 +20,16 @@ import {
   titleOf,
 } from "./format.ts";
 import { Icon, iconNames, toneIcon } from "./icons.tsx";
-import { dismiss, notify, toastLimit, toasts } from "./store.ts";
+import {
+  dismiss,
+  notify,
+  problem,
+  refresh,
+  refreshedAt,
+  sessionEnded,
+  toastLimit,
+  toasts,
+} from "./store.ts";
 import { type Tone, toneOf, tones } from "./tone.ts";
 
 const code = "ab".repeat(32);
@@ -260,5 +269,26 @@ describe("toasts", () => {
     expect(toasts.value.map((toast) => toast.text)).toEqual(["kozod refused it", "two", "three"]);
     dismiss(failure);
     expect(toasts.value.map((toast) => toast.text)).toEqual(["two", "three"]);
+  });
+});
+
+describe("refresh", () => {
+  const answering = (status: number) =>
+    new Api("token", async () => Response.json(status === 200 ? [] : { error: "no" }, { status }));
+
+  test("says why kozod cannot be reached and keeps when the page last heard from it", async () => {
+    await refresh(answering(200));
+    const heard = refreshedAt.value;
+    expect(problem.value).toBeNull();
+    await refresh(answering(503));
+    expect(problem.value).toBe("no");
+    expect(refreshedAt.value).toBe(heard);
+    expect(sessionEnded.value).toBe(false);
+  });
+
+  test("ends the page's session when kozod refuses it", async () => {
+    await refresh(answering(401));
+    expect(sessionEnded.value).toBe(true);
+    sessionEnded.value = false;
   });
 });

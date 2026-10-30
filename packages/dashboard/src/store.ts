@@ -1,5 +1,12 @@
 import { signal } from "@preact/signals";
-import type { Api, InboxRow, ItemRow, Status, TaskRow } from "./api.ts";
+import {
+  type Api,
+  ApiError,
+  type InboxRow,
+  type ItemRow,
+  type Status,
+  type TaskRow,
+} from "./api.ts";
 
 export const status = signal<Status | null>(null);
 export const inbox = signal<InboxRow[]>([]);
@@ -7,6 +14,10 @@ export const items = signal<ItemRow[]>([]);
 export const tasks = signal<TaskRow[]>([]);
 /** Why the last refresh failed, such as kozod being down, or null. */
 export const problem = signal<string | null>(null);
+/** When the lists last refreshed, so a failure can say how old what the page shows is. */
+export const refreshedAt = signal<Date | null>(null);
+/** Whether kozod refused the tab's session, as after it starts again; the page then stops. */
+export const sessionEnded = signal(false);
 /** What an action answered, as the toast region shows it. */
 export interface Toast {
   id: number;
@@ -56,7 +67,9 @@ export async function refresh(api: Api): Promise<void> {
     items.value = nextItems;
     tasks.value = nextTasks;
     problem.value = null;
+    refreshedAt.value = new Date();
   } catch (error) {
+    if (error instanceof ApiError && error.status === 401) sessionEnded.value = true;
     problem.value = (error as Error).message;
   }
 }
@@ -68,7 +81,7 @@ export async function refresh(api: Api): Promise<void> {
 export function poll(api: Api, ms = 3000): () => void {
   let pending: Promise<void> | null = null;
   const turn = () => {
-    if (pending || document.hidden) return;
+    if (pending || document.hidden || sessionEnded.value) return;
     pending = refresh(api).finally(() => {
       pending = null;
     });

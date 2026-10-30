@@ -1,7 +1,7 @@
 import type { Api } from "./api.ts";
 import { usd } from "./format.ts";
 import { Icon } from "./icons.tsx";
-import { inbox, problem, run, status } from "./store.ts";
+import { inbox, run, status } from "./store.ts";
 
 /** The factory at a glance: the views, whether it runs, what runs, and today's cost. */
 export function Header({ api, page }: { api: Api; page: string }) {
@@ -27,7 +27,6 @@ export function Header({ api, page }: { api: Api; page: string }) {
           Board
         </a>
       </nav>
-      {problem.value ? <span class="problem">kozod: {problem.value}</span> : null}
       {current ? (
         <fieldset class="factory">
           <legend class="sr-only">Factory</legend>
