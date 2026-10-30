@@ -178,13 +178,7 @@ export class EventStore {
    * schema or the state refuses throws and is neither written nor applied.
    */
   append(event: NewEvent): Promise<Event> {
-    return this.serial(async () => {
-      const line = await this.write(event);
-      if (line.type === "run.changed" && isRunOver(line.data.to) && line.run_id !== null) {
-        await this.seal(line.run_id);
-      }
-      return line;
-    });
+    return this.serial(() => this.commit(event));
   }
 
   /**
@@ -194,13 +188,17 @@ export class EventStore {
   appendIf(decide: (state: Readonly<FactoryState>) => NewEvent | null): Promise<Event | null> {
     return this.serial(async () => {
       const event = decide(this.current);
-      if (event === null) return null;
-      const line = await this.write(event);
-      if (line.type === "run.changed" && isRunOver(line.data.to) && line.run_id !== null) {
-        await this.seal(line.run_id);
-      }
-      return line;
+      return event === null ? null : await this.commit(event);
     });
+  }
+
+  /** Writes one event, and then the seal of its run's log when it ends the run. */
+  private async commit(event: NewEvent): Promise<Event> {
+    const line = await this.write(event);
+    if (line.type === "run.changed" && isRunOver(line.data.to) && line.run_id !== null) {
+      await this.seal(line.run_id);
+    }
+    return line;
   }
 
   private async seal(run: string) {
