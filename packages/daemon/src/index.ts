@@ -24,7 +24,8 @@ export interface Output {
 
 const USAGE = `Usage: kozod [options]
 
-Runs kozod in the foreground until it receives SIGINT or SIGTERM.
+Runs kozod in the foreground until it receives SIGINT or SIGTERM, or until its event store
+refuses writes, when it exits with status 1.
 
 Options:
   --version        Print the version
@@ -45,12 +46,15 @@ async function serve(out: Output): Promise<number> {
     return ExitCode.failure;
   }
   out.stdout(`kozod ${pkg.version} listening on http://127.0.0.1:${daemon.port}`);
-  await new Promise<void>((resolve) => {
-    process.once("SIGINT", resolve);
-    process.once("SIGTERM", resolve);
+  const failure = await new Promise<Error | null>((resolve) => {
+    process.once("SIGINT", () => resolve(null));
+    process.once("SIGTERM", () => resolve(null));
+    void daemon.failure.then(resolve);
   });
   await daemon.stop();
-  return ExitCode.success;
+  if (failure === null) return ExitCode.success;
+  out.stderr(`kozod: ${failure.message}`);
+  return ExitCode.failure;
 }
 
 /** The body of an upstream GitHub issue, read with gh. */

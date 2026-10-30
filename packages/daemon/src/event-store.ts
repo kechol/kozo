@@ -267,11 +267,18 @@ export class EventStore {
 
   /** Set once the state may be ahead of the logs; kozod must start again to replay them. */
   private broken: EventLogError | null = null;
+  private readonly breaking = Promise.withResolvers<EventLogError>();
+
+  /** Resolves once the store refuses every write, which kozod stops for. */
+  get failure(): Promise<EventLogError> {
+    return this.breaking.promise;
+  }
 
   private break(error: unknown): EventLogError {
     this.broken = new EventLogError(
       `kozod's state may no longer match its event logs, so it records nothing more; start kozod again to replay them: ${error instanceof Error ? error.message : String(error)}`,
     );
+    this.breaking.resolve(this.broken);
     return this.broken;
   }
 

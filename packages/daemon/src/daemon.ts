@@ -294,6 +294,11 @@ export class Daemon {
     );
   }
 
+  /** Resolves once the store refuses every write; kozod then stops and a start replays the logs. */
+  get failure(): Promise<Error> {
+    return this.store.failure;
+  }
+
   /**
    * Stops the sessions and waits for the work running now to end, so that no worker outlives
    * kozod and every run ends where the next start resumes it.

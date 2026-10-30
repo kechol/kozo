@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { cp, rm } from "node:fs/promises";
+import { cp, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { kozoHome, StateError, sha256 } from "@kozo/core";
 import { recordedLogs, tempDirectory } from "@kozo/testing";
@@ -62,6 +62,20 @@ describe("EventStore", () => {
     expect([...stamps].sort()).toEqual(stamps);
     expect(new Set(stamps).size).toBe(4);
     expect(store.state.items["K-1"]?.stage).toBe("triage");
+    store.close();
+  });
+
+  test("a log that cannot be written stops the store taking events, and says so once", async () => {
+    await using dir = await tempDirectory();
+    const home = kozoHome(dir.path);
+    const store = await EventStore.open(home);
+    await store.append(created);
+    await rm(home.eventsLog);
+    await mkdir(home.eventsLog);
+    await expect(store.append({ ...created, item: "K-2" })).rejects.toThrow(EventLogError);
+    expect((await store.failure).message).toContain("start kozod again");
+    await rm(home.eventsLog, { recursive: true });
+    await expect(store.append({ ...created, item: "K-3" })).rejects.toThrow(EventLogError);
     store.close();
   });
 
