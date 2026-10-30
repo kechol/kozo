@@ -1302,6 +1302,41 @@ describe("the minimal path", () => {
     });
   }, 180_000);
 
+  test("closing a merged task stops its check before its worktree goes", async () => {
+    await using marks = await tempDirectory();
+    const mark = join(marks.path, "merged");
+    const slow = "sleep 41";
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+      judgeWith("accept"),
+      {
+        constraints: (text) =>
+          text
+            .replace("gates:\n", `gates:\n  slow:\n    run: test ! -f '${mark}' || ${slow}\n`)
+            .replaceAll("[lint, test]", "[slow, lint, test]"),
+      },
+    );
+    const { task } = await toHandoff(env);
+    const worktree = worktreePath(env.home, env.repo.path, task);
+    await Bun.write(mark, "");
+    await env.repo.git(
+      "merge",
+      "--no-ff",
+      "--quiet",
+      "-m",
+      "merge the low stock notice",
+      `kozo/${env.store.factoryId}/K-1-t1`,
+    );
+    const running = () => Bun.spawnSync(["pgrep", "-f", slow]).stdout.toString().trim() !== "";
+    await env.reconciler.reconcile();
+    await eventually(running, "the check's slow gate to start");
+    const reference = { kind: "task", item: { repo: null, number: 1 }, task: 1 } as const;
+    await env.control.act(task, reference, "close", { done: true });
+    expect(running()).toBe(false);
+    expect(env.store.state.tasks[task]?.stage).toBe("complete");
+    expect(await Bun.file(join(worktree, "README.md")).exists()).toBe(false);
+  }, 120_000);
+
   test("a failing pull request lookup leaves a local merge to the local check, and waits a poll", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage" ? [{ answer: plan }] : implement(),

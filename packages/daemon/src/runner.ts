@@ -364,7 +364,7 @@ export class Runner implements RunnerOps {
   }
 
   async complete(taskRef: string): Promise<void> {
-    await completeTask(this, taskRef);
+    await this.records.track(taskRef, (signal) => completeTask(this, taskRef, signal));
   }
 
   async ask(itemRef: string, taskRef: string | null, question: string): Promise<string> {
