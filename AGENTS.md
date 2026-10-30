@@ -182,6 +182,7 @@ bun run typecheck     # tsc --noEmit
 bun run check         # Biome lint and format check
 bun run format        # Biome format --write
 bun run compile       # dist/kozo and dist/kozod for the current platform
+bun packages/dashboard/preview.ts  # the dashboard against fictional data
 ```
 
 ## Releases and external actions

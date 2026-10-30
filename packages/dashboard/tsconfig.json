@@ -3,6 +3,6 @@
   "compilerOptions": {
     "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
-  "include": ["src", "../verify/src/text-modules.d.ts"],
+  "include": ["src", "preview.ts", "../verify/src/text-modules.d.ts"],
   "exclude": []
 }
