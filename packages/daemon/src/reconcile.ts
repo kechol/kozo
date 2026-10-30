@@ -224,7 +224,8 @@ export class Reconciler {
   async reconcile(): Promise<void> {
     const checked = new Set<string>();
     for (const task of Object.values(this.store.state.tasks)) {
-      // A held task may still be merged by a human, who settles the hold that way.
+      // A held task may still be merged by a human. Its merge is recorded, and its check waits
+      // for the hold, which kozo retry clears without sending a merged task back.
       if (!finallyVerified(this.store.state, task)) continue;
       checked.add(taskBranch(this.store.factoryId, task.ref));
       await this.check(task).catch((error: unknown) =>
