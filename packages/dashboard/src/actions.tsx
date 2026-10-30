@@ -13,6 +13,11 @@ export interface Action {
   text?: { field: string; required: boolean; placeholder: string };
   /** A verb that cannot be undone, such as cancelling, styled as such. */
   danger?: boolean;
+  /**
+   * How much the button stands out among its row's: the one verb that settles what waits is
+   * primary, a verb seldom wanted is ghost, and the others are secondary.
+   */
+  emphasis?: "primary" | "ghost";
 }
 
 /** Cancelling an item or a task, which asks why. */
@@ -47,6 +52,7 @@ export function inboxActions(
             {
               verb: "approve",
               label: "Approve plan",
+              emphasis: "primary",
               text: {
                 field: "text",
                 required: false,
@@ -63,6 +69,7 @@ export function inboxActions(
             {
               verb: "approve",
               label: "Approve start",
+              emphasis: "primary",
               text: { field: "text", required: false, placeholder: "Anything triage should know" },
             },
             cancelAction,
@@ -72,15 +79,16 @@ export function inboxActions(
         {
           verb: "say",
           label: "Answer",
+          emphasis: "primary",
           text: { field: "text", required: true, placeholder: "Your answer" },
         },
         ...(kind === "task" ? [takeAction] : []),
       ];
     case "attention":
       return [
-        retryAction,
+        { ...retryAction, emphasis: "primary" },
         ...(kind === "task" ? [takeAction] : []),
-        { verb: "close", label: "Close as done", body: { done: true } },
+        { verb: "close", label: "Close as done", body: { done: true }, emphasis: "ghost" },
         cancelAction,
       ];
     default:
@@ -115,7 +123,7 @@ export function ActionButton({
       setText("");
     }
   };
-  const kind = action.danger ? "danger" : "";
+  const kind = action.danger ? "danger" : (action.emphasis ?? "");
   // Inside its field, the verb is what the field is for, so it takes the strongest style.
   const confirm = action.danger ? "danger-solid" : "primary";
   if (!action.text) {

@@ -100,6 +100,18 @@ describe("inboxActions", () => {
     expect(verbs("task", "merge", null)).toEqual([]);
   });
 
+  test("makes the verb that settles each row its one primary", () => {
+    const primary = (...args: Parameters<typeof inboxActions>) =>
+      inboxActions(...args)
+        .filter((action) => action.emphasis === "primary")
+        .map((action) => action.label);
+    expect(primary("item", "approval", "start")).toEqual(["Approve start"]);
+    expect(primary("item", "approval", "plan")).toEqual(["Approve plan"]);
+    expect(primary("task", "question", null)).toEqual(["Answer"]);
+    expect(primary("task", "attention", null)).toEqual(["Retry"]);
+    expect(primary("task", "merge", null)).toEqual([]);
+  });
+
   test("asks for the text a verb needs, under the field its body takes", () => {
     const [answer] = inboxActions("item", "question", null);
     expect(answer).toMatchObject({ verb: "say", text: { field: "text", required: true } });
