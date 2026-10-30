@@ -1302,6 +1302,34 @@ describe("the minimal path", () => {
     });
   }, 180_000);
 
+  test("a failing pull request lookup leaves a local merge to the local check, and waits a poll", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: plan }] : implement(),
+    );
+    const { task } = await toHandoff(env);
+    const branch = `kozo/${env.store.factoryId}/K-1-t1`;
+    let asked = 0;
+    const reconciler = new Reconciler(
+      env.store,
+      env.runner,
+      () => {},
+      () => false,
+      () => "local",
+      async () => {
+        asked += 1;
+        throw new Error("gh: API rate limit exceeded");
+      },
+    );
+    await reconciler.reconcile();
+    await reconciler.reconcile();
+    expect(asked).toBe(1);
+    expect(env.store.state.tasks[task]?.merged).toBeNull();
+    await env.repo.git("merge", "--no-ff", "--quiet", "-m", "merge the notice", branch);
+    await reconciler.reconcile();
+    expect(asked).toBe(1);
+    expect(env.store.state.tasks[task]?.merged).not.toBeNull();
+  }, 180_000);
+
   test("a failing check after the merge is a defect that sends the item back to Triage", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage" ? [{ answer: plan }] : implement(),

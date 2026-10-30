@@ -57,6 +57,9 @@ async function contains(repository: string, head: string, commit: string): Promi
   );
 }
 
+/** How often a task branch's pull request is looked up: as often as kozod polls GitHub. */
+const pullLookupMs = 300_000;
+
 /**
  * The first commit on the first-parent line of `target` that holds `head`, and its committer:
  * the merge, the fast-forwarded tip or the commit that applied the rebased or squashed change.
@@ -94,6 +97,8 @@ async function mergingCommit(repository: string, head: string, target: string) {
 export class Reconciler {
   /** The evidence each class already at L1 was last found due on, by `demotionKey`. */
   private readonly atBottom = new Map<string, string>();
+  /** When each task branch's pull request was last looked up. */
+  private readonly lookedUp = new Map<string, number>();
 
   constructor(
     private readonly store: EventStore,
@@ -136,6 +141,23 @@ export class Reconciler {
     return lastHandoff(this.store.db, task.ref)?.head ?? null;
   }
 
+  /**
+   * The merge commit of the branch's merged pull request, looked up at most once per GitHub
+   * poll, since the base it is checked against moves only with the poll's fetch. A failed lookup
+   * leaves the merge to the local check until the next one.
+   */
+  private async pullMergeCommit(repository: string, branch: string): Promise<string | null> {
+    const last = this.lookedUp.get(branch);
+    if (last !== undefined && Date.now() - last < pullLookupMs) return null;
+    this.lookedUp.set(branch, Date.now());
+    return await this.mergeCommitOf(repository, branch).catch((error: unknown) => {
+      this.report(
+        `kozod: looking up the pull request of ${branch}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    });
+  }
+
   private async check(task: TaskState) {
     const item = this.store.state.items[task.item];
     if (!item) return;
@@ -154,7 +176,7 @@ export class Reconciler {
     }
     const contained = await contains(repository, `refs/heads/${branch}`, ref);
     // The pull request's merge commit is only needed to find a merge or to record one.
-    const pulled = task.merged && contained ? null : await this.mergeCommitOf(repository, branch);
+    const pulled = task.merged && contained ? null : await this.pullMergeCommit(repository, branch);
     const viaPull = pulled !== null && (await isAncestor(repository, pulled, ref));
     if (viaPull || contained) {
       if (!task.merged) {
@@ -200,15 +222,19 @@ export class Reconciler {
 
   /** One pass over the tasks that wait on something outside kozod, then over their record. */
   async reconcile(): Promise<void> {
+    const checked = new Set<string>();
     for (const task of Object.values(this.store.state.tasks)) {
       // A held task may still be merged by a human, who settles the hold that way.
       if (!finallyVerified(this.store.state, task)) continue;
+      checked.add(taskBranch(this.store.factoryId, task.ref));
       await this.check(task).catch((error: unknown) =>
         this.report(
           `kozod: reconciling ${task.ref}: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
+    for (const branch of this.lookedUp.keys())
+      if (!checked.has(branch)) this.lookedUp.delete(branch);
     await this.demote().catch((error: unknown) =>
       this.report(`kozod: demoting: ${error instanceof Error ? error.message : String(error)}`),
     );
