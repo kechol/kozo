@@ -151,7 +151,9 @@ describe("runEvalCase", () => {
     await dir[Symbol.asyncDispose]();
   }, 180_000);
 
-  test("never runs services on what the eval merged, which nobody read", async () => {
+  test("runs services on the case's start, never on what the eval merged, which nobody read", async () => {
+    await using marks = await tempDirectory();
+    const heads = join(marks.path, "heads");
     const readme = "The docs mention the low-stock notice";
     const split = {
       ...plan,
@@ -173,19 +175,19 @@ describe("runEvalCase", () => {
     };
     await using env = await setup(
       (request) => (request.agent === "triage" ? [{ answer: split }] : suiteImplement()),
-      (text) => `${text}\nservices:\n  - "true"\n`,
+      (text) =>
+        `${text}\nservices:\n  - "echo $(basename $(pwd)) $(git rev-parse HEAD) >> '${heads}'"\n`,
     );
     const file = join(env.dir.path, "evals", "two.yml");
     await Bun.write(
       file,
       `version: 1\nid: two\nrepository: ${env.repo.path}\nstart: ${env.start}\nrequest:\n  title: Low stock\n  body: Say Only N left, and document it.\nexpected:\n  outcome: complete\n`,
     );
-    // The first task starts its services on the case's start; the second, after the merge, may not.
-    expect(await runEvalCase(file, env.definition, env.deps)).toMatchObject({
-      outcome: "attention",
-      passed: false,
-      reason: expect.stringContaining("services run only on a worktree at the eval case's start"),
-    });
+    // The second task's worktree starts past the first task's merge; its services do not.
+    await runEvalCase(file, env.definition, env.deps);
+    const ran = (await Bun.file(heads).text()).trim().split("\n");
+    expect(ran.some((line) => line.includes("-t2.services "))).toBe(true);
+    expect(ran.filter((line) => !line.endsWith(` ${env.start}`))).toEqual([]);
   }, 180_000);
 
   test("a case on a repository that is not registered is an error", async () => {

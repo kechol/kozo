@@ -1055,8 +1055,11 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[task]).toMatchObject({ stage: "handoff", hold: null });
     const worktree = await realpath(worktreePath(env.home, env.repo.path, task));
     const ran = (await Bun.file(log).text()).trim().split("\n");
-    expect(ran).toEqual([worktree, `${worktree}.services`]);
-    expect(await Bun.file(join(`${worktree}.services`, "README.md")).exists()).toBe(false);
+    // Every run starts them in one checkout of the merged code, which stays for the task's life.
+    expect(ran).toEqual([`${worktree}.services`, `${worktree}.services`]);
+    expect(await Bun.file(join(`${worktree}.services`, ".kozo", "constraints.yml")).exists()).toBe(
+      true,
+    );
   }, 120_000);
 
   test("services start outside the command sandbox before prepare, and a failing one holds the task", async () => {

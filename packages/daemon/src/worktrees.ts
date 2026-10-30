@@ -1,7 +1,7 @@
 import { mkdir, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { type KozoHome, parseReference, sha256 } from "@kozo/core";
-import { branchTip, GitError, git, isAncestor } from "@kozo/verify";
+import { branchTip, GitError, git } from "@kozo/verify";
 import { releasePorts } from "./worktree-ports.ts";
 
 function taskParts(task: string) {
@@ -108,14 +108,35 @@ export async function removeCheckout(repository: string, dir: string) {
 }
 
 /**
- * Whether `worktree` is at a commit of the default branch, whose tip is `tip`, with nothing
- * changed: then everything in it is merged code.
+ * Brings the checkout a task's services run in, beside its worktree and kept for the task's
+ * life, to `commit`, and makes it when it is missing. Moving it in place keeps the directory the
+ * services' containers may mount.
  */
-export async function atMergedCommit(worktree: string, tip: string): Promise<boolean> {
-  return (
-    (await isAncestor(worktree, "HEAD", tip)) &&
-    (await git(worktree, ["status", "--porcelain"])).trim() === ""
+export async function servicesCheckout(
+  home: KozoHome,
+  repository: string,
+  worktree: string,
+  commit: string,
+): Promise<string> {
+  const checkout = `${worktree}.services`;
+  const moved = await exists(checkout).then(
+    (found) =>
+      found &&
+      git(checkout, [
+        "-c",
+        "core.hooksPath=/dev/null",
+        "checkout",
+        "--quiet",
+        "--force",
+        "--detach",
+        commit,
+      ]).then(
+        () => true,
+        () => false,
+      ),
   );
+  if (!moved) await detachedCheckout(home, repository, checkout, commit);
+  return checkout;
 }
 
 /**
@@ -133,6 +154,7 @@ export async function releaseTask(
   if (await exists(worktree)) {
     await git(repository, ["worktree", "remove", "--force", worktree]);
   }
+  await removeCheckout(repository, `${worktree}.services`);
   await git(repository, ["worktree", "prune"]);
   await rm(`${worktree}.prepared`, { force: true });
   await releasePorts(worktree);

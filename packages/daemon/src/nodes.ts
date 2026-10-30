@@ -33,7 +33,7 @@ import { firstCodeChange, firstNonTestChange, layersFor, onlyDependencyFiles } f
 import { type BlueprintRun, describe, type Node, type RunEnd, tail } from "./task-run.ts";
 import { externalWrite } from "./transitions.ts";
 import { takePorts } from "./worktree-ports.ts";
-import { atMergedCommit, claimTask, detachedCheckout, removeCheckout } from "./worktrees.ts";
+import { claimTask, servicesCheckout } from "./worktrees.ts";
 
 /**
  * One node of a blueprint run: it ends the run with how it ended, or returns nothing for the
@@ -73,84 +73,56 @@ const claim: NodeStep = async (run, current) => {
 };
 
 /**
- * Runs the services of a worktree prepared before, as every resumed run does. They run outside
- * the command sandbox, so not in the worktree, which may hold the task's changes to the files
- * they read, but in a checkout of the merged code beside it, with the worktree's environment, so
- * that they address the same containers and ports. Services commands start what is not running
- * and leave running services alone.
+ * Runs the services of a worktree. They run outside the command sandbox, so never on the
+ * worktree, which may hold the task's changes to the files they read, but in a checkout of the
+ * trusted base kept beside it, with the worktree's environment, so that every run addresses the
+ * same containers, ports and directory. Services commands start what is not running and leave
+ * running services alone.
  */
-export async function startServicesAgain(run: BlueprintRun): Promise<RunEnd | undefined> {
+export async function startServices(run: BlueprintRun): Promise<RunEnd | undefined> {
   const { runner, worktree, constraints, repository } = run;
   if (constraints.services.length === 0) return;
-  const checkout = `${worktree}.services`;
-  await detachedCheckout(
+  const checkout = await servicesCheckout(
     runner.home,
     repository.path,
-    checkout,
+    worktree,
     runner.deps.trustedBase ?? repository.tip,
   );
-  try {
-    const env = await run.env();
-    const log = (text: string) => void run.log(text);
-    for (const command of constraints.services) {
-      const code = await runCommand(command, checkout, log, env, undefined, run.limit);
-      if (code !== 0) {
-        return await run.halt("prepare", {
-          hold: "attention",
-          reason: `prepare failed: ${command} exited with ${code}`,
-          summary: `${command} exited with ${code}`,
-          end: "failed",
-          why: "prepare failed",
-        });
-      }
+  const env = await run.env();
+  const log = (text: string) => void run.log(text);
+  for (const command of constraints.services) {
+    const code = await runCommand(command, checkout, log, env, undefined, run.limit);
+    if (code !== 0) {
+      return await run.halt("prepare", {
+        hold: "attention",
+        reason: `prepare failed: ${command} exited with ${code}`,
+        summary: `${command} exited with ${code}`,
+        end: "failed",
+        why: "prepare failed",
+      });
     }
-  } finally {
-    await removeCheckout(repository.path, checkout);
   }
 }
 
 const prepare: NodeStep = async (run) => {
-  const { runner, worktree, constraints, repository } = run;
+  const { runner, worktree, constraints } = run;
   await run.enter("prepare", "D");
   // A worktree is prepared once; the marker sits beside it, not in it, to keep it clean.
   const marker = `${worktree}.prepared`;
   if (await Bun.file(marker).exists()) {
     // The services may have stopped since, with the machine or by hand, so they start again.
-    const stopped = await startServicesAgain(run);
+    const stopped = await startServices(run);
     if (stopped) return stopped;
     await run.exit("prepare", true, "already prepared");
     return;
   }
-  // Services run outside the command sandbox, as a database container must, so only on
-  // merged code: a worktree made again from a task branch carries the agent's changes to
-  // the files they read, such as package.json or a compose file.
-  const trusted = runner.deps.trustedBase ?? repository.tip;
-  if (constraints.services.length > 0 && !(await atMergedCommit(worktree, trusted))) {
-    return await run.halt("prepare", {
-      hold: "attention",
-      reason:
-        trusted === repository.tip
-          ? `services run only on a worktree at a commit of ${repository.branch}, and this one carries the task's changes`
-          : `services run only on a worktree at the eval case's start, and this one is past a merge nobody read`,
-      end: "failed",
-      why: "services refused",
-    });
-  }
   if (constraints.ports > 0) await takePorts(worktree, constraints.ports);
+  const stopped = await startServices(run);
+  if (stopped) return stopped;
   const env = await run.env();
   const log = (text: string) => void run.log(text);
-  const steps = [
-    ...constraints.services.map((command) => ({
-      command,
-      start: () => runCommand(command, worktree, log, env, undefined, run.limit),
-    })),
-    ...constraints.prepare.map((command) => ({
-      command,
-      start: () => runner.prepare(command, worktree, log, env, run.limit),
-    })),
-  ];
-  for (const { command, start } of steps) {
-    const code = await start();
+  for (const command of constraints.prepare) {
+    const code = await runner.prepare(command, worktree, log, env, run.limit);
     if (code !== 0) {
       return await run.halt("prepare", {
         hold: "attention",

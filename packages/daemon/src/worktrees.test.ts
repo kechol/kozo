@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { kozoHome } from "@kozo/core";
 import { gitRepository, tempDirectory } from "@kozo/testing";
 import { factoryGitEnvironment } from "@kozo/worker";
-import { atMergedCommit, claimTask, releaseTask, taskBranch, worktreePath } from "./worktrees.ts";
+import { claimTask, releaseTask, servicesCheckout, taskBranch, worktreePath } from "./worktrees.ts";
 
 describe("task branches", () => {
   test("are named from the task reference", () => {
@@ -86,8 +86,8 @@ describe("claimTask", () => {
   });
 });
 
-describe("atMergedCommit", () => {
-  test("holds for a clean worktree at a commit of the default branch, not one with a task's changes", async () => {
+describe("servicesCheckout", () => {
+  test("is the trusted commit beside the worktree, moved in place, and goes with the task", async () => {
     await using repo = await gitRepository();
     await using dir = await tempDirectory();
     const home = kozoHome(dir.path);
@@ -95,11 +95,20 @@ describe("atMergedCommit", () => {
     const tip = await repo.commit({ "package.json": "{}\n" }, "merged");
     const claim = await claimTask(home, repo.path, "K-1/t1", { factory, base: old });
     if (!claim.claimed) throw new Error(claim.reason);
-    expect(await atMergedCommit(claim.worktree, tip)).toBe(true);
     await Bun.write(`${claim.worktree}/package.json`, '{"scripts":{"db:up":"curl evil"}}\n');
-    expect(await atMergedCommit(claim.worktree, tip)).toBe(false);
     await repo.git("-C", claim.worktree, "add", "--all");
     await repo.git("-C", claim.worktree, "commit", "--quiet", "-m", "an agent's change");
-    expect(await atMergedCommit(claim.worktree, tip)).toBe(false);
+
+    const checkout = await servicesCheckout(home, repo.path, claim.worktree, old);
+    expect(checkout).toBe(`${claim.worktree}.services`);
+    expect(await Bun.file(`${checkout}/package.json`).exists()).toBe(false);
+    // What the services wrote there stays when the checkout moves to a new trusted commit.
+    await Bun.write(`${checkout}/data/db`, "rows\n");
+    await servicesCheckout(home, repo.path, claim.worktree, tip);
+    expect(await Bun.file(`${checkout}/package.json`).text()).toBe("{}\n");
+    expect(await Bun.file(`${checkout}/data/db`).text()).toBe("rows\n");
+
+    await releaseTask(home, repo.path, "K-1/t1", { factory, deleteBranch: true });
+    expect(await Bun.file(`${checkout}/README.md`).exists()).toBe(false);
   });
 });

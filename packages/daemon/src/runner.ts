@@ -28,7 +28,7 @@ import type { EventStore } from "./event-store.ts";
 import { askExplorer } from "./explorer.ts";
 import { writeHandoffReport } from "./handoff-report.ts";
 import type { Launcher } from "./launcher.ts";
-import { nodeSteps, startServicesAgain } from "./nodes.ts";
+import { nodeSteps, startServices } from "./nodes.ts";
 import { RunRecords } from "./run-records.ts";
 import {
   BlueprintRun,
@@ -296,7 +296,7 @@ export class Runner implements RunnerOps {
     // stopped since.
     if (blueprintNodes.indexOf(start) > blueprintNodes.indexOf("prepare")) {
       try {
-        const ended = await startServicesAgain(blueprintRun);
+        const ended = await startServices(blueprintRun);
         if (ended) return ended;
       } catch (error) {
         return await stoppedAt(start, error);
