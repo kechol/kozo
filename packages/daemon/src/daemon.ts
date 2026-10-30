@@ -247,14 +247,13 @@ export class Daemon {
         .remind()
         .catch((error: unknown) => report(`kozod: reminding of approvals failed: ${error}`));
     remind();
-    const pollGitHub = async () => {
-      if (definition.current.factory.mode === "github") await github.poll();
-    };
     const jobs = serialJobs(report);
-    jobs.add("polling GitHub", async () => {
-      await pollGitHub();
-      scheduler.tick();
-    });
+    const pollGitHub = () =>
+      jobs.add("polling GitHub", async () => {
+        if (definition.current.factory.mode === "github") await github.poll();
+        scheduler.tick();
+      });
+    pollGitHub();
     let ticks = 0;
     const every = (ms: number) => ticks % Math.max(1, Math.round(ms / tickMs)) === 0;
     const timer = setInterval(() => {
@@ -262,12 +261,7 @@ export class Daemon {
       // The automations' minute is the tick's, however long the jobs before them take.
       const now = new Date();
       // GitHub is read every five minutes, with no webhook and no open port.
-      if (every(300_000)) {
-        jobs.add("polling GitHub", async () => {
-          await pollGitHub();
-          scheduler.tick();
-        });
-      }
+      if (every(300_000)) pollGitHub();
       // The factory definition is read and reconciliation runs once a minute; looking for work
       // to start, every tick.
       if (every(60_000)) {
