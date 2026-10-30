@@ -299,10 +299,9 @@ export class GitHubSync {
     { number, reason, author }: GitHubIssue,
   ) {
     const cancelled = reason === "not_planned" || reason === "duplicate";
+    // kozod closes an Issue only once its item is closed, which followClosedIssues skips. The
+    // closer's login says nothing of kozod: kozod uses the owner's own gh login.
     const closer = await this.github.closedBy(github, number);
-    // kozod closes an Issue after its item, which is its own record of the close.
-    this.self ??= await this.github.login();
-    if (closer === this.self) return;
     const writer =
       closer !== null && writers.includes(await this.github.permission(github, closer));
     if (!writer && !(cancelled && closer === author)) {

@@ -543,9 +543,9 @@ describe("GitHubSync", () => {
     close(done, "completed", "owner");
     close(dropped, "not_planned", "reader");
     close(stray, "completed", "triager");
-    // kozod's own login is a writer, but its close follows the item, never leads it.
+    // The owner closing through the login kozod uses is still the owner's close.
     env.github.permissions.set("me/shop kozo", "admin");
-    close(own, "completed", "kozo");
+    close(own, "not_planned", "kozo");
     for (const number of [edited, untrusted]) {
       const target = issues().find((entry) => entry.number === number);
       if (target) target.body = "Also cover 0 units.";
@@ -558,7 +558,7 @@ describe("GitHubSync", () => {
       "kozo:cancelled",
     ]);
     expect(items[`shop#${stray}`]).toMatchObject({ stage: "triage", hold: { kind: "attention" } });
-    expect(items[`shop#${own}`]).toMatchObject({ stage: "triage", hold: null });
+    expect(items[`shop#${own}`]?.stage).toBe("cancelled");
     expect(items[`shop#${edited}`]?.hold).toBeNull();
     expect(items[`shop#${untrusted}`]?.hold?.reason).toStartWith("reader, who may not write");
     for (const number of [edited, untrusted]) {
