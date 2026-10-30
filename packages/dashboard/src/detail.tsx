@@ -3,6 +3,7 @@ import { useEffect, useState } from "preact/hooks";
 import { type Action, ActionButton, cancelAction, retryAction, takeAction } from "./actions.tsx";
 import type { Api } from "./api.ts";
 import { ago, detailHash, eventLine, kindOf, usd } from "./format.ts";
+import { toneOf } from "./tone.ts";
 
 type Row = Record<string, unknown>;
 
@@ -136,7 +137,7 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
         <h2>{String(subject.title ?? subject.goal ?? `${subject.agent} run`)}</h2>
         <p class="row meta">
           <span>{String(subject.shown_stage ?? subject.stage ?? subject.state)}</span>
-          {hold ? <span class={`badge ${hold}`}>{hold}</span> : null}
+          {hold ? <span class={`badge ${toneOf("hold", hold)}`}>{hold}</span> : null}
           {reason ? <span class="reason">{reason}</span> : null}
           {detail.cost_usd !== undefined ? <span>cost {usd(detail.cost_usd)}</span> : null}
         </p>
@@ -206,7 +207,11 @@ function ItemBody({ detail }: { detail: Detail }) {
                   {String(task.ref)}
                 </a>
                 <span class="meta">{String(task.stage)}</span>
-                {task.hold ? <span class={`badge ${task.hold}`}>{String(task.hold)}</span> : null}
+                {task.hold ? (
+                  <span class={`badge ${toneOf("hold", String(task.hold))}`}>
+                    {String(task.hold)}
+                  </span>
+                ) : null}
                 <span>{String(task.goal)}</span>
               </li>
             ))}
@@ -255,7 +260,11 @@ function TaskBody({ api, refName, detail }: { api: Api; refName: string; detail:
           <h3>Blueprint{records.latest ? ` in ${records.latest}` : ""}</h3>
           <ol class="nodes">
             {records.nodes.map((node) => (
-              <li key={node.node} class={`node ${node.state}`} title={node.summary ?? node.state}>
+              <li
+                key={node.node}
+                class={`node ${toneOf("node", node.state)}`}
+                title={node.summary ?? node.state}
+              >
                 {node.node}
               </li>
             ))}

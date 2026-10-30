@@ -1,9 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { isClosed, stageSchema } from "@kozo/core";
+import {
+  holdKindSchema,
+  isClosed,
+  reviewVerdictSchema,
+  runStateSchema,
+  stageSchema,
+} from "@kozo/core";
 import { inboxActions } from "./actions.tsx";
 import { Api, ApiError, takeSession } from "./api.ts";
 import { detailActions } from "./detail.tsx";
 import { ago, eventLine, isClosedStage, kindOf, moveTarget, routeOf, stages } from "./format.ts";
+import { toneOf, tones } from "./tone.ts";
 
 const code = "ab".repeat(32);
 
@@ -185,5 +192,27 @@ describe("Api.follow", () => {
     });
     await expect(following).rejects.toBeInstanceOf(ApiError);
     expect(calls).toBe(1);
+  });
+});
+
+describe("toneOf", () => {
+  test("gives every stage, hold, run state and review verdict kozo defines a tone", () => {
+    const keys = (table: object) => Object.keys(table).sort();
+    expect(keys(tones.stage)).toEqual([...stageSchema.options].sort());
+    expect(keys(tones.hold)).toEqual([...holdKindSchema.options].sort());
+    expect(keys(tones.run)).toEqual([...runStateSchema.options].sort());
+    expect(keys(tones.review)).toEqual([...reviewVerdictSchema.options].sort());
+  });
+
+  test("colours merged work violet, work in progress yellow and failures red", () => {
+    expect(toneOf("stage", "complete")).toBe("done");
+    expect(toneOf("stage", "building")).toBe("progress");
+    expect(toneOf("run", "failed")).toBe("negative");
+    expect(toneOf("waiting", "merge")).toBe("positive");
+  });
+
+  test("leaves what it does not know, or nothing, neutral", () => {
+    expect(toneOf("hold", null)).toBe("neutral");
+    expect(toneOf("gates", "unknown")).toBe("neutral");
   });
 });

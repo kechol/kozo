@@ -2,6 +2,7 @@ import { ActionButton, inboxActions } from "./actions.tsx";
 import type { Api } from "./api.ts";
 import { ago, detailHash } from "./format.ts";
 import { inbox } from "./store.ts";
+import { toneOf } from "./tone.ts";
 
 const label: Record<string, string> = {
   approval: "approval",
@@ -19,12 +20,14 @@ export function Inbox({ api }: { api: Api }) {
   return (
     <ul class="inbox">
       {rows.map((row) => (
-        <li key={`${row.ref} ${row.waiting}`} class={`card waiting-${row.waiting}`}>
+        <li key={`${row.ref} ${row.waiting}`} class={`card ${toneOf("waiting", row.waiting)}`}>
           <div class="row spread">
             <a href={detailHash(row.ref)} class="ref">
               {row.ref}
             </a>
-            <span class={`badge ${row.waiting}`}>{label[row.waiting] ?? row.waiting}</span>
+            <span class={`badge ${toneOf("waiting", row.waiting)}`}>
+              {label[row.waiting] ?? row.waiting}
+            </span>
           </div>
           <h3>{row.title}</h3>
           {row.reason ? <p class="reason">{row.reason}</p> : null}
