@@ -30,7 +30,7 @@ import {
   toastLimit,
   toasts,
 } from "./store.ts";
-import { type Tone, toneOf, tones } from "./tone.ts";
+import { toneOf, tones } from "./tone.ts";
 
 const code = "ab".repeat(32);
 
@@ -265,10 +265,10 @@ describe("Icon", () => {
     }
   });
 
-  test("gives every tone a glyph, so that no state is told by colour alone", () => {
-    const all: Tone[] = ["info", "progress", "warning", "negative", "positive", "done", "neutral"];
-    for (const tone of all) expect(iconNames).toContain(toneIcon[tone]);
-    expect(new Set(Object.values(toneIcon)).size).toBe(all.length);
+  test("gives each tone its own glyph, so that no state is told by colour alone", () => {
+    const glyphs = Object.values(toneIcon);
+    for (const glyph of glyphs) expect(iconNames).toContain(glyph);
+    expect(new Set(glyphs).size).toBe(glyphs.length);
   });
 });
 

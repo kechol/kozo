@@ -6,7 +6,10 @@ import { Icon, type IconName } from "./icons.tsx";
 import { inbox } from "./store.ts";
 import { toneOf } from "./tone.ts";
 
-const label: Record<InboxRow["waiting"], string> = {
+/** What a row waits on, by its approval kind for an approval and by its waiting kind otherwise. */
+const label: Record<NonNullable<InboxRow["approval"]> | InboxRow["waiting"], string> = {
+  start: "Start approval",
+  plan: "Plan approval",
   approval: "Approval",
   question: "Question",
   attention: "Attention",
@@ -21,6 +24,13 @@ const glyph: Partial<Record<InboxRow["waiting"], IconName>> = {
 
 /** The exact time a row began waiting, shown on hover; one formatter serves every row. */
 const exact = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+/** The line under a row's title; an approval's reason only repeats its badge. */
+function note(row: InboxRow): string | null {
+  if (row.waiting === "merge")
+    return "Read the diff and merge the task branch yourself; kozo never merges.";
+  return row.waiting === "approval" ? null : row.reason;
+}
 
 /** What waits for the human, oldest first, each with the verbs that settle it. */
 export function Inbox({ api }: { api: Api }) {
@@ -42,11 +52,7 @@ export function Inbox({ api }: { api: Api }) {
         <li key={`${row.ref} ${row.waiting}`} class="inbox-row">
           <div class="row-head">
             <Badge tone={toneOf("waiting", row.waiting)} icon={glyph[row.waiting]}>
-              {row.approval === "plan"
-                ? "Plan approval"
-                : row.approval === "start"
-                  ? "Start approval"
-                  : label[row.waiting]}
+              {label[row.approval ?? row.waiting]}
             </Badge>
             <h2 class="row-heading">
               <a href={detailHash(row.ref)} class="row-title">
@@ -58,12 +64,7 @@ export function Inbox({ api }: { api: Api }) {
               {ago(row.since)}
             </time>
           </div>
-          {row.reason && row.waiting !== "approval" ? <p class="reason">{row.reason}</p> : null}
-          {row.waiting === "merge" ? (
-            <p class="reason">
-              Read the diff and merge the task branch yourself; kozo never merges.
-            </p>
-          ) : null}
+          {note(row) ? <p class="reason">{note(row)}</p> : null}
           <div class="row actions">
             {inboxActions(row.kind, row.waiting, row.approval).map((action) => (
               <ActionButton key={action.label} api={api} refName={row.ref} action={action} />

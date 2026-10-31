@@ -6,6 +6,7 @@ import { run, status, waiting } from "./store.ts";
 /** The factory at a glance: the views, whether it runs, what runs, and today's cost. */
 export function Header({ api, page }: { api: Api; page: string }) {
   const current = status.value;
+  const paused = current?.paused ?? false;
   const count = waiting.value;
   return (
     <header class="appbar">
@@ -30,11 +31,11 @@ export function Header({ api, page }: { api: Api; page: string }) {
       {current ? (
         <fieldset class="factory">
           <legend class="sr-only">Factory</legend>
-          <span class={`factory-state ${current.paused ? "neutral" : "positive"}`}>
-            <Icon name={current.paused ? "pause" : "dot"} />
-            {current.paused ? "Paused" : "Running"}
+          <span class={`factory-state ${paused ? "neutral" : "positive"}`}>
+            <Icon name={paused ? "pause" : "dot"} />
+            {paused ? "Paused" : "Running"}
           </span>
-          {current.paused && current.pausedReason ? (
+          {paused && current.pausedReason ? (
             <span class="paused-reason" title={current.pausedReason}>
               {current.pausedReason}
             </span>
@@ -46,15 +47,13 @@ export function Header({ api, page }: { api: Api; page: string }) {
           <span class="mode">{current.mode}</span>
           <button
             type="button"
-            aria-label={current.paused ? "Resume the factory" : "Pause the factory"}
+            aria-label={paused ? "Resume the factory" : "Pause the factory"}
             onClick={() =>
-              void run(api, () =>
-                api.post(current.paused ? "/api/factory/resume" : "/api/factory/pause"),
-              )
+              void run(api, () => api.post(paused ? "/api/factory/resume" : "/api/factory/pause"))
             }
           >
-            <Icon name={current.paused ? "play" : "pause"} />
-            {current.paused ? "Resume" : "Pause"}
+            <Icon name={paused ? "play" : "pause"} />
+            {paused ? "Resume" : "Pause"}
           </button>
         </fieldset>
       ) : null}

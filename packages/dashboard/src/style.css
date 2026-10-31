@@ -468,10 +468,14 @@ select:focus-visible {
   color: var(--negative-fg);
 }
 
-.card {
+.card,
+.panel {
   background: var(--surface);
   border: 1px solid var(--divider);
   border-radius: var(--radius-lg);
+}
+
+.card {
   padding: var(--space-3);
 }
 
@@ -733,19 +737,18 @@ pre.text {
   color: var(--negative-fg);
 }
 
+.toasts,
+.toast-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
 .toasts {
   position: fixed;
   right: var(--space-4);
   bottom: var(--space-4);
   z-index: var(--layer-toast);
-  display: grid;
-  gap: var(--space-2);
   width: min(380px, calc(100vw - 2 * var(--space-4)));
-}
-
-.toast-list {
-  display: grid;
-  gap: var(--space-2);
 }
 
 .toast {
@@ -792,12 +795,6 @@ pre.text {
   font-size: var(--text-xs);
 }
 
-.panel {
-  background: var(--surface);
-  border: 1px solid var(--divider);
-  border-radius: var(--radius-lg);
-}
-
 .rows {
   list-style: none;
   margin: 0;
@@ -840,15 +837,14 @@ pre.text {
   }
 }
 
-.row-head .ref {
+.row-head .ref,
+.row-head time {
   color: var(--muted);
   font-size: var(--text-xs);
 }
 
 .row-head time {
   margin-left: auto;
-  color: var(--muted);
-  font-size: var(--text-xs);
   white-space: nowrap;
 }
 

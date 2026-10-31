@@ -1,10 +1,11 @@
 import { signal } from "@preact/signals";
+import type { ComponentChildren } from "preact";
 import { useEffect, useRef } from "preact/hooks";
 import { AddItem } from "./add-item.tsx";
 import { type Api, endSession } from "./api.ts";
 import { Board } from "./board.tsx";
 import { DetailView } from "./detail.tsx";
-import { routeOf, titleOf } from "./format.ts";
+import { type Route, routeOf, titleOf } from "./format.ts";
 import { Header } from "./header.tsx";
 import { Inbox } from "./inbox.tsx";
 import { sessionEnded, status, waiting } from "./store.ts";
@@ -41,30 +42,43 @@ export function App({ api }: { api: Api }) {
       <Header api={api} page={current.page} />
       <Unreachable api={api} />
       <main ref={main} tabIndex={-1}>
-        {current.page === "detail" ? (
-          <DetailView key={current.ref} api={api} refName={current.ref} />
-        ) : current.page === "board" ? (
-          <>
-            <div class="page-head">
-              <h1>Board</h1>
-            </div>
-            {status.value?.mode === "local" ? <AddItem api={api} /> : null}
-            <Board api={api} />
-          </>
-        ) : (
-          <>
-            <div class="page-head">
-              <h1>Inbox</h1>
-              {count > 0 ? <p>{count} waiting for you, oldest first</p> : null}
-            </div>
-            <Inbox api={api} />
-          </>
-        )}
+        <View api={api} route={current} count={count} />
       </main>
       <Toasts />
     </>
   );
 }
+function View({ api, route, count }: { api: Api; route: Route; count: number }) {
+  if (route.page === "detail") return <DetailView key={route.ref} api={api} refName={route.ref} />;
+  if (route.page === "board") {
+    return (
+      <>
+        <PageHead title="Board" />
+        {status.value?.mode === "local" ? <AddItem api={api} /> : null}
+        <Board api={api} />
+      </>
+    );
+  }
+  return (
+    <>
+      <PageHead title="Inbox">
+        {count > 0 ? <p>{count} waiting for you, oldest first</p> : null}
+      </PageHead>
+      <Inbox api={api} />
+    </>
+  );
+}
+
+/** A view's one h1, with what it says about the view under it. */
+function PageHead({ title, children }: { title: string; children?: ComponentChildren }) {
+  return (
+    <div class="page-head">
+      <h1>{title}</h1>
+      {children}
+    </div>
+  );
+}
+
 /** What the page shows without a token, or once kozod ended its session: how to open it. */
 export function NoToken({ ended = false }: { ended?: boolean }) {
   useEffect(() => {

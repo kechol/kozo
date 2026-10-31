@@ -362,29 +362,27 @@ const events = [
   data,
 }));
 
-const json = (body: unknown, init?: ResponseInit) => Response.json(body, init);
+/** What every read answers with --down, as when kozod cannot be reached. */
+const down = () => Response.json({ error: "kozod is not running" }, { status: 503 });
 const list = (rows: unknown[]) =>
-  options.down
-    ? json({ error: "kozod is not running" }, { status: 503 })
-    : json(options.empty ? [] : rows);
+  options.down ? down() : Response.json(options.empty ? [] : rows);
 
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: Number(options.port),
   routes: {
     "/": page,
-    "/api/dashboard/session": () => json({ token: "preview" }),
-    "/api/status": () =>
-      options.down ? json({ error: "kozod is not running" }, { status: 503 }) : json(status),
+    "/api/dashboard/session": () => Response.json({ token: "preview" }),
+    "/api/status": () => (options.down ? down() : Response.json(status)),
     "/api/ls/inbox": () => list(inbox),
     "/api/ls/items": () => list(items),
     "/api/ls/tasks": () => list(tasks),
   },
   fetch(request) {
     const path = decodeURIComponent(new URL(request.url).pathname);
-    if (/^\/api\/refs\/.+\/records$/.test(path)) return json(records);
+    if (/^\/api\/refs\/.+\/records$/.test(path)) return Response.json(records);
     if (/^\/api\/refs\/.+\/diff$/.test(path))
-      return json({ base: "main", branch: "kozo/K-5-t1", diff, cut: false });
+      return Response.json({ base: "main", branch: "kozo/K-5-t1", diff, cut: false });
     if (/^\/api\/refs\/.+\/events$/.test(path)) {
       const body = events
         .map((event, index) => `id: ${index + 1}\ndata: ${JSON.stringify(event)}\n\n`)
@@ -400,16 +398,18 @@ const server = Bun.serve({
       );
     }
     const verb = /^\/api\/refs\/(.+)\/[a-z]+$/.exec(path);
-    if (verb && request.method === "POST") return json({ message: `${verb[1]}: done` });
+    if (verb && request.method === "POST") return Response.json({ message: `${verb[1]}: done` });
     const ref = /^\/api\/refs\/(.+)$/.exec(path);
     if (ref?.[1]) {
       const found = detailOf(ref[1]);
-      return found ? json(found) : json({ error: `${ref[1]} does not exist` }, { status: 404 });
+      return found
+        ? Response.json(found)
+        : Response.json({ error: `${ref[1]} does not exist` }, { status: 404 });
     }
     if (path.startsWith("/api/runs/"))
       return new Response("evidence", { headers: { "content-type": "text/plain" } });
-    if (request.method === "POST") return json({ message: "done" });
-    return json({ error: "not found" }, { status: 404 });
+    if (request.method === "POST") return Response.json({ message: "done" });
+    return Response.json({ error: "not found" }, { status: 404 });
   },
 });
 

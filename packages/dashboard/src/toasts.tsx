@@ -6,22 +6,17 @@ import { dismiss, type Toast, toasts } from "./store.ts";
  * announces each toast put in them: an answer politely, a failure at once.
  */
 export function Toasts() {
-  const shown = toasts.value;
+  const list = (failed: boolean) =>
+    toasts.value
+      .filter((toast) => toast.failed === failed)
+      .map((toast) => <ToastItem key={toast.id} toast={toast} />);
   return (
     <section class="toasts" aria-label="Notifications">
       <div class="toast-list" role="status">
-        {shown
-          .filter((toast) => !toast.failed)
-          .map((toast) => (
-            <ToastItem key={toast.id} toast={toast} />
-          ))}
+        {list(false)}
       </div>
       <div class="toast-list" role="alert">
-        {shown
-          .filter((toast) => toast.failed)
-          .map((toast) => (
-            <ToastItem key={toast.id} toast={toast} />
-          ))}
+        {list(true)}
       </div>
     </section>
   );
