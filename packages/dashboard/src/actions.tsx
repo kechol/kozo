@@ -1,5 +1,5 @@
 import type { Verb } from "@kozo/core";
-import { useState } from "preact/hooks";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Api } from "./api.ts";
 import { run } from "./store.ts";
 
@@ -17,6 +17,8 @@ export interface Action {
    * danger, and the others are secondary.
    */
   emphasis?: "primary" | "ghost" | "danger";
+  /** For a verb that closes work, which first asks in an alert dialog: its question and what it ends. */
+  confirm?: { ask: (ref: string) => string; ends: string };
 }
 
 /** Cancelling an item or a task, which asks why. */
@@ -25,6 +27,21 @@ export const cancelAction: Action = {
   label: "Cancel",
   text: { field: "cancel", required: true, placeholder: "Why it is cancelled" },
   emphasis: "danger",
+  confirm: {
+    ask: (ref) => `Cancel ${ref}?`,
+    ends: "Its runs stop, and its worktrees and task branches are removed. It closes as Cancelled and stays closed.",
+  },
+};
+
+export const doneAction: Action = {
+  verb: "close",
+  label: "Close as done",
+  body: { done: true },
+  emphasis: "ghost",
+  confirm: {
+    ask: (ref) => `Close ${ref} as done?`,
+    ends: "Its runs stop and its worktrees are removed. It closes as Complete and stays closed.",
+  },
 };
 
 export const retryAction: Action = {
@@ -87,7 +104,7 @@ export function inboxActions(
       return [
         { ...retryAction, emphasis: "primary" },
         ...(kind === "task" ? [takeAction] : []),
-        { verb: "close", label: "Close as done", body: { done: true }, emphasis: "ghost" },
+        doneAction,
         cancelAction,
       ];
     default:
@@ -95,7 +112,10 @@ export function inboxActions(
   }
 }
 
-/** A button for an action; one that takes text opens a field for it first. */
+/**
+ * A button for an action. One that takes text opens a field for it in place, and one that closes
+ * work asks in an alert dialog first; either gives focus back to the button when it closes.
+ */
 export function ActionButton({
   api,
   refName,
@@ -108,7 +128,45 @@ export function ActionButton({
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const form = useRef<HTMLFormElement>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
+  const back = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const restore = useRef(false);
+  const id = useId();
+
+  useEffect(() => {
+    if (open) {
+      dialog.current?.showModal();
+      (field.current ?? back.current)?.focus();
+    } else if (restore.current) {
+      restore.current = false;
+      trigger.current?.focus();
+    }
+  }, [open]);
+
+  // A sent action often settles what the button's row waits on, so the row goes; focus then
+  // moves to the view instead of being lost with it. A layout cleanup runs while the row is still
+  // in the page, and an open modal dialog makes the view inert, so it closes first.
+  useLayoutEffect(
+    () => () => {
+      const holder = [trigger.current, form.current].find((node) =>
+        node?.contains(document.activeElement),
+      );
+      if (!holder) return;
+      dialog.current?.close();
+      holder.closest("main")?.focus();
+    },
+    [],
+  );
+
+  const close = () => {
+    restore.current = true;
+    setOpen(false);
+  };
   const submit = async () => {
+    if (busy) return;
     setBusy(true);
     const words = text.trim();
     const body = {
@@ -118,51 +176,122 @@ export function ActionButton({
     const done = await run(api, () => api.act(refName, action.verb, body));
     setBusy(false);
     if (done) {
-      setOpen(false);
       setText("");
+      close();
     }
   };
   const kind = action.emphasis ?? "";
   // Inside its field, the verb is what the field is for, so it takes the strongest style.
-  const confirm = action.emphasis === "danger" ? "danger-solid" : "primary";
-  if (!action.text) {
+  const sendStyle = action.emphasis === "danger" || action.confirm ? "danger-solid" : "primary";
+  // A sending button stays focusable, so it is marked busy rather than disabled.
+  const sending = busy ? { "aria-busy": true, "aria-disabled": true } : {};
+  const label = busy ? "Sending…" : action.label;
+
+  if (!action.text && !action.confirm) {
     return (
-      <button type="button" class={kind} disabled={busy} onClick={submit}>
-        {action.label}
+      <button type="button" ref={trigger} class={kind} onClick={submit} {...sending}>
+        {label}
       </button>
     );
   }
-  if (!open) {
-    return (
-      <button type="button" class={kind} onClick={() => setOpen(true)}>
-        {action.label}…
-      </button>
-    );
-  }
-  const missing = action.text.required && text.trim() === "";
-  return (
+  const missing = action.text?.required === true && text.trim() === "";
+  const sendButton = (
+    <button
+      type="submit"
+      class={sendStyle}
+      disabled={missing}
+      aria-keyshortcuts={action.text ? "Meta+Enter Control+Enter" : undefined}
+      {...sending}
+    >
+      {label}
+    </button>
+  );
+  // An alert dialog puts the way back first, so the verb that closes work is the last stop.
+  const backButton = (
+    <button type="button" ref={back} class="ghost" onClick={close}>
+      Back
+    </button>
+  );
+  const fields = (
     <form
+      ref={form}
       class="action-form"
       onSubmit={(event) => {
         event.preventDefault();
         if (!missing) void submit();
       }}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        close();
+      }}
     >
-      <textarea
-        aria-label={`${action.label}: ${action.text.placeholder}`}
-        placeholder={action.text.placeholder}
-        value={text}
-        rows={3}
-        onInput={(event) => setText((event.target as HTMLTextAreaElement).value)}
-      />
-      <div class="row">
-        <button type="submit" class={confirm} disabled={busy || missing}>
-          {action.label}
-        </button>
-        <button type="button" class="ghost" onClick={() => setOpen(false)}>
-          Back
-        </button>
+      {action.confirm ? (
+        <>
+          <h2 id={`${id}-title`}>{action.confirm.ask(refName)}</h2>
+          <p id={`${id}-body`}>{action.confirm.ends}</p>
+        </>
+      ) : null}
+      {action.text ? (
+        <textarea
+          ref={field}
+          aria-label={`${action.label}: ${action.text.placeholder}`}
+          placeholder={action.text.placeholder}
+          value={text}
+          rows={3}
+          onInput={(event) => setText((event.target as HTMLTextAreaElement).value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+            event.preventDefault();
+            form.current?.requestSubmit();
+          }}
+        />
+      ) : null}
+      <div class="row form-actions">
+        {action.confirm ? (
+          <>
+            {backButton}
+            {sendButton}
+          </>
+        ) : (
+          <>
+            {sendButton}
+            {backButton}
+          </>
+        )}
       </div>
     </form>
   );
+  if (action.confirm) {
+    return (
+      <>
+        <button type="button" ref={trigger} class={kind} onClick={() => setOpen(true)}>
+          {action.label}…
+        </button>
+        {open ? (
+          <dialog
+            ref={dialog}
+            role="alertdialog"
+            class="confirm"
+            aria-labelledby={`${id}-title`}
+            aria-describedby={`${id}-body`}
+            onCancel={(event) => {
+              event.preventDefault();
+              close();
+            }}
+          >
+            {fields}
+          </dialog>
+        ) : null}
+      </>
+    );
+  }
+  if (!open) {
+    return (
+      <button type="button" ref={trigger} class={kind} onClick={() => setOpen(true)}>
+        {action.label}…
+      </button>
+    );
+  }
+  return fields;
 }

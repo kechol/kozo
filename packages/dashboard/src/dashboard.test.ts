@@ -120,6 +120,17 @@ describe("inboxActions", () => {
     const cancel = inboxActions("item", "approval", "start")[1];
     expect(cancel).toMatchObject({ verb: "close", text: { field: "cancel" }, emphasis: "danger" });
   });
+
+  test("asks before the verbs that close work, and only before them", () => {
+    const asking = (...args: Parameters<typeof inboxActions>) =>
+      inboxActions(...args)
+        .filter((action) => action.confirm)
+        .map((action) => action.confirm?.ask("K-7/t1"));
+    expect(asking("task", "attention", null)).toEqual(["Close K-7/t1 as done?", "Cancel K-7/t1?"]);
+    expect(asking("item", "approval", "start")).toEqual(["Cancel K-7/t1?"]);
+    expect(asking("item", "approval", "plan")).toEqual([]);
+    expect(asking("task", "question", null)).toEqual([]);
+  });
 });
 
 describe("format", () => {

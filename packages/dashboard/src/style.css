@@ -54,6 +54,7 @@
 
   --width-read: 760px;
   --width-page: 1200px;
+  --width-dialog: 440px;
 
   /* Stone leaning toward Graphite, light then dark. */
   --canvas: light-dark(#f7f6f4, #100f0e);
@@ -110,6 +111,7 @@
   --shadow-floating:
     0 0 0 1px rgb(0 0 0 / 0.06), 0 4px 12px -2px rgb(0 0 0 / 0.1),
     0 12px 32px -8px rgb(0 0 0 / 0.12);
+  --scrim: light-dark(rgb(28 26 25 / 0.32), rgb(0 0 0 / 0.6));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -305,6 +307,7 @@ button:disabled {
 }
 
 button[aria-busy="true"] {
+  opacity: 0.7;
   cursor: progress;
 }
 
@@ -513,6 +516,40 @@ select:focus-visible {
   display: grid;
   gap: var(--space-2);
   width: 100%;
+}
+
+.confirm {
+  width: min(var(--width-dialog), calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-5);
+  border: 0;
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-floating);
+}
+
+.confirm::backdrop {
+  background: var(--scrim);
+}
+
+.confirm .action-form {
+  gap: var(--space-3);
+}
+
+.confirm h2 {
+  font-size: var(--text-lg);
+  line-height: var(--leading-lg);
+  overflow-wrap: anywhere;
+}
+
+.confirm p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.confirm .form-actions {
+  justify-content: flex-end;
+  margin-top: var(--space-2);
 }
 
 .no-token {
