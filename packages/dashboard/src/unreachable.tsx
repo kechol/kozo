@@ -12,7 +12,7 @@ export function Unreachable({ api }: { api: Api }) {
   return (
     <div role="alert">
       {reason ? (
-        <div class="banner">
+        <div class="banner negative">
           <Icon name="alert" />
           <p>
             <strong>kozod cannot be reached.</strong>{" "}

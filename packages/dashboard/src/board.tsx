@@ -104,9 +104,9 @@ function ItemCard({
           {item.ref}
         </a>
         {item.level ? (
-          <Badge tone="neutral" icon={null} label="autonomy level">
+          <span class="badge neutral" title="autonomy level">
             {item.level}
-          </Badge>
+          </span>
         ) : null}
       </div>
       <p class="title">{item.title}</p>

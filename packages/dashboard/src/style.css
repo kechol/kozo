@@ -130,6 +130,49 @@
   box-sizing: border-box;
 }
 
+/* Each tone once: a rule colours a state through --tone-fg, --tone-bg and --tone-solid. */
+.info {
+  --tone-fg: var(--info-fg);
+  --tone-bg: var(--info-bg);
+  --tone-solid: var(--info-solid);
+}
+
+.progress {
+  --tone-fg: var(--progress-fg);
+  --tone-bg: var(--progress-bg);
+  --tone-solid: var(--progress-solid);
+}
+
+.warning {
+  --tone-fg: var(--warning-fg);
+  --tone-bg: var(--warning-bg);
+  --tone-solid: var(--warning-solid);
+}
+
+.negative {
+  --tone-fg: var(--negative-fg);
+  --tone-bg: var(--negative-bg);
+  --tone-solid: var(--negative-solid);
+}
+
+.positive {
+  --tone-fg: var(--positive-fg);
+  --tone-bg: var(--positive-bg);
+  --tone-solid: var(--positive-solid);
+}
+
+.done {
+  --tone-fg: var(--done-fg);
+  --tone-bg: var(--done-bg);
+  --tone-solid: var(--done-solid);
+}
+
+.neutral {
+  --tone-fg: var(--neutral-fg);
+  --tone-bg: var(--neutral-bg);
+  --tone-solid: var(--neutral-solid);
+}
+
 body {
   margin: 0;
   background: var(--canvas);
@@ -419,11 +462,7 @@ select:focus-visible {
 }
 
 .factory-state .icon {
-  color: var(--positive-solid);
-}
-
-.factory-state.paused .icon {
-  color: var(--neutral-solid);
+  color: var(--tone-solid);
 }
 
 .paused-reason {
@@ -460,41 +499,11 @@ select:focus-visible {
   height: 20px;
   padding: 0 6px;
   border-radius: var(--radius-sm);
-  color: var(--neutral-fg);
-  background: var(--neutral-bg);
+  color: var(--tone-fg);
+  background: var(--tone-bg);
   font-size: var(--text-xs);
   font-weight: var(--weight-medium);
   white-space: nowrap;
-}
-
-.badge.info {
-  color: var(--info-fg);
-  background: var(--info-bg);
-}
-
-.badge.progress {
-  color: var(--progress-fg);
-  background: var(--progress-bg);
-}
-
-.badge.warning {
-  color: var(--warning-fg);
-  background: var(--warning-bg);
-}
-
-.badge.negative {
-  color: var(--negative-fg);
-  background: var(--negative-bg);
-}
-
-.badge.positive {
-  color: var(--positive-fg);
-  background: var(--positive-bg);
-}
-
-.badge.done {
-  color: var(--done-fg);
-  background: var(--done-bg);
 }
 
 .reason,
@@ -658,23 +667,11 @@ button.small {
   font-size: var(--text-xs);
   padding: 2px var(--space-2);
   border-radius: var(--radius-sm);
-  color: var(--neutral-fg);
-  background: var(--neutral-bg);
-}
-
-.node.positive {
-  color: var(--positive-fg);
-  background: var(--positive-bg);
-}
-
-.node.negative {
-  color: var(--negative-fg);
-  background: var(--negative-bg);
+  color: var(--tone-fg);
+  background: var(--tone-bg);
 }
 
 .node.progress {
-  color: var(--progress-fg);
-  background: var(--progress-bg);
   font-weight: var(--weight-strong);
 }
 
@@ -783,11 +780,7 @@ pre.text {
 .toast-mark {
   display: flex;
   margin-top: 1px;
-  color: var(--positive-solid);
-}
-
-.toast.failed .toast-mark {
-  color: var(--negative-solid);
+  color: var(--tone-solid);
 }
 
 .toast p {
@@ -808,8 +801,8 @@ pre.text {
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-5);
-  background: var(--negative-bg);
-  color: var(--negative-fg);
+  background: var(--tone-bg);
+  color: var(--tone-fg);
   border-bottom: 1px solid var(--divider);
 }
 

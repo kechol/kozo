@@ -30,7 +30,7 @@ export function Header({ api, page }: { api: Api; page: string }) {
       {current ? (
         <fieldset class="factory">
           <legend class="sr-only">Factory</legend>
-          <span class={current.paused ? "factory-state paused" : "factory-state"}>
+          <span class={`factory-state ${current.paused ? "neutral" : "positive"}`}>
             <Icon name={current.paused ? "pause" : "dot"} />
             {current.paused ? "Paused" : "Running"}
           </span>

@@ -1,4 +1,4 @@
-import { Icon } from "./icons.tsx";
+import { Icon, toneIcon } from "./icons.tsx";
 import { dismiss, type Toast, toasts } from "./store.ts";
 
 /**
@@ -28,10 +28,11 @@ export function Toasts() {
 }
 
 function ToastItem({ toast }: { toast: Toast }) {
+  const tone = toast.failed ? "negative" : "positive";
   return (
-    <div class={toast.failed ? "toast failed" : "toast"}>
+    <div class={`toast ${tone}`}>
       <span class="toast-mark">
-        <Icon name={toast.failed ? "x" : "check"} />
+        <Icon name={toneIcon[tone]} />
       </span>
       <p>{toast.text}</p>
       <button type="button" class="ghost" aria-label="Dismiss" onClick={() => dismiss(toast.id)}>
