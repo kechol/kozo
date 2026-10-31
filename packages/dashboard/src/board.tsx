@@ -151,11 +151,7 @@ function ItemCard({
     <article class="card board-card">
       <div class="card-top">
         <span class="ref">{item.ref}</span>
-        {item.level ? (
-          <span class="level" title="Autonomy level">
-            {item.level}
-          </span>
-        ) : null}
+        {item.level ? <span title="Autonomy level">{item.level}</span> : null}
       </div>
       <CardTitle href={detailHash(item.ref)}>{item.title}</CardTitle>
       {item.hold || item.class ? (

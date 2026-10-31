@@ -34,7 +34,7 @@ export const cancelAction: Action = {
   },
 };
 
-export const doneAction: Action = {
+const doneAction: Action = {
   verb: "close",
   label: "Close as done",
   body: { done: true },
@@ -52,6 +52,10 @@ export const retryAction: Action = {
 };
 
 export const takeAction: Action = { verb: "take", label: "Take it over" };
+
+/** A sending button stays focusable, so it is marked busy rather than disabled. */
+export const busyAttributes = (busy: boolean) =>
+  busy ? ({ "aria-busy": true, "aria-disabled": true } as const) : {};
 
 /**
  * The verbs a row of the inbox offers for what it waits on. There is never a merge, and each
@@ -178,16 +182,14 @@ export function ActionButton({
       close();
     }
   };
-  const kind = action.emphasis ?? "";
   // Inside its field, the verb is what the field is for, so it takes the strongest style.
   const sendStyle = action.emphasis === "danger" || action.confirm ? "danger-solid" : "primary";
-  // A sending button stays focusable, so it is marked busy rather than disabled.
-  const sending = busy ? { "aria-busy": true, "aria-disabled": true } : {};
+  const sending = busyAttributes(busy);
   const label = busy ? "Sending…" : action.label;
 
   if (!action.text && !action.confirm) {
     return (
-      <button type="button" ref={trigger} class={kind} onClick={submit} {...sending}>
+      <button type="button" ref={trigger} class={action.emphasis} onClick={submit} {...sending}>
         {label}
       </button>
     );
@@ -260,12 +262,15 @@ export function ActionButton({
       </div>
     </form>
   );
+  const opener = (
+    <button type="button" ref={trigger} class={action.emphasis} onClick={() => setOpen(true)}>
+      {action.label}…
+    </button>
+  );
   if (action.confirm) {
     return (
       <>
-        <button type="button" ref={trigger} class={kind} onClick={() => setOpen(true)}>
-          {action.label}…
-        </button>
+        {opener}
         {open ? (
           <Modal alert label={`${id}-title`} description={`${id}-body`} onClose={close}>
             {fields}
@@ -274,12 +279,5 @@ export function ActionButton({
       </>
     );
   }
-  if (!open) {
-    return (
-      <button type="button" ref={trigger} class={kind} onClick={() => setOpen(true)}>
-        {action.label}…
-      </button>
-    );
-  }
-  return fields;
+  return open ? fields : opener;
 }

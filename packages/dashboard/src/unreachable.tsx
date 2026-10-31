@@ -1,6 +1,7 @@
 import type { Api } from "./api.ts";
 import { Icon } from "./icons.tsx";
 import { problem, refresh, refreshedAt } from "./store.ts";
+import { Time } from "./time.tsx";
 
 /**
  * Says when kozod cannot be reached and how old what the page shows is. The region is always in
@@ -18,10 +19,8 @@ export function Unreachable({ api }: { api: Api }) {
             {refreshedAt.value ? (
               <>
                 The page shows what it said at{" "}
-                <time dateTime={refreshedAt.value.toISOString()}>
-                  {refreshedAt.value.toLocaleTimeString()}
-                </time>
-                , and tries again every few seconds.
+                <Time iso={refreshedAt.value.toISOString()} as="clock" />, and tries again every few
+                seconds.
               </>
             ) : (
               "The page tries again every few seconds."

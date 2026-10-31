@@ -1,9 +1,10 @@
 import type { Event } from "@kozo/core";
 import type { ComponentChildren } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   type Action,
   ActionButton,
+  busyAttributes,
   cancelAction,
   inboxActions,
   retryAction,
@@ -115,7 +116,6 @@ const text = (value: unknown) => (value === null || value === undefined ? "" : S
 export function DetailView({ api, refName }: { api: Api; refName: string }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [failed, setFailed] = useState<{ message: string; missing: boolean } | null>(null);
-  const [events, setEvents] = useState<Event[]>([]);
   const [records, setRecords] = useState<Verdicts | null>(null);
   const kind = kindOf(refName);
 
@@ -140,31 +140,22 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
         );
     void load();
     const timer = setInterval(load, 3000);
-    const stop = new AbortController();
-    setEvents([]);
-    void api
-      .follow(
-        refName,
-        (event) => setEvents((shown) => [event, ...shown].slice(0, 400)),
-        stop.signal,
-      )
-      .catch(() => {});
     return () => {
       live = false;
       clearInterval(timer);
-      stop.abort();
     };
   }, [api, refName]);
 
   // A task's records change when a run ends or its stage or hold moves, not on every poll.
+  const shown = detail !== null;
   const runCount = detail?.runs?.length ?? 0;
   useEffect(() => {
-    if (kind !== "task") return;
+    if (kind !== "task" || !shown) return;
     void api
       .get<Verdicts>(`/api/refs/${encodeURIComponent(refName)}/records`)
       .then(setRecords)
       .catch(() => {});
-  }, [api, refName, kind, runCount, detail?.task?.stage, detail?.task?.hold]);
+  }, [api, refName, kind, shown, runCount, detail?.task?.stage, detail?.task?.hold]);
 
   if (failed?.missing) return <Missing refName={refName} />;
   if (failed && !detail) return <p class="problem">{failed.message}</p>;
@@ -223,11 +214,13 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
       </header>
       <div class="detail-body">
         <div class="detail-main">
-          {kind === "item" && detail.item ? <ItemBody detail={detail} /> : null}
-          {kind === "task" && detail.task ? (
-            <TaskBody api={api} refName={refName} detail={detail} records={records} />
+          {kind === "item" && detail.item ? (
+            <ItemBody item={detail.item} tasks={detail.tasks ?? []} />
           ) : null}
-          <Timeline events={events} />
+          {kind === "task" && detail.task ? (
+            <TaskBody api={api} refName={refName} task={detail.task} records={records} />
+          ) : null}
+          <Timeline api={api} refName={refName} />
         </div>
         <Properties kind={kind} refName={refName} detail={detail} records={records} />
       </div>
@@ -364,7 +357,7 @@ function PlanView({ plan, title }: { plan: Plan; title: string }) {
         ))}
       </ul>
       <h3>Tasks</h3>
-      <ol class="plan-tasks">
+      <ol>
         {plan.tasks.map((task) => (
           <li key={task.id}>
             <span class="ref">{task.id}</span> {task.goal}
@@ -384,18 +377,16 @@ function PlanView({ plan, title }: { plan: Plan; title: string }) {
   );
 }
 
-function ItemBody({ detail }: { detail: Detail }) {
-  const item = detail.item;
-  if (!item) return null;
+function ItemBody({ item, tasks }: { item: NonNullable<Detail["item"]>; tasks: Row[] }) {
   return (
     <>
       {item.draft ? <PlanView plan={item.draft} title="Draft plan waiting for approval" /> : null}
       {item.plan ? <PlanView plan={item.plan} title="Plan" /> : null}
-      {detail.tasks && detail.tasks.length > 0 ? (
+      {tasks.length > 0 ? (
         <section class="card">
           <h2>Tasks</h2>
-          <ul class="plain list">
-            {detail.tasks.map((task) => (
+          <ul class="plain">
+            {tasks.map((task) => (
               <li key={text(task.ref)} class="list-row">
                 <a href={detailHash(text(task.ref))} class="list-title">
                   {text(task.goal)}
@@ -417,16 +408,14 @@ function ItemBody({ detail }: { detail: Detail }) {
 function TaskBody({
   api,
   refName,
-  detail,
+  task,
   records,
 }: {
   api: Api;
   refName: string;
-  detail: Detail;
+  task: NonNullable<Detail["task"]>;
   records: Verdicts | null;
 }) {
-  const task = detail.task;
-  if (!task) return null;
   return (
     <>
       <section class="card">
@@ -601,6 +590,7 @@ function Diff({ api, refName }: { api: Api; refName: string }) {
     if (diff) shown.current?.focus();
   }, [diff]);
   const show = () => {
+    if (loading) return;
     setLoading(true);
     void api
       .get<{ diff: string; cut: boolean }>(`/api/refs/${encodeURIComponent(refName)}/diff`)
@@ -622,11 +612,7 @@ function Diff({ api, refName }: { api: Api; refName: string }) {
           ) : null}
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={show}
-          {...(loading ? { "aria-busy": true, "aria-disabled": true } : {})}
-        >
+        <button type="button" onClick={show} {...busyAttributes(loading)}>
           {loading ? "Reading the diff…" : "Show the diff"}
         </button>
       )}
@@ -637,10 +623,10 @@ function Diff({ api, refName }: { api: Api; refName: string }) {
 
 /** A diff as text, its added and removed lines marked; it is never rendered as markup. */
 function DiffView({ text }: { text: string }) {
-  if (text.trim() === "") return <p class="empty">The branch changes nothing yet.</p>;
-  return (
-    <pre class="diff">
-      {text.split("\n").map((line, index) => {
+  // The detail view re-renders on every poll, and a diff runs to many thousand lines.
+  const lines = useMemo(
+    () =>
+      text.split("\n").map((line, index) => {
         const kind =
           line.startsWith("diff ") || line.startsWith("+++") || line.startsWith("---")
             ? "file"
@@ -657,9 +643,11 @@ function DiffView({ text }: { text: string }) {
             {"\n"}
           </span>
         );
-      })}
-    </pre>
+      }),
+    [text],
   );
+  if (text.trim() === "") return <p class="empty">The branch changes nothing yet.</p>;
+  return <pre class="diff">{lines}</pre>;
 }
 
 /** One evidence file: an image shown in place, anything else as a download. */
@@ -712,15 +700,33 @@ function Runs({ runs }: { runs: Row[] }) {
   );
 }
 
-/** The newest events first, in one group per run, so a run's turns read together. */
-function Timeline({ events }: { events: Event[] }) {
-  const groups: { run: string | null; events: Event[] }[] = [];
-  for (const event of events) {
-    const run = event.run_id ?? null;
-    const last = groups.at(-1);
-    if (last && last.run === run) last.events.push(event);
-    else groups.push({ run, events: [event] });
-  }
+/**
+ * The newest events first, in one group per run, so a run's turns read together. It follows the
+ * events itself, so that each one re-renders the timeline only and not the whole view.
+ */
+function Timeline({ api, refName }: { api: Api; refName: string }) {
+  const [events, setEvents] = useState<Event[]>([]);
+  useEffect(() => {
+    const stop = new AbortController();
+    void api
+      .follow(
+        refName,
+        (event) => setEvents((shown) => [event, ...shown].slice(0, 400)),
+        stop.signal,
+      )
+      .catch(() => {});
+    return () => stop.abort();
+  }, [api, refName]);
+  const groups = useMemo(() => {
+    const grouped: { run: string | null; events: Event[] }[] = [];
+    for (const event of events) {
+      const run = event.run_id ?? null;
+      const last = grouped.at(-1);
+      if (last && last.run === run) last.events.push(event);
+      else grouped.push({ run, events: [event] });
+    }
+    return grouped;
+  }, [events]);
   return (
     <section class="card">
       <h2>Events</h2>

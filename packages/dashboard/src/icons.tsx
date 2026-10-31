@@ -23,7 +23,6 @@ const shapes = {
   plus: <path d="M8 3.5v9M3.5 8h9" />,
   "arrow-up": <path d="M8 12.5v-9M4.5 7L8 3.5 11.5 7" />,
   "arrow-down": <path d="M8 3.5v9M4.5 9L8 12.5 11.5 9" />,
-  "chevron-down": <path d="M4.5 6.5L8 10l3.5-3.5" />,
   circle: <circle cx="8" cy="8" r="5.75" />,
   dot: <circle cx="8" cy="8" r="3" fill="currentColor" stroke="none" />,
   merge: (

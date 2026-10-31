@@ -93,6 +93,17 @@ export const stages = [
   "cancelled",
 ] as const;
 
+/** The work classes a new item may ask for, listed here for the same reason as the stages. */
+export const workClasses = [
+  "docs",
+  "deps",
+  "bugfix",
+  "refactor",
+  "perf",
+  "migration",
+  "feature",
+] as const;
+
 export const isClosedStage = (stage: string) => stage === "complete" || stage === "cancelled";
 
 /**

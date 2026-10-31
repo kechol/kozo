@@ -5,6 +5,7 @@ import {
   reviewVerdictSchema,
   runStateSchema,
   stageSchema,
+  workClassSchema,
 } from "@kozo/core";
 import { inboxActions } from "./actions.tsx";
 import { Api, ApiError, takeSession } from "./api.ts";
@@ -18,6 +19,7 @@ import {
   routeOf,
   stages,
   titleOf,
+  workClasses,
 } from "./format.ts";
 import { Icon, iconNames, toneIcon } from "./icons.tsx";
 import {
@@ -139,6 +141,10 @@ describe("format", () => {
     const closed: string[] = stageSchema.options.filter((stage) => isClosed(stage));
     expect(listed).toEqual(stageSchema.options);
     expect<string[]>(listed.filter(isClosedStage)).toEqual(closed);
+  });
+
+  test("lists the work classes as kozo defines them", () => {
+    expect<string[]>([...workClasses]).toEqual(workClassSchema.options);
   });
 
   test("titles the tab with the view, and with how many wait while any do", () => {

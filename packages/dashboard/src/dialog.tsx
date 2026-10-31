@@ -1,9 +1,9 @@
 import type { ComponentChildren } from "preact";
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 
 /**
- * A modal dialog, open for as long as it is rendered. Opening focuses its first control, and
- * Escape asks the owner to close it; the owner gives focus back to what opened it.
+ * A modal dialog, open for as long as it is rendered. Opening focuses its first control, Escape
+ * asks the owner to close it, and closing gives focus back to what opened it.
  */
 export function Modal({
   label,
@@ -23,6 +23,12 @@ export function Modal({
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     dialog.current?.showModal();
+  }, []);
+  // Closing a modal dialog gives focus back to what had it before, so the dialog closes while it
+  // is still in the page; a passive cleanup would run after it is gone.
+  useLayoutEffect(() => {
+    const node = dialog.current;
+    return () => node?.close();
   }, []);
   return (
     <dialog

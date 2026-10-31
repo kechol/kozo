@@ -258,11 +258,6 @@ button,
     transform var(--duration-press) var(--ease);
 }
 
-button.md {
-  height: var(--control-md);
-  font-size: var(--text-md);
-}
-
 button.icon-button {
   width: var(--control-sm);
   padding: 0;
@@ -615,14 +610,13 @@ main.wide {
   outline-offset: 0;
 }
 
-/* The scroller clips what overflows it, so it keeps room for a card's focus ring at its sides. */
+/* The scroller clips what overflows it, so focus rings inside it are drawn inside their element. */
 .board {
+  --focus-offset: calc(-1 * var(--focus-width));
   display: flex;
   gap: var(--space-3);
   overflow-x: auto;
-  margin: 0 calc(-1 * var(--space-1));
-  padding: 0 var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
+  padding-bottom: var(--space-2);
 }
 
 .column {
@@ -782,6 +776,15 @@ main.wide {
     width: calc(100vw - 2 * var(--space-5) - var(--space-6));
     scroll-snap-align: start;
   }
+
+  .factory {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .factory button {
+    margin-left: auto;
+  }
 }
 
 .detail {
@@ -813,10 +816,6 @@ main.wide {
 
 .trail [aria-current] {
   color: var(--text);
-}
-
-.detail-head .reason {
-  color: var(--muted);
 }
 
 .detail-body {
@@ -921,7 +920,8 @@ main.wide {
   gap: 2px;
 }
 
-.list-row {
+.list-row,
+.runs li {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -953,13 +953,6 @@ main.wide {
 
 .record-head .ref {
   margin-left: auto;
-}
-
-.runs li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1) var(--space-2);
 }
 
 .runs time {
@@ -1342,17 +1335,6 @@ pre.diff {
 .empty-state strong {
   color: var(--text);
   font-weight: var(--weight-medium);
-}
-
-@media (max-width: 720px) {
-  .factory {
-    flex-basis: 100%;
-    margin-left: 0;
-  }
-
-  .factory button {
-    margin-left: auto;
-  }
 }
 
 /* More contrast: quiet text and the lines between things move toward the text colour. */

@@ -1,10 +1,10 @@
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+import { useId, useState } from "preact/hooks";
+import { busyAttributes } from "./actions.tsx";
 import type { Api } from "./api.ts";
 import { Modal } from "./dialog.tsx";
+import { workClasses } from "./format.ts";
 import { Icon } from "./icons.tsx";
 import { run, status } from "./store.ts";
-
-const classes = ["docs", "deps", "bugfix", "refactor", "perf", "migration", "feature"] as const;
 
 /**
  * Adds an item as `kozo add` does, from a dialog: a title, the request, and the repository and
@@ -18,20 +18,9 @@ export function AddItem({ api }: { api: Api }) {
   const [repository, setRepository] = useState("");
   const [workClass, setWorkClass] = useState("");
   const [busy, setBusy] = useState(false);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const restore = useRef(false);
   const id = useId();
 
-  useEffect(() => {
-    if (open || !restore.current) return;
-    restore.current = false;
-    trigger.current?.focus();
-  }, [open]);
-
-  const close = () => {
-    restore.current = true;
-    setOpen(false);
-  };
+  const close = () => setOpen(false);
   const ready = title.trim() !== "" && (repositories.length <= 1 || repository !== "");
   const submit = async () => {
     if (busy || !ready) return;
@@ -53,7 +42,7 @@ export function AddItem({ api }: { api: Api }) {
   };
   return (
     <>
-      <button type="button" ref={trigger} class="primary" onClick={() => setOpen(true)}>
+      <button type="button" class="primary" onClick={() => setOpen(true)}>
         <Icon name="plus" />
         New item
       </button>
@@ -108,7 +97,7 @@ export function AddItem({ api }: { api: Api }) {
                 onChange={(event) => setWorkClass((event.target as HTMLSelectElement).value)}
               >
                 <option value="">Let triage choose</option>
-                {classes.map((name) => (
+                {workClasses.map((name) => (
                   <option key={name} value={name}>
                     {name}
                   </option>
@@ -119,12 +108,7 @@ export function AddItem({ api }: { api: Api }) {
               <button type="button" class="ghost" onClick={close}>
                 Back
               </button>
-              <button
-                type="submit"
-                class="primary"
-                disabled={!ready}
-                {...(busy ? { "aria-busy": true, "aria-disabled": true } : {})}
-              >
+              <button type="submit" class="primary" disabled={!ready} {...busyAttributes(busy)}>
                 {busy ? "Adding…" : "Add item"}
               </button>
             </div>
