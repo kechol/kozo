@@ -615,11 +615,13 @@ main.wide {
   outline-offset: 0;
 }
 
+/* The scroller clips what overflows it, so it keeps room for a card's focus ring at its sides. */
 .board {
   display: flex;
   gap: var(--space-3);
   overflow-x: auto;
-  padding-bottom: var(--space-2);
+  margin: 0 calc(-1 * var(--space-1));
+  padding: 0 var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
 }
 
@@ -1088,6 +1090,12 @@ pre.diff {
 
 pre.text {
   white-space: pre-wrap;
+}
+
+.diff-shown {
+  display: grid;
+  gap: var(--space-2);
+  border-radius: var(--radius-md);
 }
 
 pre.diff {

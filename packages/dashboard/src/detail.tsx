@@ -1,6 +1,6 @@
 import type { Event } from "@kozo/core";
 import type { ComponentChildren } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import {
   type Action,
   ActionButton,
@@ -595,6 +595,11 @@ function Diff({ api, refName }: { api: Api; refName: string }) {
   const [diff, setDiff] = useState<{ diff: string; cut: boolean } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const shown = useRef<HTMLDivElement>(null);
+  // The diff replaces the button that asked for it, so focus moves onto the diff.
+  useEffect(() => {
+    if (diff) shown.current?.focus();
+  }, [diff]);
   const show = () => {
     setLoading(true);
     void api
@@ -610,12 +615,12 @@ function Diff({ api, refName }: { api: Api; refName: string }) {
     <section class="card">
       <h2>Diff</h2>
       {diff ? (
-        <>
+        <div ref={shown} class="diff-shown" tabIndex={-1}>
           <DiffView text={diff.diff} />
           {diff.cut ? (
             <p class="meta">The diff is longer; kozo show --diff prints all of it.</p>
           ) : null}
-        </>
+        </div>
       ) : (
         <button
           type="button"
