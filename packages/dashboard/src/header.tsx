@@ -1,12 +1,12 @@
 import type { Api } from "./api.ts";
 import { usd } from "./format.ts";
 import { Icon } from "./icons.tsx";
-import { inbox, run, status } from "./store.ts";
+import { run, status, waiting } from "./store.ts";
 
 /** The factory at a glance: the views, whether it runs, what runs, and today's cost. */
 export function Header({ api, page }: { api: Api; page: string }) {
   const current = status.value;
-  const waiting = inbox.value.length;
+  const count = waiting.value;
   return (
     <header class="appbar">
       <a class="brand" href="#/">
@@ -16,9 +16,9 @@ export function Header({ api, page }: { api: Api; page: string }) {
       <nav class="tabs" aria-label="Views">
         <a class="tab" href="#/" aria-current={page === "inbox" ? "page" : undefined}>
           Inbox
-          {waiting > 0 ? (
+          {count > 0 ? (
             <span class="count">
-              {waiting}
+              {count}
               <span class="sr-only"> waiting</span>
             </span>
           ) : null}

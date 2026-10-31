@@ -8,7 +8,6 @@ import { problem, refresh, refreshedAt } from "./store.ts";
  */
 export function Unreachable({ api }: { api: Api }) {
   const reason = problem.value;
-  const last = refreshedAt.value;
   return (
     <div role="alert">
       {reason ? (
@@ -16,11 +15,13 @@ export function Unreachable({ api }: { api: Api }) {
           <Icon name="alert" />
           <p>
             <strong>kozod cannot be reached.</strong>{" "}
-            {last ? (
+            {refreshedAt.value ? (
               <>
                 The page shows what it said at{" "}
-                <time dateTime={last.toISOString()}>{last.toLocaleTimeString()}</time>, and tries
-                again every few seconds.
+                <time dateTime={refreshedAt.value.toISOString()}>
+                  {refreshedAt.value.toLocaleTimeString()}
+                </time>
+                , and tries again every few seconds.
               </>
             ) : (
               "The page tries again every few seconds."

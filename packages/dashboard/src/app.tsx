@@ -7,7 +7,7 @@ import { DetailView } from "./detail.tsx";
 import { routeOf, titleOf } from "./format.ts";
 import { Header } from "./header.tsx";
 import { Inbox } from "./inbox.tsx";
-import { inbox, sessionEnded, status } from "./store.ts";
+import { sessionEnded, status, waiting } from "./store.ts";
 import { Toasts } from "./toasts.tsx";
 import { Unreachable } from "./unreachable.tsx";
 
@@ -18,13 +18,13 @@ window.addEventListener("hashchange", () => {
 
 export function App({ api }: { api: Api }) {
   const current = route.value;
-  const waiting = inbox.value.length;
+  const count = waiting.value;
   const main = useRef<HTMLElement>(null);
   const first = useRef(true);
 
   useEffect(() => {
-    document.title = titleOf(current, waiting);
-  }, [current, waiting]);
+    document.title = titleOf(current, count);
+  }, [current, count]);
 
   // A new view takes focus, so that keyboard and screen reader users start reading it.
   useEffect(() => {
@@ -55,7 +55,7 @@ export function App({ api }: { api: Api }) {
           <>
             <div class="page-head">
               <h1>Inbox</h1>
-              {waiting > 0 ? <p>{waiting} waiting for you, oldest first</p> : null}
+              {count > 0 ? <p>{count} waiting for you, oldest first</p> : null}
             </div>
             <Inbox api={api} />
           </>

@@ -1,4 +1,4 @@
-import { signal } from "@preact/signals";
+import { computed, signal } from "@preact/signals";
 import {
   type Api,
   ApiError,
@@ -10,6 +10,8 @@ import {
 
 export const status = signal<Status | null>(null);
 export const inbox = signal<InboxRow[]>([]);
+/** How many rows wait, which changes far less often than the rows a poll brings. */
+export const waiting = computed(() => inbox.value.length);
 export const items = signal<ItemRow[]>([]);
 export const tasks = signal<TaskRow[]>([]);
 /** Why the last refresh failed, such as kozod being down, or null. */
@@ -33,7 +35,7 @@ export const toasts = signal<Toast[]>([]);
 
 export const toastLimit = 3;
 /** How long an answer that succeeded stays; a failure stays until it is dismissed. */
-export const toastMs = 5000;
+const toastMs = 5000;
 let lastToast = 0;
 
 /** Shows an action's answer as a toast. */
@@ -50,6 +52,7 @@ export function notify(text: string, failed: boolean): number {
 }
 
 export function dismiss(id: number): void {
+  if (!toasts.value.some((toast) => toast.id === id)) return;
   toasts.value = toasts.value.filter((toast) => toast.id !== id);
 }
 

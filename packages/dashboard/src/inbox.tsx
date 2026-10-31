@@ -19,6 +19,9 @@ const glyph: Partial<Record<InboxRow["waiting"], IconName>> = {
   merge: "pull-request",
 };
 
+/** The exact time a row began waiting, shown on hover; one formatter serves every row. */
+const exact = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+
 /** What waits for the human, oldest first, each with the verbs that settle it. */
 export function Inbox({ api }: { api: Api }) {
   const rows = inbox.value;
@@ -51,7 +54,7 @@ export function Inbox({ api }: { api: Api }) {
               </a>
             </h2>
             <span class="ref">{row.ref}</span>
-            <time dateTime={row.since} title={new Date(row.since).toLocaleString()}>
+            <time dateTime={row.since} title={exact.format(new Date(row.since))}>
               {ago(row.since)}
             </time>
           </div>
