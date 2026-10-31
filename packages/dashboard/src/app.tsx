@@ -1,14 +1,13 @@
 import { signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 import { useEffect, useRef } from "preact/hooks";
-import { AddItem } from "./add-item.tsx";
 import { type Api, endSession } from "./api.ts";
 import { Board } from "./board.tsx";
 import { DetailView } from "./detail.tsx";
 import { type Route, routeOf, titleOf } from "./format.ts";
 import { Header } from "./header.tsx";
 import { Inbox } from "./inbox.tsx";
-import { sessionEnded, status, waiting } from "./store.ts";
+import { sessionEnded, waiting } from "./store.ts";
 import { Toasts } from "./toasts.tsx";
 import { Unreachable } from "./unreachable.tsx";
 
@@ -41,7 +40,7 @@ export function App({ api }: { api: Api }) {
     <>
       <Header api={api} page={current.page} />
       <Unreachable api={api} />
-      <main ref={main} tabIndex={-1}>
+      <main ref={main} tabIndex={-1} class={current.page === "board" ? "wide" : undefined}>
         <View api={api} route={current} count={count} />
       </main>
       <Toasts />
@@ -54,7 +53,6 @@ function View({ api, route, count }: { api: Api; route: Route; count: number }) 
     return (
       <>
         <PageHead title="Board" />
-        {status.value?.mode === "local" ? <AddItem api={api} /> : null}
         <Board api={api} />
       </>
     );

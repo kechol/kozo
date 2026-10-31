@@ -1,6 +1,7 @@
 import type { Verb } from "@kozo/core";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Api } from "./api.ts";
+import { Modal } from "./dialog.tsx";
 import { run } from "./store.ts";
 
 /** One verb on a reference, as the inbox and the detail view offer it. */
@@ -131,15 +132,12 @@ export function ActionButton({
   const trigger = useRef<HTMLButtonElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
-  const back = useRef<HTMLButtonElement>(null);
-  const dialog = useRef<HTMLDialogElement>(null);
   const restore = useRef(false);
   const id = useId();
 
   useEffect(() => {
     if (open) {
-      dialog.current?.showModal();
-      (field.current ?? back.current)?.focus();
+      field.current?.focus();
     } else if (restore.current) {
       restore.current = false;
       trigger.current?.focus();
@@ -155,7 +153,7 @@ export function ActionButton({
         node?.contains(document.activeElement),
       );
       if (!holder) return;
-      dialog.current?.close();
+      holder.closest("dialog")?.close();
       holder.closest("main")?.focus();
     },
     [],
@@ -208,7 +206,7 @@ export function ActionButton({
   );
   // An alert dialog puts the way back first, so the verb that closes work is the last stop.
   const backButton = (
-    <button type="button" ref={back} class="ghost" onClick={close}>
+    <button type="button" class="ghost" onClick={close}>
       Back
     </button>
   );
@@ -269,19 +267,9 @@ export function ActionButton({
           {action.label}…
         </button>
         {open ? (
-          <dialog
-            ref={dialog}
-            role="alertdialog"
-            class="confirm"
-            aria-labelledby={`${id}-title`}
-            aria-describedby={`${id}-body`}
-            onCancel={(event) => {
-              event.preventDefault();
-              close();
-            }}
-          >
+          <Modal alert label={`${id}-title`} description={`${id}-body`} onClose={close}>
             {fields}
-          </dialog>
+          </Modal>
         ) : null}
       </>
     );
