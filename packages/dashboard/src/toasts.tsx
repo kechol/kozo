@@ -35,7 +35,12 @@ function ToastItem({ toast }: { toast: Toast }) {
         <Icon name={toneIcon[tone]} />
       </span>
       <p>{toast.text}</p>
-      <button type="button" class="ghost" aria-label="Dismiss" onClick={() => dismiss(toast.id)}>
+      <button
+        type="button"
+        class="ghost icon-button"
+        aria-label="Dismiss"
+        onClick={() => dismiss(toast.id)}
+      >
         <Icon name="x" size={14} />
       </button>
     </div>

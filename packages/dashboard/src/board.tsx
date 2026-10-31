@@ -123,7 +123,7 @@ function ItemCard({
         <div class="row reorder">
           <button
             type="button"
-            class="ghost small"
+            class="ghost icon-button"
             aria-label={`Move ${item.ref} up`}
             disabled={up === undefined}
             onClick={() => up !== undefined && move(up)}
@@ -132,7 +132,7 @@ function ItemCard({
           </button>
           <button
             type="button"
-            class="ghost small"
+            class="ghost icon-button"
             aria-label={`Move ${item.ref} down`}
             disabled={down === undefined}
             onClick={() => down !== undefined && move(down)}

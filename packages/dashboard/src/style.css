@@ -230,6 +230,9 @@ code {
 
 button,
 .button-link {
+  --button-bg: var(--secondary-bg);
+  --button-fg: var(--secondary-fg);
+  --button-hover: var(--secondary-hover);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -238,26 +241,17 @@ button,
   padding: 0 var(--space-3);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
-  background: var(--secondary-bg);
-  color: var(--secondary-fg);
+  background: var(--button-bg);
+  color: var(--button-fg);
   font: inherit;
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   white-space: nowrap;
+  text-decoration: none;
   cursor: pointer;
   transition:
     background-color var(--duration-hover) var(--ease),
     transform var(--duration-press) var(--ease);
-}
-
-.button-link {
-  text-decoration: none;
-}
-
-@media (hover: hover) {
-  .button-link:hover {
-    background: var(--secondary-hover);
-  }
 }
 
 button.md {
@@ -265,45 +259,39 @@ button.md {
   font-size: var(--text-md);
 }
 
+button.icon-button {
+  width: var(--control-sm);
+  padding: 0;
+}
+
 button.primary {
-  background: var(--primary);
-  color: var(--on-primary);
+  --button-bg: var(--primary);
+  --button-fg: var(--on-primary);
+  --button-hover: var(--primary-hover);
 }
 
 button.ghost {
-  background: transparent;
-  color: var(--text);
+  --button-bg: transparent;
+  --button-fg: var(--text);
+  --button-hover: var(--hover);
 }
 
 button.danger {
-  background: transparent;
-  color: var(--danger-text);
+  --button-bg: transparent;
+  --button-fg: var(--danger-text);
+  --button-hover: var(--danger-soft);
 }
 
 button.danger-solid {
-  background: var(--danger);
-  color: var(--on-danger);
+  --button-bg: var(--danger);
+  --button-fg: var(--on-danger);
+  --button-hover: var(--danger-hover);
 }
 
 @media (hover: hover) {
-  button:not(:disabled):hover {
-    background: var(--secondary-hover);
-  }
-
-  button.primary:not(:disabled):hover {
-    background: var(--primary-hover);
-  }
-
-  button.ghost:not(:disabled):hover {
-    background: var(--hover);
-  }
-
-  button.danger:not(:disabled):hover {
-    background: var(--danger-soft);
-  }
-
-  button.danger-solid:not(:disabled):hover {
-    background: var(--danger-hover);
+  button:not(:disabled):hover,
+  .button-link:hover {
+    background: var(--button-hover);
   }
 }
 
@@ -598,11 +586,6 @@ select:focus-visible {
   justify-content: flex-end;
 }
 
-button.small {
-  width: var(--control-sm);
-  padding: 0;
-}
-
 .more {
   color: var(--muted);
   font-size: var(--text-sm);
@@ -767,7 +750,7 @@ pre.text {
 
 .toast {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4);
   background: var(--surface);
@@ -779,7 +762,6 @@ pre.text {
 
 .toast-mark {
   display: flex;
-  margin-top: 1px;
   color: var(--tone-solid);
 }
 
@@ -787,13 +769,6 @@ pre.text {
   flex: 1;
   margin: 0;
   overflow-wrap: anywhere;
-}
-
-.toast button {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  margin-top: -3px;
 }
 
 .banner {

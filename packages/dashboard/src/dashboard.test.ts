@@ -118,7 +118,7 @@ describe("inboxActions", () => {
     const reject = inboxActions("item", "approval", "plan")[1];
     expect(reject).toMatchObject({ verb: "reject", text: { field: "reason", required: true } });
     const cancel = inboxActions("item", "approval", "start")[1];
-    expect(cancel).toMatchObject({ verb: "close", text: { field: "cancel" }, danger: true });
+    expect(cancel).toMatchObject({ verb: "close", text: { field: "cancel" }, emphasis: "danger" });
   });
 });
 

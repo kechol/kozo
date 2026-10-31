@@ -11,13 +11,12 @@ export interface Action {
   body?: Record<string, unknown>;
   /** The field the human's text fills, and whether the verb needs it. */
   text?: { field: string; required: boolean; placeholder: string };
-  /** A verb that cannot be undone, such as cancelling, styled as such. */
-  danger?: boolean;
   /**
    * How much the button stands out among its row's: the one verb that settles what waits is
-   * primary, a verb seldom wanted is ghost, and the others are secondary.
+   * primary, a verb seldom wanted is ghost, one that cannot be undone, such as cancelling, is
+   * danger, and the others are secondary.
    */
-  emphasis?: "primary" | "ghost";
+  emphasis?: "primary" | "ghost" | "danger";
 }
 
 /** Cancelling an item or a task, which asks why. */
@@ -25,7 +24,7 @@ export const cancelAction: Action = {
   verb: "close",
   label: "Cancel",
   text: { field: "cancel", required: true, placeholder: "Why it is cancelled" },
-  danger: true,
+  emphasis: "danger",
 };
 
 export const retryAction: Action = {
@@ -123,9 +122,9 @@ export function ActionButton({
       setText("");
     }
   };
-  const kind = action.danger ? "danger" : (action.emphasis ?? "");
+  const kind = action.emphasis ?? "";
   // Inside its field, the verb is what the field is for, so it takes the strongest style.
-  const confirm = action.danger ? "danger-solid" : "primary";
+  const confirm = action.emphasis === "danger" ? "danger-solid" : "primary";
   if (!action.text) {
     return (
       <button type="button" class={kind} disabled={busy} onClick={submit}>
