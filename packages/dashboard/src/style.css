@@ -1335,3 +1335,53 @@ pre.diff {
   color: var(--text);
   font-weight: var(--weight-medium);
 }
+
+@media (max-width: 720px) {
+  .factory {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .factory button {
+    margin-left: auto;
+  }
+}
+
+/* More contrast: quiet text and the lines between things move toward the text colour. */
+@media (prefers-contrast: more) {
+  :root {
+    --muted: light-dark(#3f3c38, #cfcdc9);
+    --divider: var(--edge);
+    --edge: light-dark(#5e5b57, #9a9792);
+  }
+}
+
+/*
+ * Forced colours drop backgrounds, so what a fill told apart gets a system-coloured border:
+ * buttons, badges, the chosen view and the current step. Placeholders keep their grey.
+ */
+@media (forced-colors: active) {
+  button,
+  .button-link,
+  .badge,
+  .step-mark,
+  .segmented label:has(:checked),
+  .tab[aria-current="page"] {
+    border: 1px solid CanvasText;
+  }
+
+  button.primary,
+  button.danger-solid,
+  .steps [aria-current="step"] .step-mark {
+    border-color: Highlight;
+  }
+
+  .placeholder span {
+    forced-color-adjust: none;
+    background: GrayText;
+  }
+
+  .tally progress {
+    border: 1px solid CanvasText;
+  }
+}
