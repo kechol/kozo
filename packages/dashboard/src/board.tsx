@@ -4,8 +4,8 @@ import type { Api, ItemRow, TaskRow } from "./api.ts";
 import { Badge } from "./badge.tsx";
 import { detailHash, isClosedStage, moveTarget, stages } from "./format.ts";
 import { Icon } from "./icons.tsx";
-import { Loading, Placeholder } from "./placeholder.tsx";
-import { items, loaded, run, status, tasks } from "./store.ts";
+import { Loading, Placeholder, Unread } from "./placeholder.tsx";
+import { items, loaded, problem, run, status, tasks } from "./store.ts";
 import { toneOf } from "./tone.ts";
 
 /** Whether the board shows items or tasks; the viewer's choice, kept in this browser. */
@@ -35,6 +35,15 @@ export function Board({ api }: { api: Api }) {
   const allItems = items.value;
   const order = allItems.filter((item) => !isClosedStage(item.stage)).map((item) => item.ref);
   const ready = loaded.value;
+  // Each card counts its item's tasks, so they are counted in one pass rather than per card.
+  const tally = new Map<string, Tally>();
+  for (const task of tasks.value) {
+    const count = tally.get(task.item) ?? { done: 0, total: 0, held: 0 };
+    count.total += 1;
+    if (task.stage === "complete") count.done += 1;
+    if (task.hold) count.held += 1;
+    tally.set(task.item, count);
+  }
   return (
     <>
       <div class="row spread board-tools">
@@ -61,61 +70,66 @@ export function Board({ api }: { api: Api }) {
         </fieldset>
         {status.value?.mode === "local" ? <AddItem api={api} /> : null}
       </div>
-      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scroller takes focus so the keyboard can scroll it */}
-      <section class="board" aria-label="Stages" tabIndex={0}>
-        {ready ? null : <Loading what="the board" />}
-        {stages.map((stage) => {
-          const cards = showItems
-            ? allItems.filter((item) => item.shown_stage === stage)
-            : tasks.value.filter((task) => task.stage === stage);
-          const closed = isClosedStage(stage);
-          const shown = closed ? cards.slice(-closedShown).reverse() : cards;
-          const column = cards.map((card) => card.ref);
-          const head = (
-            <h2>
-              {stage} {ready ? <span class="column-count">{cards.length}</span> : null}
-            </h2>
-          );
-          const list = shown.map((card, index) =>
-            showItems ? (
-              <ItemCard
-                key={card.ref}
-                api={api}
-                item={card as ItemRow}
-                up={closed ? undefined : moveTarget(column, order, index, "up")}
-                down={closed ? undefined : moveTarget(column, order, index, "down")}
-              />
+      {!ready && problem.value ? (
+        <Unread what="the board" />
+      ) : (
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroller takes focus so the keyboard can scroll it
+        <section class="board" aria-label="Stages" tabIndex={0}>
+          {ready ? null : <Loading what="the board" />}
+          {stages.map((stage) => {
+            const cards = showItems
+              ? allItems.filter((item) => item.shown_stage === stage)
+              : tasks.value.filter((task) => task.stage === stage);
+            const closed = isClosedStage(stage);
+            const shown = closed ? cards.slice(-closedShown).reverse() : cards;
+            const column = cards.map((card) => card.ref);
+            const head = (
+              <h2>
+                {stage} {ready ? <span class="column-count">{cards.length}</span> : null}
+              </h2>
+            );
+            const list = shown.map((card, index) =>
+              showItems ? (
+                <ItemCard
+                  key={card.ref}
+                  api={api}
+                  item={card as ItemRow}
+                  tally={tally.get(card.ref)}
+                  up={closed ? undefined : moveTarget(column, order, index, "up")}
+                  down={closed ? undefined : moveTarget(column, order, index, "down")}
+                />
+              ) : (
+                <TaskCard key={card.ref} task={card as TaskRow} />
+              ),
+            );
+            // A closed column holds what is finished, so it stays folded to its count until opened.
+            // An empty column keeps its frame, so the columns line up whatever they hold.
+            const body = !ready ? (
+              <div class="card board-card">
+                <Placeholder />
+              </div>
+            ) : cards.length === 0 ? (
+              <div class="column-empty" aria-hidden="true" />
             ) : (
-              <TaskCard key={card.ref} task={card as TaskRow} />
-            ),
-          );
-          // A closed column holds what is finished, so it stays folded to its count until opened.
-          // An empty column keeps its frame, so the columns line up whatever they hold.
-          const body = !ready ? (
-            <div class="card board-card">
-              <Placeholder />
-            </div>
-          ) : cards.length === 0 ? (
-            <div class="column-empty" aria-hidden="true" />
-          ) : (
-            list
-          );
-          return closed ? (
-            <details key={stage} class="column closed">
-              <summary>{head}</summary>
-              {list}
-              {cards.length > closedShown ? (
-                <p class="more">and {cards.length - closedShown} older</p>
-              ) : null}
-            </details>
-          ) : (
-            <section key={stage} class="column" aria-label={stage}>
-              {head}
-              {body}
-            </section>
-          );
-        })}
-      </section>
+              list
+            );
+            return closed ? (
+              <details key={stage} class="column closed">
+                <summary>{head}</summary>
+                {list}
+                {cards.length > closedShown ? (
+                  <p class="more">and {cards.length - closedShown} older</p>
+                ) : null}
+              </details>
+            ) : (
+              <section key={stage} class="column" aria-label={stage}>
+                {head}
+                {body}
+              </section>
+            );
+          })}
+        </section>
+      )}
     </>
   );
 }
@@ -131,20 +145,25 @@ function CardTitle({ href, children }: { href: string; children: string }) {
   );
 }
 
+interface Tally {
+  done: number;
+  total: number;
+  held: number;
+}
+
 function ItemCard({
   api,
   item,
+  tally,
   up,
   down,
 }: {
   api: Api;
   item: ItemRow;
+  tally: Tally | undefined;
   up: string | null | undefined;
   down: string | null | undefined;
 }) {
-  const own = tasks.value.filter((task) => task.item === item.ref);
-  const done = own.filter((task) => task.stage === "complete").length;
-  const held = own.filter((task) => task.hold).length;
   const move = (before: string | null) =>
     void run(api, () => api.act(item.ref, "reorder", { before }));
   return (
@@ -160,12 +179,12 @@ function ItemCard({
           {item.class ? <span>{item.class}</span> : null}
         </div>
       ) : null}
-      {own.length > 0 ? (
+      {tally ? (
         <div class="tally">
           <span>
-            {done}/{own.length} tasks{held > 0 ? `, ${held} held` : ""}
+            {tally.done}/{tally.total} tasks{tally.held > 0 ? `, ${tally.held} held` : ""}
           </span>
-          <progress value={done} max={own.length} aria-hidden="true" />
+          <progress value={tally.done} max={tally.total} aria-hidden="true" />
         </div>
       ) : null}
       {up !== undefined || down !== undefined ? (

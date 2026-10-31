@@ -1,6 +1,7 @@
 /*
- * Tokens. Rules below use these alone, never a colour or a length of their own. The scale tokens
- * hold for both themes; the colour tokens name what a colour is for, and tone.ts maps each state
+ * Tokens. Rules below take every colour from these, and every length from the scale where a step
+ * fits; a hairline, an icon's size or an optical nudge that no step fits is written in place. The
+ * scale tokens hold for both themes; the colour tokens name what a colour is for, and tone.ts maps each state
  * to one of the seven tones (info, progress, warning, negative, positive, done, neutral).
  */
 :root {
@@ -45,14 +46,11 @@
 
   --duration-press: 120ms;
   --duration-hover: 150ms;
-  --duration-ui: 200ms;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   --layer-sticky: 10;
   --layer-toast: 20;
-  --layer-dialog: 30;
 
-  --width-read: 760px;
   --width-page: 1200px;
   --width-dialog: 440px;
   --width-column: 200px;
@@ -126,7 +124,6 @@
   :root {
     --duration-press: 0ms;
     --duration-hover: 0ms;
-    --duration-ui: 0ms;
   }
 }
 
@@ -465,6 +462,7 @@ select:focus-visible {
 }
 
 .problem {
+  margin: 0;
   color: var(--negative-fg);
 }
 
@@ -775,6 +773,10 @@ main.wide {
     flex: none;
     width: calc(100vw - 2 * var(--space-5) - var(--space-6));
     scroll-snap-align: start;
+  }
+
+  .column.closed:not([open]) {
+    width: auto;
   }
 
   .factory {
@@ -1167,9 +1169,12 @@ pre.diff {
   bottom: var(--space-4);
   z-index: var(--layer-toast);
   width: min(380px, calc(100vw - 2 * var(--space-4)));
+  /* The region is always in the page, so only the toasts in it take the pointer. */
+  pointer-events: none;
 }
 
 .toast {
+  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: var(--space-3);

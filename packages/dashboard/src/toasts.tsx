@@ -1,9 +1,10 @@
 import { Icon, toneIcon } from "./icons.tsx";
-import { dismiss, type Toast, toasts } from "./store.ts";
+import { dismiss, holdToasts, type Toast, toasts } from "./store.ts";
 
 /**
  * Where actions answer. Both live regions are always in the page, so that a screen reader
- * announces each toast put in them: an answer politely, a failure at once.
+ * announces each toast put in them: an answer politely, a failure at once. Answers stay while
+ * the pointer or focus is on them.
  */
 export function Toasts() {
   const list = (failed: boolean) =>
@@ -11,7 +12,19 @@ export function Toasts() {
       .filter((toast) => toast.failed === failed)
       .map((toast) => <ToastItem key={toast.id} toast={toast} />);
   return (
-    <section class="toasts" aria-label="Notifications">
+    <section
+      class="toasts"
+      aria-label="Notifications"
+      // The region lets the pointer through to its toasts, whose pointer events reach it here.
+      onPointerOver={() => holdToasts(true)}
+      onPointerOut={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) holdToasts(false);
+      }}
+      onFocusIn={() => holdToasts(true)}
+      onFocusOut={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) holdToasts(false);
+      }}
+    >
       <div class="toast-list" role="status">
         {list(false)}
       </div>

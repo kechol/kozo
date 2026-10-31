@@ -58,6 +58,12 @@ export const busyAttributes = (busy: boolean) =>
   busy ? ({ "aria-busy": true, "aria-disabled": true } as const) : {};
 
 /**
+ * The key of an action among its row's. A verb's label changes with what waits, as Send becomes
+ * Answer, and a new key would drop what was typed; only the verbs that close work share a verb.
+ */
+export const actionKey = (action: Action) => (action.confirm ? action.label : action.verb);
+
+/**
  * The verbs a row of the inbox offers for what it waits on. There is never a merge, and each
  * action acts on one reference only.
  */
@@ -133,6 +139,7 @@ export function ActionButton({
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -164,22 +171,32 @@ export function ActionButton({
   );
 
   const close = () => {
+    if (busy) return;
     restore.current = true;
+    setFailure(null);
     setOpen(false);
   };
   const submit = async () => {
     if (busy) return;
     setBusy(true);
+    setFailure(null);
     const words = text.trim();
     const body = {
       ...action.body,
       ...(action.text && words ? { [action.text.field]: words } : {}),
     };
-    const done = await run(api, () => api.act(refName, action.verb, body));
+    // A verb with a field says its failure in the field, where a dialog cannot hide it.
+    const opened = Boolean(action.text || action.confirm);
+    const done = await run(
+      api,
+      () => api.act(refName, action.verb, body),
+      opened ? setFailure : undefined,
+    );
     setBusy(false);
     if (done) {
       setText("");
-      close();
+      restore.current = true;
+      setOpen(false);
     }
   };
   // Inside its field, the verb is what the field is for, so it takes the strongest style.
@@ -208,7 +225,7 @@ export function ActionButton({
   );
   // An alert dialog puts the way back first, so the verb that closes work is the last stop.
   const backButton = (
-    <button type="button" class="ghost" onClick={close}>
+    <button type="button" class="ghost" onClick={close} disabled={busy}>
       Back
     </button>
   );
@@ -246,6 +263,11 @@ export function ActionButton({
             form.current?.requestSubmit();
           }}
         />
+      ) : null}
+      {failure ? (
+        <div class="problem" role="alert">
+          {failure}
+        </div>
       ) : null}
       <div class="row form-actions">
         {action.confirm ? (

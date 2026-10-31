@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   type Action,
   ActionButton,
+  actionKey,
   busyAttributes,
   cancelAction,
   inboxActions,
@@ -207,7 +208,7 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
         {actions.length > 0 ? (
           <div class="row actions">
             {actions.map((action) => (
-              <ActionButton key={action.label} api={api} refName={refName} action={action} />
+              <ActionButton key={actionKey(action)} api={api} refName={refName} action={action} />
             ))}
           </div>
         ) : null}

@@ -1,10 +1,10 @@
-import { ActionButton, inboxActions } from "./actions.tsx";
+import { ActionButton, actionKey, inboxActions } from "./actions.tsx";
 import type { Api, InboxRow } from "./api.ts";
 import { Badge } from "./badge.tsx";
 import { detailHash } from "./format.ts";
 import { Icon, type IconName } from "./icons.tsx";
-import { Loading, Placeholder } from "./placeholder.tsx";
-import { inbox, loaded } from "./store.ts";
+import { Loading, Placeholder, Unread } from "./placeholder.tsx";
+import { inbox, loaded, problem } from "./store.ts";
 import { Time } from "./time.tsx";
 import { toneOf } from "./tone.ts";
 
@@ -38,6 +38,7 @@ function Note({ row }: { row: InboxRow }) {
 export function Inbox({ api }: { api: Api }) {
   const rows = inbox.value;
   if (!loaded.value) {
+    if (problem.value) return <Unread what="the inbox" />;
     return (
       <div class="panel rows">
         <Loading what="the inbox" />
@@ -79,7 +80,7 @@ export function Inbox({ api }: { api: Api }) {
           <Note row={row} />
           <div class="row actions">
             {inboxActions(row.kind, row.waiting, row.approval).map((action) => (
-              <ActionButton key={action.label} api={api} refName={row.ref} action={action} />
+              <ActionButton key={actionKey(action)} api={api} refName={row.ref} action={action} />
             ))}
             {row.waiting === "merge" ? (
               <a class="button-link" href={detailHash(row.ref)}>

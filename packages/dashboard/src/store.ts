@@ -31,7 +31,7 @@ export interface Toast {
 
 /**
  * The toasts shown now, oldest first, at most `toastLimit` of them; past it the oldest answer
- * goes first, and a failure only when nothing else is left.
+ * other than the newest goes first, and a failure only when no such answer is left.
  */
 export const toasts = signal<Toast[]>([]);
 
@@ -39,27 +39,61 @@ export const toastLimit = 3;
 /** How long an answer that succeeded stays; a failure stays until it is dismissed. */
 const toastMs = 5000;
 let lastToast = 0;
+/** The answers' timers; none run while the human points at or focuses the toasts. */
+const timers = new Map<number, ReturnType<typeof setTimeout>>();
+let held = false;
+
+function expire(id: number): void {
+  timers.set(
+    id,
+    setTimeout(() => dismiss(id), toastMs),
+  );
+}
 
 /** Shows an action's answer as a toast. */
 export function notify(text: string, failed: boolean): number {
   const id = ++lastToast;
   const next = [...toasts.value, { id, text, failed }];
   while (next.length > toastLimit) {
-    const oldest = next.findIndex((toast) => !toast.failed);
-    next.splice(oldest === -1 ? 0 : oldest, 1);
+    const oldest = next.findIndex((toast, index) => !toast.failed && index < next.length - 1);
+    const [gone] = next.splice(oldest === -1 ? 0 : oldest, 1);
+    if (gone) clearTimeout(timers.get(gone.id));
   }
   toasts.value = next;
-  if (!failed) setTimeout(() => dismiss(id), toastMs);
+  if (!failed && !held) expire(id);
   return id;
 }
 
 export function dismiss(id: number): void {
+  clearTimeout(timers.get(id));
+  timers.delete(id);
   if (!toasts.value.some((toast) => toast.id === id)) return;
   toasts.value = toasts.value.filter((toast) => toast.id !== id);
 }
 
-/** Reads the status and every list once; a failure keeps the last good values. */
+/**
+ * Stops the answers from going while the human reads them, and lets each run its full time again
+ * once they stop.
+ */
+export function holdToasts(hold: boolean): void {
+  if (hold === held) return;
+  held = hold;
+  for (const toast of toasts.value) {
+    if (toast.failed) continue;
+    clearTimeout(timers.get(toast.id));
+    timers.delete(toast.id);
+    if (!hold) expire(toast.id);
+  }
+}
+
+let lastRefresh = 0;
+
+/**
+ * Reads the status and every list once; a failure keeps the last good values, and an answer that
+ * arrives after a later refresh started is dropped, since it may be older than what that one shows.
+ */
 export async function refresh(api: Api): Promise<void> {
+  const mine = ++lastRefresh;
   try {
     const [nextStatus, nextInbox, nextItems, nextTasks] = await Promise.all([
       api.get<Status>("/api/status"),
@@ -67,6 +101,7 @@ export async function refresh(api: Api): Promise<void> {
       api.get<ItemRow[]>("/api/ls/items"),
       api.get<TaskRow[]>("/api/ls/tasks"),
     ]);
+    if (mine !== lastRefresh) return;
     status.value = nextStatus;
     inbox.value = nextInbox;
     items.value = nextItems;
@@ -75,7 +110,7 @@ export async function refresh(api: Api): Promise<void> {
     refreshedAt.value = new Date();
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) sessionEnded.value = true;
-    problem.value = (error as Error).message;
+    if (mine === lastRefresh) problem.value = (error as Error).message;
   }
 }
 
@@ -96,13 +131,22 @@ export function poll(api: Api, ms = 3000): () => void {
   return () => clearInterval(timer);
 }
 
-/** Runs one action, shows its answer and refreshes, so the page shows what it changed. */
-export async function run(api: Api, action: () => Promise<{ message: string }>): Promise<boolean> {
+/**
+ * Runs one action, shows its answer and refreshes, so the page shows what it changed. A failure
+ * goes to `failed` when the action has a place of its own to say it, and to a toast otherwise.
+ */
+export async function run(
+  api: Api,
+  action: () => Promise<{ message: string }>,
+  failed?: (message: string) => void,
+): Promise<boolean> {
   try {
     notify((await action()).message, false);
     return true;
   } catch (error) {
-    notify((error as Error).message, true);
+    const message = (error as Error).message;
+    if (failed) failed(message);
+    else notify(message, true);
     return false;
   } finally {
     await refresh(api);

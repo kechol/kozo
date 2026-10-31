@@ -157,6 +157,8 @@
 | issue move | Moving a local item without tasks to an Issue of its repository in GitHub mode, which cancels the local item and leaves the Issue to intake. | `kozo issue` | - | - |
 | status comment | The single Issue comment that kozod keeps rewriting with the stage, holds, tasks, pull requests and cost. | - | - | - |
 | take | Handing a task to the human, who commits in its worktree until giving it back with `kozo return` to the checks after implement. | `kozo take`, `kozo return`, `task.returned` | hijack, takeover | - |
+| toast | The dashboard's corner message that answers a verb, which leaves after a few seconds unless it says that a verb without a field of its own failed. | `Toasts`, `notify` | popup, snackbar | - |
+| tone | One of the seven colours, each with its glyph, that the dashboard gives a state: info, progress, warning, negative, positive, done or neutral. | `Tone`, `toneOf` | severity, status colour | - |
 
 ## Records and improvement
 

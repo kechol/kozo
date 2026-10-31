@@ -8,7 +8,8 @@ import { run, status } from "./store.ts";
 
 /**
  * Adds an item as `kozo add` does, from a dialog: a title, the request, and the repository and
- * work class when the human wants to choose them. What was typed stays until the item is added.
+ * work class when the human wants to choose them. What was typed stays until the item is added,
+ * and a failure is said in the dialog.
  */
 export function AddItem({ api }: { api: Api }) {
   const repositories = status.value?.repositories ?? [];
@@ -18,26 +19,37 @@ export function AddItem({ api }: { api: Api }) {
   const [repository, setRepository] = useState("");
   const [workClass, setWorkClass] = useState("");
   const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
   const id = useId();
 
-  const close = () => setOpen(false);
+  const close = () => {
+    if (busy) return;
+    setFailure(null);
+    setOpen(false);
+  };
   const ready = title.trim() !== "" && (repositories.length <= 1 || repository !== "");
   const submit = async () => {
     if (busy || !ready) return;
     setBusy(true);
-    const added = await run(api, () =>
-      api.post("/api/items", {
-        title: title.trim(),
-        body: request.trim(),
-        ...(repository ? { repository } : {}),
-        ...(workClass ? { class: workClass } : {}),
-      }),
+    setFailure(null);
+    const added = await run(
+      api,
+      () =>
+        api.post("/api/items", {
+          title: title.trim(),
+          body: request.trim(),
+          ...(repository ? { repository } : {}),
+          ...(workClass ? { class: workClass } : {}),
+        }),
+      setFailure,
     );
     setBusy(false);
     if (added) {
       setTitle("");
       setRequest("");
-      close();
+      setRepository("");
+      setWorkClass("");
+      setOpen(false);
     }
   };
   return (
@@ -104,8 +116,13 @@ export function AddItem({ api }: { api: Api }) {
                 ))}
               </select>
             </label>
+            {failure ? (
+              <div class="problem" role="alert">
+                {failure}
+              </div>
+            ) : null}
             <div class="row form-actions">
-              <button type="button" class="ghost" onClick={close}>
+              <button type="button" class="ghost" onClick={close} disabled={busy}>
                 Back
               </button>
               <button type="submit" class="primary" disabled={!ready} {...busyAttributes(busy)}>

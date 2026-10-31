@@ -7,8 +7,8 @@ import {
   stageSchema,
   workClassSchema,
 } from "@kozo/core";
-import { inboxActions } from "./actions.tsx";
-import { Api, ApiError, takeSession } from "./api.ts";
+import { actionKey, inboxActions } from "./actions.tsx";
+import { Api, ApiError, type InboxRow, takeSession } from "./api.ts";
 import { detailActions } from "./detail.tsx";
 import {
   ago,
@@ -24,6 +24,7 @@ import {
 import { Icon, iconNames, toneIcon } from "./icons.tsx";
 import {
   dismiss,
+  inbox,
   notify,
   problem,
   refresh,
@@ -32,6 +33,7 @@ import {
   toastLimit,
   toasts,
 } from "./store.ts";
+import { Time } from "./time.tsx";
 import { toneOf, tones } from "./tone.ts";
 
 const code = "ab".repeat(32);
@@ -299,6 +301,23 @@ describe("Icon", () => {
   });
 });
 
+describe("Time", () => {
+  test("shows nothing for a value that is not a time, rather than throwing", () => {
+    expect(Time({ iso: "" })).toBeNull();
+    expect(Time({ iso: "2026-10-31T09:00:00Z", as: "clock" })?.type).toBe("time");
+  });
+});
+
+describe("actionKey", () => {
+  test("keeps a verb's key when its label changes, and tells apart the verbs that close work", () => {
+    const keys = (waiting: string) =>
+      inboxActions("task", waiting, null).map((action) => actionKey(action));
+    expect(keys("question")[0]).toBe("say");
+    const attention = keys("attention");
+    expect(new Set(attention).size).toBe(attention.length);
+  });
+});
+
 describe("toasts", () => {
   test("keeps the newest few, and a failure until it is dismissed", () => {
     toasts.value = [];
@@ -308,6 +327,14 @@ describe("toasts", () => {
     expect(toasts.value.map((toast) => toast.text)).toEqual(["kozod refused it", "two", "three"]);
     dismiss(failure);
     expect(toasts.value.map((toast) => toast.text)).toEqual(["two", "three"]);
+  });
+
+  test("shows a new answer even when only failures came before it", () => {
+    toasts.value = [];
+    for (const text of ["one", "two", "three"]) notify(text, true);
+    notify("done", false);
+    expect(toasts.value.map((toast) => toast.text)).toEqual(["two", "three", "done"]);
+    for (const toast of toasts.value) dismiss(toast.id);
   });
 });
 
@@ -323,6 +350,31 @@ describe("refresh", () => {
     expect(problem.value).toBe("no");
     expect(refreshedAt.value).toBe(heard);
     expect(sessionEnded.value).toBe(false);
+  });
+
+  test("drops an answer that arrives after a later refresh started", async () => {
+    const rows = (title: string): InboxRow[] => [
+      {
+        kind: "item",
+        ref: "K-1",
+        title,
+        waiting: "question",
+        reason: null,
+        approval: null,
+        since: "",
+      },
+    ];
+    const slow = new Api("token", async (input) => {
+      if (String(input).endsWith("/inbox")) await Bun.sleep(30);
+      return Response.json(String(input).endsWith("/inbox") ? rows("old") : []);
+    });
+    const fast = new Api("token", async (input) =>
+      Response.json(String(input).endsWith("/inbox") ? rows("new") : []),
+    );
+    const older = refresh(slow);
+    await refresh(fast);
+    await older;
+    expect(inbox.value.map((row) => row.title)).toEqual(["new"]);
   });
 
   test("ends the page's session when kozod refuses it", async () => {
