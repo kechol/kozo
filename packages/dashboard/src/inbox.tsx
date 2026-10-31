@@ -26,10 +26,13 @@ const glyph: Partial<Record<InboxRow["waiting"], IconName>> = {
 const exact = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 /** The line under a row's title; an approval's reason only repeats its badge. */
-function note(row: InboxRow): string | null {
-  if (row.waiting === "merge")
-    return "Read the diff and merge the task branch yourself; kozo never merges.";
-  return row.waiting === "approval" ? null : row.reason;
+function Note({ row }: { row: InboxRow }) {
+  if (row.waiting === "approval") return null;
+  const text =
+    row.waiting === "merge"
+      ? "Read the diff and merge the task branch yourself; kozo never merges."
+      : row.reason;
+  return text ? <p class="reason">{text}</p> : null;
 }
 
 /** What waits for the human, oldest first, each with the verbs that settle it. */
@@ -64,7 +67,7 @@ export function Inbox({ api }: { api: Api }) {
               {ago(row.since)}
             </time>
           </div>
-          {note(row) ? <p class="reason">{note(row)}</p> : null}
+          <Note row={row} />
           <div class="row actions">
             {inboxActions(row.kind, row.waiting, row.approval).map((action) => (
               <ActionButton key={action.label} api={api} refName={row.ref} action={action} />

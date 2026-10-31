@@ -364,8 +364,8 @@ const events = [
 
 /** What every read answers with --down, as when kozod cannot be reached. */
 const down = () => Response.json({ error: "kozod is not running" }, { status: 503 });
-const list = (rows: unknown[]) =>
-  options.down ? down() : Response.json(options.empty ? [] : rows);
+const read = (body: unknown) => (options.down ? down() : Response.json(body));
+const list = (rows: unknown[]) => read(options.empty ? [] : rows);
 
 const server = Bun.serve({
   hostname: "127.0.0.1",
@@ -373,7 +373,7 @@ const server = Bun.serve({
   routes: {
     "/": page,
     "/api/dashboard/session": () => Response.json({ token: "preview" }),
-    "/api/status": () => (options.down ? down() : Response.json(status)),
+    "/api/status": () => read(status),
     "/api/ls/inbox": () => list(inbox),
     "/api/ls/items": () => list(items),
     "/api/ls/tasks": () => list(tasks),
