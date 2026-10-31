@@ -1,28 +1,11 @@
 import { ActionButton, actionKey, inboxActions } from "./actions.tsx";
 import type { Api, InboxRow } from "./api.ts";
-import { Badge } from "./badge.tsx";
+import { HoldBadge } from "./badge.tsx";
 import { detailHash } from "./format.ts";
-import { Icon, type IconName } from "./icons.tsx";
+import { Icon } from "./icons.tsx";
 import { Loading, Placeholder, Unread } from "./placeholder.tsx";
 import { inbox, loaded, problem } from "./store.ts";
 import { Time } from "./time.tsx";
-import { toneOf } from "./tone.ts";
-
-/** What a row waits on, by its approval kind for an approval and by its waiting kind otherwise. */
-const label: Record<NonNullable<InboxRow["approval"]> | InboxRow["waiting"], string> = {
-  start: "Start approval",
-  plan: "Plan approval",
-  approval: "Approval",
-  question: "Question",
-  attention: "Attention",
-  merge: "Ready to merge",
-};
-
-/** Glyphs closer to what a row waits on than its tone's own. */
-const glyph: Partial<Record<InboxRow["waiting"], IconName>> = {
-  question: "question",
-  merge: "pull-request",
-};
 
 /** The line under a row's title; an approval's reason only repeats its badge. */
 function Note({ row }: { row: InboxRow }) {
@@ -66,9 +49,7 @@ export function Inbox({ api }: { api: Api }) {
       {rows.map((row) => (
         <li key={`${row.ref} ${row.waiting}`} class="inbox-row">
           <div class="row-head">
-            <Badge tone={toneOf("waiting", row.waiting)} icon={glyph[row.waiting]}>
-              {label[row.approval ?? row.waiting]}
-            </Badge>
+            <HoldBadge hold={row.waiting} approval={row.approval} />
             <h2 class="row-heading">
               <a href={detailHash(row.ref)} class="row-title">
                 {row.title}

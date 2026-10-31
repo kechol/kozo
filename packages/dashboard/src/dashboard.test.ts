@@ -206,12 +206,24 @@ describe("detailActions", () => {
     detailActions(...args).map((action) => action.label);
 
   test("offers what each kind takes in its state, never a merge", () => {
-    expect(labels("run", null)).toEqual(["Send", "Pause"]);
-    expect(labels("item", null)).toEqual(["Send", "Pause", "Cancel"]);
-    expect(labels("task", null)).toEqual(["Send", "Pause", "Take it over", "Cancel"]);
-    expect(labels("task", "question")).toEqual(["Answer", "Retry", "Take it over", "Cancel"]);
-    expect(labels("task", "paused")).toEqual(["Send", "Resume", "Cancel"]);
+    expect(labels("run", null)).toEqual(["Instruct", "Pause"]);
+    expect(labels("item", null)).toEqual(["Instruct", "Pause", "Cancel"]);
+    expect(labels("task", null)).toEqual(["Instruct", "Pause", "Take it over", "Cancel"]);
+    expect(labels("task", "paused")).toEqual(["Instruct", "Resume", "Cancel"]);
     expect(labels("task", "taken")).toEqual(["Give it back", "Cancel"]);
+  });
+
+  test("settles a question or attention with the inbox's verbs, its first one primary", () => {
+    const inbox = (waiting: string) =>
+      inboxActions("task", waiting, null).map((action) => action.label);
+    expect(labels("task", "question")).toEqual([...inbox("question"), "Cancel"]);
+    const attention = detailActions("task", "attention");
+    expect(attention[0]?.emphasis).toBe("primary");
+    expect(attention.map((action) => action.label)).toEqual([
+      "Retry",
+      "Instruct",
+      ...inbox("attention").slice(1),
+    ]);
   });
 
   test("offers an approval's decision as the inbox does", () => {

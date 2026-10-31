@@ -1,4 +1,4 @@
-import type { Event } from "@kozo/core";
+import type { Event, Verb } from "@kozo/core";
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
@@ -8,15 +8,14 @@ import {
   busyAttributes,
   cancelAction,
   inboxActions,
-  retryAction,
   takeAction,
 } from "./actions.tsx";
 import { type Api, ApiError } from "./api.ts";
-import { Badge } from "./badge.tsx";
+import { Badge, HoldBadge } from "./badge.tsx";
 import { detailHash, eventLine, isClosedStage, kindOf, usd } from "./format.ts";
 import { Icon, toneIcon } from "./icons.tsx";
 import { Loading, Placeholder } from "./placeholder.tsx";
-import { items } from "./store.ts";
+import { items, notify } from "./store.ts";
 import { Time } from "./time.tsx";
 import { toneOf } from "./tone.ts";
 
@@ -43,12 +42,25 @@ interface Plan {
 interface Detail {
   kind: "item" | "task" | "run";
   item?: Row & { plan: Plan | null; draft: Plan | null };
-  task?: Row & { done_when: string[]; scope: string[]; depends_on: string[] };
+  task?: Row & {
+    done_when: string[];
+    scope: string[];
+    depends_on: string[];
+    awaiting_merge: number;
+  };
   tasks?: Row[];
   run?: Row;
   runs?: Row[];
   events?: number;
   cost_usd?: number;
+  /** Where a task's branch is, once it has one. */
+  diff?: Branch;
+}
+
+interface Branch {
+  repository: string;
+  branch: string;
+  base: string;
 }
 
 interface Verdicts {
@@ -65,8 +77,8 @@ interface Verdicts {
 }
 
 /**
- * The verbs the detail view offers for a reference in its present state: an approval offers what
- * the inbox does, and closed work or a run that ended offers none.
+ * The verbs the detail view offers for a reference in its present state. What waits is settled
+ * with the inbox's own verbs, and closed work or a run that ended offers none.
  */
 export function detailActions(
   kind: "item" | "task" | "run",
@@ -76,40 +88,48 @@ export function detailActions(
 ): Action[] {
   if (ended) return [];
   if (kind !== "run" && hold === "approval") return inboxActions(kind, "approval", approval);
-  const say: Action = {
+  // kozod keeps what is said as an instruction for the runs to come, and a running run reads it at
+  // its next turn; a question takes it as the answer, which the inbox's verbs already offer.
+  const instruct: Action = {
     verb: "say",
-    label: hold === "question" ? "Answer" : "Send",
+    label: "Instruct",
     text: {
       field: "text",
       required: true,
-      placeholder: hold === "question" ? "Your answer" : "An instruction for the next turn or run",
+      placeholder: "An instruction for this run and the ones after it",
     },
   };
   const pause: Action =
     hold === "paused"
       ? { verb: "resume", label: "Resume" }
       : { verb: "pause", label: "Pause", body: { now: true } };
-  if (kind === "run") return [say, pause];
+  if (kind === "run") return [instruct, pause];
+  if (hold === "question") return [...inboxActions(kind, hold, null), cancelAction];
+  if (hold === "attention") {
+    const [settle, ...rest] = inboxActions(kind, hold, null);
+    return settle ? [settle, instruct, ...rest] : [instruct, ...rest];
+  }
   if (kind === "task" && hold === "taken") {
     return [
       {
         verb: "return",
         label: "Give it back",
+        emphasis: "primary",
         text: { field: "text", required: true, placeholder: "What you changed and checked" },
       },
       cancelAction,
     ];
   }
   return [
-    say,
-    ...(hold === "attention" || hold === "question" ? [retryAction] : []),
+    instruct,
     ...(hold === null || hold === "paused" ? [pause] : []),
-    ...(kind === "task" && (hold === null || hold === "attention" || hold === "question")
-      ? [takeAction]
-      : []),
+    ...(kind === "task" && hold === null ? [takeAction] : []),
     cancelAction,
   ];
 }
+
+/** Verbs seldom wanted, which the detail view keeps behind More, closing work last. */
+const seldom = new Set<Verb>(["pause", "resume", "take", "close"]);
 
 const text = (value: unknown) => (value === null || value === undefined ? "" : String(value));
 
@@ -191,6 +211,10 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
     approval,
     kind === "run" ? stage !== "running" : isClosedStage(stage),
   );
+  const shownNow = actions.filter((action) => !seldom.has(action.verb));
+  const behindMore = actions.filter((action) => seldom.has(action.verb));
+  const awaitingMerge = kind === "task" && Boolean(detail.task?.awaiting_merge);
+  const tone = toneOf("hold", hold);
   return (
     <article class="detail">
       <header class="detail-head">
@@ -198,18 +222,24 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
         <h1>{text(subject.title ?? subject.goal ?? `${text(subject.agent)} run`)}</h1>
         <div class="row">
           <Badge tone={toneOf(kind === "run" ? "run" : "stage", stage)}>{stage}</Badge>
-          {hold ? (
-            <Badge tone={toneOf("hold", hold)}>
-              {hold === "approval" && approval ? `${approval} approval` : hold}
-            </Badge>
-          ) : null}
-          {reason && hold !== "approval" ? <span class="reason">{reason}</span> : null}
+          {hold ? <HoldBadge hold={hold} approval={approval} /> : null}
+          {awaitingMerge ? <HoldBadge hold="merge" /> : null}
         </div>
+        {/* What a hold asks or why it holds is what the human reads before acting, so it stands out. */}
+        {hold && reason && hold !== "approval" ? (
+          <div class={`callout ${tone}`}>
+            <Icon name={hold === "question" ? "question" : toneIcon[tone]} />
+            <p>{reason}</p>
+          </div>
+        ) : null}
         {actions.length > 0 ? (
           <div class="row actions">
-            {actions.map((action) => (
+            {shownNow.map((action) => (
               <ActionButton key={actionKey(action)} api={api} refName={refName} action={action} />
             ))}
+            {behindMore.length > 0 ? (
+              <More api={api} refName={refName} actions={behindMore} />
+            ) : null}
           </div>
         ) : null}
       </header>
@@ -219,13 +249,49 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
             <ItemBody item={detail.item} tasks={detail.tasks ?? []} />
           ) : null}
           {kind === "task" && detail.task ? (
-            <TaskBody api={api} refName={refName} task={detail.task} records={records} />
+            <TaskBody
+              api={api}
+              refName={refName}
+              task={detail.task}
+              branch={detail.diff ?? null}
+              records={records}
+            />
           ) : null}
           <Timeline api={api} refName={refName} />
         </div>
         <Properties kind={kind} refName={refName} detail={detail} records={records} />
       </div>
     </article>
+  );
+}
+
+/**
+ * The verbs seldom wanted, behind a disclosure in the row of verbs; Escape folds it back onto
+ * its summary.
+ */
+function More({ api, refName, actions }: { api: Api; refName: string; actions: Action[] }) {
+  return (
+    <details
+      class="more-verbs"
+      onKeyDown={(event) => {
+        // A dialog opened from inside handles its own Escape.
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        if ((event.target as Element).closest("dialog")) return;
+        const more = event.currentTarget;
+        more.open = false;
+        more.querySelector("summary")?.focus();
+      }}
+    >
+      <summary class="button-link ghost more-toggle">
+        More
+        <Icon name="chevron-down" />
+      </summary>
+      <div class="row">
+        {actions.map((action) => (
+          <ActionButton key={actionKey(action)} api={api} refName={refName} action={action} />
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -321,6 +387,7 @@ function Properties({
       </ul>,
     ]);
     if (task.depends_on.length > 0) rows.push(["After", task.depends_on.join(", ")]);
+    if (detail.diff) rows.push(["Branch", <code key="branch">{detail.diff.branch}</code>]);
   }
   if (kind === "run" && detail.run) {
     const run = detail.run;
@@ -406,126 +473,173 @@ function ItemBody({ item, tasks }: { item: NonNullable<Detail["item"]>; tasks: R
   );
 }
 
+/**
+ * A task's records, in the order its state reads them: a task awaiting merge leads with its branch
+ * and diff and what was checked, and any other leads with what it must do and how far it got.
+ */
 function TaskBody({
   api,
   refName,
   task,
+  branch,
   records,
 }: {
   api: Api;
   refName: string;
   task: NonNullable<Detail["task"]>;
+  branch: Branch | null;
   records: Verdicts | null;
 }) {
-  return (
-    <>
-      <section class="card">
-        <h2>Done when</h2>
-        <ul>
-          {task.done_when.map((condition) => (
-            <li key={condition}>{condition}</li>
-          ))}
-        </ul>
-      </section>
-      {records ? <Blueprint records={records} /> : null}
-      {records?.report ? (
-        <section class="card">
-          <RecordHead title="Run report" run={records.report.run} />
-          <p>{text(records.report.report.summary)}</p>
+  const doneWhen = (
+    <section class="card">
+      <h2>Done when</h2>
+      <ul>
+        {task.done_when.map((condition) => (
+          <li key={condition}>{condition}</li>
+        ))}
+      </ul>
+    </section>
+  );
+  const blueprint = records ? <Blueprint records={records} /> : null;
+  const report = records?.report ? (
+    <section class="card">
+      <RecordHead title="Run report" run={records.report.run} />
+      <p>{text(records.report.report.summary)}</p>
+      <ul>
+        {records.report.report.changes.map((change) => (
+          <li key={change}>{change}</li>
+        ))}
+      </ul>
+      {records.report.report.out_of_scope.length > 0 ? (
+        <>
+          <h3>Noticed out of scope</h3>
           <ul>
-            {records.report.report.changes.map((change) => (
-              <li key={change}>{change}</li>
-            ))}
-          </ul>
-          {records.report.report.out_of_scope.length > 0 ? (
-            <>
-              <h3>Noticed out of scope</h3>
-              <ul>
-                {records.report.report.out_of_scope.map((note) => (
-                  <li key={text(note.note)}>
-                    {note.path ? <code>{text(note.path)}</code> : null} {text(note.note)}
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-        </section>
-      ) : null}
-      {records?.review ? (
-        <section class="card">
-          <RecordHead
-            title="Review"
-            run={records.review.run}
-            verdict={text(records.review.verdict.verdict)}
-            tone={toneOf("review", text(records.review.verdict.verdict))}
-          />
-          <p>{text(records.review.verdict.summary)}</p>
-          {records.review.verdict.findings.length > 0 ? (
-            <ul class="plain findings">
-              {records.review.verdict.findings.map((finding) => (
-                <li key={`${text(finding.criterion)} ${text(finding.issue)}`}>
-                  <Badge tone={toneOf("severity", text(finding.severity))}>
-                    {text(finding.severity)}
-                  </Badge>
-                  <span>
-                    <strong>{text(finding.criterion)}</strong> {text(finding.issue)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </section>
-      ) : null}
-      {records?.verify ? (
-        <section class="card">
-          <RecordHead
-            title="Verify"
-            run={records.verify.run}
-            verdict={text(records.verify.verdict.result)}
-            tone={toneOf("verify", text(records.verify.verdict.result))}
-          />
-          <p>{text(records.verify.verdict.summary)}</p>
-          <ul class="plain conditions">
-            {records.verify.verdict.conditions.map((condition) => (
-              <li key={text(condition.condition)} class={condition.met ? "positive" : "negative"}>
-                <Icon name={condition.met ? "check" : "x"} />
-                <div>
-                  <p>
-                    <span class="sr-only">{condition.met ? "Met: " : "Not met: "}</span>
-                    {text(condition.condition)}
-                  </p>
-                  <p class="meta">{text(condition.observation)}</p>
-                  {condition.evidence.length > 0 ? (
-                    <div class="evidence">
-                      {condition.evidence.map((path) => (
-                        <Evidence
-                          key={path}
-                          api={api}
-                          run={records.verify?.run ?? ""}
-                          path={path}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
+            {records.report.report.out_of_scope.map((note) => (
+              <li key={text(note.note)}>
+                {note.path ? <code>{text(note.path)}</code> : null} {text(note.note)}
               </li>
             ))}
           </ul>
-        </section>
+        </>
       ) : null}
-      {records && records.decisions.length > 0 ? (
-        <section class="card">
-          <h2>Decision log</h2>
-          {records.decisions.map((log) => (
-            <div key={log.run}>
-              <h3 class="ref">{log.run}</h3>
-              <pre class="text">{log.text}</pre>
-            </div>
+    </section>
+  ) : null;
+  const review = records?.review ? (
+    <section class="card">
+      <RecordHead
+        title="Review"
+        run={records.review.run}
+        verdict={text(records.review.verdict.verdict)}
+        tone={toneOf("review", text(records.review.verdict.verdict))}
+      />
+      <p>{text(records.review.verdict.summary)}</p>
+      {records.review.verdict.findings.length > 0 ? (
+        <ul class="plain findings">
+          {records.review.verdict.findings.map((finding) => (
+            <li key={`${text(finding.criterion)} ${text(finding.issue)}`}>
+              <Badge tone={toneOf("severity", text(finding.severity))}>
+                {text(finding.severity)}
+              </Badge>
+              <span>
+                <strong>{text(finding.criterion)}</strong> {text(finding.issue)}
+              </span>
+            </li>
           ))}
-        </section>
+        </ul>
       ) : null}
+    </section>
+  ) : null;
+  const verify = records?.verify ? (
+    <section class="card">
+      <RecordHead
+        title="Verify"
+        run={records.verify.run}
+        verdict={text(records.verify.verdict.result)}
+        tone={toneOf("verify", text(records.verify.verdict.result))}
+      />
+      <p>{text(records.verify.verdict.summary)}</p>
+      <ul class="plain conditions">
+        {records.verify.verdict.conditions.map((condition) => (
+          <li key={text(condition.condition)} class={condition.met ? "positive" : "negative"}>
+            <Icon name={condition.met ? "check" : "x"} />
+            <div>
+              <p>
+                <span class="sr-only">{condition.met ? "Met: " : "Not met: "}</span>
+                {text(condition.condition)}
+              </p>
+              <p class="meta">{text(condition.observation)}</p>
+              {condition.evidence.length > 0 ? (
+                <div class="evidence">
+                  {condition.evidence.map((path) => (
+                    <Evidence key={path} api={api} run={records.verify?.run ?? ""} path={path} />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  ) : null;
+  const decisions =
+    records && records.decisions.length > 0 ? (
+      <section class="card">
+        <h2>Decision log</h2>
+        {records.decisions.map((log) => (
+          <div key={log.run}>
+            <h3 class="ref">{log.run}</h3>
+            <pre class="text">{log.text}</pre>
+          </div>
+        ))}
+      </section>
+    ) : null;
+  if (task.awaiting_merge && branch) {
+    return (
+      <>
+        <MergeCard branch={branch} />
+        <Diff api={api} refName={refName} open />
+        {report}
+        {review}
+        {verify}
+        {doneWhen}
+        {blueprint}
+        {decisions}
+      </>
+    );
+  }
+  return (
+    <>
+      {doneWhen}
+      {blueprint}
+      {report}
+      {review}
+      {verify}
+      {decisions}
       <Diff api={api} refName={refName} />
     </>
+  );
+}
+
+/** What merging a task takes: its branch, where it goes, and that the human does it. */
+function MergeCard({ branch }: { branch: Branch }) {
+  const copy = () =>
+    void navigator.clipboard.writeText(branch.branch).then(
+      () => notify(`Copied ${branch.branch}`, false),
+      (error: Error) => notify(error.message, true),
+    );
+  return (
+    <section class="card">
+      <h2>Ready to merge</h2>
+      <p>
+        Read the diff, then merge <code>{branch.branch}</code> into <code>{branch.base}</code> in{" "}
+        <code>{branch.repository}</code> yourself; kozo never merges.
+      </p>
+      <div class="row">
+        <button type="button" onClick={copy}>
+          Copy the branch name
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -580,18 +694,19 @@ function Blueprint({ records }: { records: Verdicts }) {
   );
 }
 
-/** The task branch's diff, read when the human asks for it. */
-function Diff({ api, refName }: { api: Api; refName: string }) {
+/** The task branch's diff, read when the human asks for it, or on opening when `open`. */
+function Diff({ api, refName, open = false }: { api: Api; refName: string; open?: boolean }) {
   const [diff, setDiff] = useState<{ diff: string; cut: boolean } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const shown = useRef<HTMLDivElement>(null);
-  // The diff replaces the button that asked for it, so focus moves onto the diff.
+  const asked = useRef(false);
+  // The diff replaces the button that asked for it, so focus moves onto the diff; a diff read on
+  // opening leaves focus where it is.
   useEffect(() => {
-    if (diff) shown.current?.focus();
+    if (diff && asked.current) shown.current?.focus();
   }, [diff]);
-  const show = () => {
-    if (loading) return;
+  const read = () => {
     setLoading(true);
     void api
       .get<{ diff: string; cut: boolean }>(`/api/refs/${encodeURIComponent(refName)}/diff`)
@@ -602,6 +717,15 @@ function Diff({ api, refName }: { api: Api; refName: string }) {
       .catch((error: Error) => setProblem(error.message))
       .finally(() => setLoading(false));
   };
+  const show = () => {
+    if (loading) return;
+    asked.current = true;
+    read();
+  };
+  // A diff opened with the page is read once, on opening.
+  useEffect(() => {
+    if (open) read();
+  }, []);
   return (
     <section class="card">
       <h2>Diff</h2>

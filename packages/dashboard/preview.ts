@@ -156,7 +156,8 @@ const task = (
   goal,
   stage,
   hold,
-  hold_reason: hold,
+  // A held task gives the reason its inbox row gives, as kozod's index does.
+  hold_reason: inbox.find((row) => row.ref === ref)?.reason ?? hold,
   revisions,
   updated_at: at(20),
 });
@@ -231,8 +232,18 @@ function detailOf(ref: string) {
         ],
         scope: ["src/orders/summary.ts", "src/orders/summary.test.ts"],
         depends_on: [],
+        awaiting_merge: found.stage === "handoff" ? 1 : 0,
       },
       runs,
+      ...(found.stage === "complete"
+        ? {}
+        : {
+            diff: {
+              repository: "example/sample-shop",
+              branch: `kozo/q7k2m9/${ref.replace("/", "-")}`,
+              base: "main",
+            },
+          }),
     };
   }
   const found = items.find((candidate) => candidate.ref === ref);

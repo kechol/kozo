@@ -1,12 +1,11 @@
 import { signal } from "@preact/signals";
 import { AddItem } from "./add-item.tsx";
 import type { Api, ItemRow, TaskRow } from "./api.ts";
-import { Badge } from "./badge.tsx";
+import { HoldBadge } from "./badge.tsx";
 import { detailHash, isClosedStage, moveTarget, stages } from "./format.ts";
 import { Icon } from "./icons.tsx";
 import { Loading, Placeholder, Unread } from "./placeholder.tsx";
 import { items, loaded, problem, run, status, tasks } from "./store.ts";
-import { toneOf } from "./tone.ts";
 
 /** Whether the board shows items or tasks; the viewer's choice, kept in this browser. */
 const view = signal<"items" | "tasks">(readView());
@@ -175,7 +174,7 @@ function ItemCard({
       <CardTitle href={detailHash(item.ref)}>{item.title}</CardTitle>
       {item.hold || item.class ? (
         <div class="row meta">
-          {item.hold ? <Badge tone={toneOf("hold", item.hold)}>{item.hold}</Badge> : null}
+          {item.hold ? <HoldBadge hold={item.hold} /> : null}
           {item.class ? <span>{item.class}</span> : null}
         </div>
       ) : null}
@@ -222,7 +221,7 @@ function TaskCard({ task }: { task: TaskRow }) {
       <CardTitle href={detailHash(task.ref)}>{task.goal}</CardTitle>
       {task.hold || task.revisions > 0 ? (
         <div class="row meta">
-          {task.hold ? <Badge tone={toneOf("hold", task.hold)}>{task.hold}</Badge> : null}
+          {task.hold ? <HoldBadge hold={task.hold} /> : null}
           {task.revisions > 0 ? (
             <span>
               {task.revisions} {task.revisions === 1 ? "revision" : "revisions"}
