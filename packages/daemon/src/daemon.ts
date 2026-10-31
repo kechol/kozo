@@ -17,6 +17,7 @@ import { readItemFile } from "./item-file.ts";
 import { type Launcher, processLauncher } from "./launcher.ts";
 import { Notifier, type Notify, osNotify } from "./notifier.ts";
 import { pruneRecords } from "./prune.ts";
+import { lastHandoff } from "./queries.ts";
 import { Reconciler } from "./reconcile.ts";
 import { buildReport } from "./report.ts";
 import { readCharter } from "./repository.ts";
@@ -207,6 +208,14 @@ export class Daemon {
           class: drafted ?? requested,
           level: charter.ok ? itemLevel(charter.charter, requested, drafted) : null,
         };
+      },
+      async request(item) {
+        return (await readItemFile(home, item)).body;
+      },
+      async handoff(task) {
+        const last = lastHandoff(store.db, task);
+        if (!last) return null;
+        return { head: last.head, report: await Bun.file(join(home.root, last.report)).text() };
       },
       async locateTask(ref) {
         const repository = store.state.items[store.state.tasks[ref]?.item ?? ""]?.repository;

@@ -93,6 +93,8 @@ export interface TaskRow {
   hold: string | null;
   hold_reason: string | null;
   revisions: number;
+  /** 1 while the task's branch waits for the human to merge it, else 0. */
+  awaiting_merge: number;
   updated_at: string;
 }
 

@@ -57,10 +57,11 @@ export function Board({ api, asked }: { api: Api; asked?: BoardView }) {
   // Each card counts its item's tasks, so they are counted in one pass rather than per card.
   const tally = new Map<string, Tally>();
   for (const task of tasks.value) {
-    const count = tally.get(task.item) ?? { done: 0, total: 0, held: 0 };
+    const count = tally.get(task.item) ?? { done: 0, total: 0, held: 0, merge: 0 };
     count.total += 1;
     if (task.stage === "complete") count.done += 1;
     if (task.hold) count.held += 1;
+    if (task.awaiting_merge) count.merge += 1;
     tally.set(task.item, count);
   }
   return (
@@ -183,6 +184,7 @@ interface Tally {
   done: number;
   total: number;
   held: number;
+  merge: number;
 }
 
 function ItemCard({
@@ -219,6 +221,7 @@ function ItemCard({
         <div class="tally">
           <span>
             {tally.done}/{tally.total} tasks{tally.held > 0 ? `, ${tally.held} held` : ""}
+            {tally.merge > 0 ? `, ${tally.merge} ready to merge` : ""}
           </span>
           <progress value={tally.done} max={tally.total} aria-hidden="true" />
         </div>
@@ -256,9 +259,10 @@ function TaskCard({ task, repository }: { task: TaskRow; repository: string | un
         <Where refName={task.ref} repository={repository} />
       </div>
       <CardTitle href={detailHash(task.ref)}>{task.goal}</CardTitle>
-      {task.hold || task.revisions > 0 ? (
+      {task.hold || task.awaiting_merge || task.revisions > 0 ? (
         <div class="row meta">
           {task.hold ? <HoldBadge hold={task.hold} /> : null}
+          {task.awaiting_merge ? <HoldBadge hold="merge" /> : null}
           {task.revisions > 0 ? (
             <span>
               {task.revisions} {task.revisions === 1 ? "revision" : "revisions"}

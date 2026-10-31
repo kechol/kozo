@@ -42,6 +42,8 @@ interface Plan {
 interface Detail {
   kind: "item" | "task" | "run";
   item?: Row & { plan: Plan | null; draft: Plan | null };
+  /** An item's request body, when kozod could read it. */
+  request?: string;
   task?: Row & {
     done_when: string[];
     scope: string[];
@@ -55,6 +57,8 @@ interface Detail {
   cost_usd?: number;
   /** Where a task's branch is, once it has one. */
   diff?: Branch;
+  /** The head and handoff report of a task's last final verification that passed. */
+  handoff?: { head: string; report: string };
 }
 
 interface Branch {
@@ -246,7 +250,12 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
       <div class="detail-body">
         <div class="detail-main">
           {kind === "item" && detail.item ? (
-            <ItemBody refName={refName} item={detail.item} tasks={detail.tasks ?? []} />
+            <ItemBody
+              refName={refName}
+              item={detail.item}
+              request={detail.request ?? null}
+              tasks={detail.tasks ?? []}
+            />
           ) : null}
           {kind === "task" && detail.task ? (
             <TaskBody
@@ -254,6 +263,7 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
               refName={refName}
               task={detail.task}
               branch={detail.diff ?? null}
+              handoff={detail.handoff ?? null}
               records={records}
             />
           ) : null}
@@ -466,15 +476,28 @@ function PlanView({
 function ItemBody({
   refName,
   item,
+  request,
   tasks,
 }: {
   refName: string;
   item: NonNullable<Detail["item"]>;
+  request: string | null;
   tasks: Row[];
 }) {
   const made = new Set(tasks.map((task) => text(task.ref)));
   return (
     <>
+      {/* The request is what a start approval decides on, so it comes first. */}
+      {request !== null ? (
+        <section class="card">
+          <h2>Request</h2>
+          {request.trim() === "" ? (
+            <p class="empty">The request has a title only.</p>
+          ) : (
+            <pre class="text">{request}</pre>
+          )}
+        </section>
+      ) : null}
       {item.draft ? (
         <PlanView
           plan={item.draft}
@@ -516,12 +539,14 @@ function TaskBody({
   refName,
   task,
   branch,
+  handoff,
   records,
 }: {
   api: Api;
   refName: string;
   task: NonNullable<Detail["task"]>;
   branch: Branch | null;
+  handoff: Detail["handoff"] | null;
   records: Verdicts | null;
 }) {
   const doneWhen = (
@@ -630,7 +655,7 @@ function TaskBody({
   if (task.awaiting_merge && branch) {
     return (
       <>
-        <MergeCard branch={branch} />
+        <MergeCard branch={branch} handoff={handoff} />
         <Diff api={api} refName={refName} open />
         {report}
         {review}
@@ -654,8 +679,11 @@ function TaskBody({
   );
 }
 
-/** What merging a task takes: its branch, where it goes, and that the human does it. */
-function MergeCard({ branch }: { branch: Branch }) {
+/**
+ * What merging a task takes: its branch, where it goes, that the human does it, and the handoff
+ * report of the head that passed final verification.
+ */
+function MergeCard({ branch, handoff }: { branch: Branch; handoff: Detail["handoff"] | null }) {
   const copy = () =>
     void navigator.clipboard.writeText(branch.branch).then(
       () => notify(`Copied ${branch.branch}`, false),
@@ -673,6 +701,14 @@ function MergeCard({ branch }: { branch: Branch }) {
           Copy the branch name
         </button>
       </div>
+      {handoff ? (
+        <>
+          <h3>
+            Handoff report <span class="meta">at {handoff.head.slice(0, 12)}</span>
+          </h3>
+          <pre class="text">{handoff.report}</pre>
+        </>
+      ) : null}
     </section>
   );
 }

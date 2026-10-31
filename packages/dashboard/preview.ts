@@ -159,6 +159,7 @@ const task = (
   // A held task gives the reason its inbox row gives, as kozod's index does.
   hold_reason: inbox.find((row) => row.ref === ref)?.reason ?? hold,
   revisions,
+  awaiting_merge: stage === "handoff" ? 1 : 0,
   updated_at: at(20),
 });
 
@@ -214,6 +215,23 @@ const runs = [
   ended_at: at(Number(ended)),
 }));
 
+const handoffReport = `## Why
+The order summary rounded the total, so line taxes could sum a cent off.
+
+## What changed
+- src/orders/summary.ts rounds each line's tax, half to even, before summing.
+- src/orders/summary.test.ts covers an order whose line taxes sum to x.xx5.
+
+## Out of scope
+src/orders/discount.ts rounds the same way and may need the same fix.
+
+## Why it is safe
+Only the summary's tax changes; the totals of orders already placed are stored.
+
+## Verification
+The full gates passed, and the review accepted the diff.
+`;
+
 /** The runs that run now, as many as the status counts. */
 const running = [
   ["r-0040", "K-8", "K-8/t1", "implement"],
@@ -248,7 +266,6 @@ function detailOf(ref: string) {
         ],
         scope: ["src/orders/summary.ts", "src/orders/summary.test.ts"],
         depends_on: [],
-        awaiting_merge: found.stage === "handoff" ? 1 : 0,
       },
       runs,
       ...(found.stage === "complete"
@@ -260,6 +277,9 @@ function detailOf(ref: string) {
               base: "main",
             },
           }),
+      ...(found.awaiting_merge
+        ? { handoff: { head: "3b18e51c9a0f4d2e", report: handoffReport } }
+        : {}),
     };
   }
   const found = items.find((candidate) => candidate.ref === ref);
@@ -273,6 +293,7 @@ function detailOf(ref: string) {
       plan: drafting ? null : plan,
       draft: drafting ? plan : null,
     },
+    request: `${found.title}.\n\nShoppers should see it on every page where it applies; keep the change to the storefront.`,
     tasks: tasks.filter((candidate) => candidate.item === ref),
     runs: runs.filter((candidate) => candidate.item === ref),
     cost_usd: 1.27,

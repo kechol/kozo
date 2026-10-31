@@ -131,6 +131,37 @@ describe("the local API", () => {
     expect((await call("/api/refs/nope")).status).toBe(400);
   });
 
+  test("a detail carries an item's request and a task's branch and last handoff", async () => {
+    const tasks = (await (await call("/api/ls/tasks")).json()) as Record<string, unknown>[];
+    expect(tasks[0]).toMatchObject({ ref: "K-1/t1", awaiting_merge: 0 });
+    const detailed = createApi({
+      store,
+      token,
+      port,
+      mode: "local",
+      commands,
+      request: async () => "Show the cart total with tax.",
+      handoff: async (task) => ({ head: "abc123", report: `# ${task}` }),
+      locateTask: async () => ({ repository: "/src/shop", branch: "kozo/x/K-1-t1", base: "main" }),
+    });
+    const read = async (path: string) =>
+      (
+        await detailed.request(`http://127.0.0.1:${port}${path}`, {
+          headers: { authorization: `Bearer ${token}`, host: `127.0.0.1:${port}` },
+        })
+      ).json();
+    expect(await read("/api/refs/K-1")).toMatchObject({ request: "Show the cart total with tax." });
+    expect(await read("/api/refs/K-1%2Ft1")).toMatchObject({
+      diff: { branch: "kozo/x/K-1-t1" },
+      handoff: { head: "abc123", report: "# K-1/t1" },
+    });
+    // Without the files, the detail still answers, without the fields.
+    const item = (await (await call("/api/refs/K-1")).json()) as Record<string, unknown>;
+    const task = (await (await call("/api/refs/K-1%2Ft1")).json()) as Record<string, unknown>;
+    expect(item.request).toBeUndefined();
+    expect(task.handoff).toBeUndefined();
+  });
+
   test("events stream from Last-Event-ID, then live", async () => {
     const run = { item: "K-1", task: "K-1/t1", run_id: "r-0004" };
     await store.append({

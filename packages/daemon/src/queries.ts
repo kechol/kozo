@@ -39,7 +39,7 @@ export function list(db: Database, kind: ListKind) {
     case "tasks":
       return db
         .query(
-          "select ref, item, goal, stage, hold, hold_reason, revisions, updated_at from tasks order by ref",
+          "select ref, item, goal, stage, hold, hold_reason, revisions, awaiting_merge, updated_at from tasks order by ref",
         )
         .all();
     case "runs":

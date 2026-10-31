@@ -81,6 +81,10 @@ export interface ApiOptions {
   now?: () => Date;
   /** Where a task's diff lives, for `kozo show --diff`. */
   locateTask?(ref: string): Promise<{ repository: string; branch: string; base: string } | null>;
+  /** An item's request body, as the human or the Issue wrote it. */
+  request?(item: string): Promise<string>;
+  /** The head and handoff report of a task's last final verification that passed, or null. */
+  handoff?(task: string): Promise<{ head: string; report: string } | null>;
   /** The dashboard's sessions, whose tokens the API accepts beside its own. */
   sessions?: DashboardSessions;
   /** The registered repositories, which the dashboard offers when it adds an item. */
@@ -127,6 +131,8 @@ export function createApi({
   commands,
   now = () => new Date(),
   locateTask,
+  request,
+  handoff,
   sessions = new DashboardSessions(),
   repositories = () => [],
   reservedUsd = () => 0,
@@ -236,8 +242,21 @@ export function createApi({
     const [ref, parsedReference] = found;
     const result = detail(store.db, ref, parsedReference);
     if (!result) return error(c, 404, `${ref} does not exist`);
-    const location = result.kind === "task" ? await locateTask?.(ref).catch(() => null) : null;
-    return c.json(location ? { ...result, diff: location } : result);
+    // A file that cannot be read leaves its field out rather than failing the detail.
+    if (result.kind === "item") {
+      const body = await request?.(ref).catch(() => null);
+      return c.json(typeof body === "string" ? { ...result, request: body } : result);
+    }
+    if (result.kind !== "task") return c.json(result);
+    const [location, last] = await Promise.all([
+      locateTask?.(ref).catch(() => null) ?? null,
+      handoff?.(ref).catch(() => null) ?? null,
+    ]);
+    return c.json({
+      ...result,
+      ...(location ? { diff: location } : {}),
+      ...(last ? { handoff: last } : {}),
+    });
   });
 
   // A diff past this many characters is cut, since the page renders all of it.
