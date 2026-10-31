@@ -3,7 +3,8 @@ import type { Api, InboxRow } from "./api.ts";
 import { Badge } from "./badge.tsx";
 import { detailHash } from "./format.ts";
 import { Icon, type IconName } from "./icons.tsx";
-import { inbox } from "./store.ts";
+import { Loading, Placeholder } from "./placeholder.tsx";
+import { inbox, loaded } from "./store.ts";
 import { Time } from "./time.tsx";
 import { toneOf } from "./tone.ts";
 
@@ -36,6 +37,18 @@ function Note({ row }: { row: InboxRow }) {
 /** What waits for the human, oldest first, each with the verbs that settle it. */
 export function Inbox({ api }: { api: Api }) {
   const rows = inbox.value;
+  if (!loaded.value) {
+    return (
+      <div class="panel rows">
+        <Loading what="the inbox" />
+        {[0, 1, 2].map((index) => (
+          <div key={index} class="inbox-row">
+            <Placeholder />
+          </div>
+        ))}
+      </div>
+    );
+  }
   if (rows.length === 0) {
     return (
       <div class="panel empty-state">

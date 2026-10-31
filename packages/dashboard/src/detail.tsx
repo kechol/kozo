@@ -9,10 +9,11 @@ import {
   retryAction,
   takeAction,
 } from "./actions.tsx";
-import type { Api } from "./api.ts";
+import { type Api, ApiError } from "./api.ts";
 import { Badge } from "./badge.tsx";
 import { detailHash, eventLine, isClosedStage, kindOf, usd } from "./format.ts";
 import { Icon, toneIcon } from "./icons.tsx";
+import { Loading, Placeholder } from "./placeholder.tsx";
 import { items } from "./store.ts";
 import { Time } from "./time.tsx";
 import { toneOf } from "./tone.ts";
@@ -113,7 +114,7 @@ const text = (value: unknown) => (value === null || value === undefined ? "" : S
 /** One item, task or run: what it is, what it did and what the human can do about it. */
 export function DetailView({ api, refName }: { api: Api; refName: string }) {
   const [detail, setDetail] = useState<Detail | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
+  const [failed, setFailed] = useState<{ message: string; missing: boolean } | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [records, setRecords] = useState<Verdicts | null>(null);
   const kind = kindOf(refName);
@@ -129,7 +130,14 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
             setFailed(null);
           }
         })
-        .catch((error: Error) => live && setFailed(error.message));
+        .catch(
+          (error: Error) =>
+            live &&
+            setFailed({
+              message: error.message,
+              missing: error instanceof ApiError && error.status === 404,
+            }),
+        );
     void load();
     const timer = setInterval(load, 3000);
     const stop = new AbortController();
@@ -158,8 +166,26 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
       .catch(() => {});
   }, [api, refName, kind, runCount, detail?.task?.stage, detail?.task?.hold]);
 
-  if (failed && !detail) return <p class="problem">{failed}</p>;
-  if (!detail) return <p class="empty">Loading {refName}…</p>;
+  if (failed?.missing) return <Missing refName={refName} />;
+  if (failed && !detail) return <p class="problem">{failed.message}</p>;
+  if (!detail) {
+    return (
+      <article class="detail">
+        <Loading what={refName} />
+        <div class="detail-head">
+          <Placeholder />
+        </div>
+        <div class="detail-main">
+          <div class="card">
+            <Placeholder lines={4} />
+          </div>
+          <div class="card">
+            <Placeholder lines={4} />
+          </div>
+        </div>
+      </article>
+    );
+  }
   const subject = (
     detail.item && kind === "item" ? detail.item : (detail.task ?? detail.run)
   ) as Row;
@@ -206,6 +232,27 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
         <Properties kind={kind} refName={refName} detail={detail} records={records} />
       </div>
     </article>
+  );
+}
+
+/** What a reference that does not exist shows, with the ways back. */
+function Missing({ refName }: { refName: string }) {
+  return (
+    <div class="panel empty-state">
+      <Icon name="question" />
+      <div>
+        <h1>{refName} does not exist</h1>
+        <p>There is no item, task or run by that reference.</p>
+        <p class="row">
+          <a class="button-link" href="#/">
+            Go to the inbox
+          </a>
+          <a class="button-link" href="#/board">
+            Go to the board
+          </a>
+        </p>
+      </div>
+    </div>
   );
 }
 

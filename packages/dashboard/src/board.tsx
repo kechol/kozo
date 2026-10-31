@@ -4,7 +4,8 @@ import type { Api, ItemRow, TaskRow } from "./api.ts";
 import { Badge } from "./badge.tsx";
 import { detailHash, isClosedStage, moveTarget, stages } from "./format.ts";
 import { Icon } from "./icons.tsx";
-import { items, run, status, tasks } from "./store.ts";
+import { Loading, Placeholder } from "./placeholder.tsx";
+import { items, loaded, run, status, tasks } from "./store.ts";
 import { toneOf } from "./tone.ts";
 
 /** Whether the board shows items or tasks; the viewer's choice, kept in this browser. */
@@ -33,6 +34,7 @@ export function Board({ api }: { api: Api }) {
   const showItems = view.value === "items";
   const allItems = items.value;
   const order = allItems.filter((item) => !isClosedStage(item.stage)).map((item) => item.ref);
+  const ready = loaded.value;
   return (
     <>
       <div class="row spread board-tools">
@@ -61,6 +63,7 @@ export function Board({ api }: { api: Api }) {
       </div>
       {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scroller takes focus so the keyboard can scroll it */}
       <section class="board" aria-label="Stages" tabIndex={0}>
+        {ready ? null : <Loading what="the board" />}
         {stages.map((stage) => {
           const cards = showItems
             ? allItems.filter((item) => item.shown_stage === stage)
@@ -70,7 +73,7 @@ export function Board({ api }: { api: Api }) {
           const column = cards.map((card) => card.ref);
           const head = (
             <h2>
-              {stage} <span class="column-count">{cards.length}</span>
+              {stage} {ready ? <span class="column-count">{cards.length}</span> : null}
             </h2>
           );
           const list = shown.map((card, index) =>
@@ -87,6 +90,16 @@ export function Board({ api }: { api: Api }) {
             ),
           );
           // A closed column holds what is finished, so it stays folded to its count until opened.
+          // An empty column keeps its frame, so the columns line up whatever they hold.
+          const body = !ready ? (
+            <div class="card board-card">
+              <Placeholder />
+            </div>
+          ) : cards.length === 0 ? (
+            <div class="column-empty" aria-hidden="true" />
+          ) : (
+            list
+          );
           return closed ? (
             <details key={stage} class="column closed">
               <summary>{head}</summary>
@@ -98,7 +111,7 @@ export function Board({ api }: { api: Api }) {
           ) : (
             <section key={stage} class="column" aria-label={stage}>
               {head}
-              {list}
+              {body}
             </section>
           );
         })}

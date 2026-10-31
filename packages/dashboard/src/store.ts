@@ -18,6 +18,8 @@ export const tasks = signal<TaskRow[]>([]);
 export const problem = signal<string | null>(null);
 /** When the lists last refreshed, so a failure can say how old what the page shows is. */
 export const refreshedAt = signal<Date | null>(null);
+/** Whether the lists have loaded once, which changes once rather than on every refresh. */
+export const loaded = computed(() => refreshedAt.value !== null);
 /** Whether kozod refused the tab's session, as after it starts again; the page then stops. */
 export const sessionEnded = signal(false);
 /** What an action answered, as the toast region shows it. */
