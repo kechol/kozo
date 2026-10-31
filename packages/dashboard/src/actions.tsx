@@ -156,8 +156,9 @@ export function ActionButton({
   }, [open]);
 
   // A sent action often settles what the button's row waits on, so the row goes; focus then
-  // moves to the view instead of being lost with it. A layout cleanup runs while the row is still
-  // in the page, and an open modal dialog makes the view inert, so it closes first.
+  // moves to the next row's first verb, as a worklist goes on to what is next, or to the view
+  // when no row is left. A layout cleanup runs while the row is still in the page, and an open
+  // modal dialog makes the view inert, so it closes first.
   useLayoutEffect(
     () => () => {
       const holder = [trigger.current, form.current].find((node) =>
@@ -165,7 +166,10 @@ export function ActionButton({
       );
       if (!holder) return;
       holder.closest("dialog")?.close();
-      holder.closest("main")?.focus();
+      const row = holder.closest("li");
+      const next = row?.nextElementSibling ?? row?.previousElementSibling;
+      const verb = next?.querySelector<HTMLElement>(".actions button, .actions a");
+      (verb ?? holder.closest("main"))?.focus();
     },
     [],
   );

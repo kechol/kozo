@@ -96,6 +96,17 @@ export interface TaskRow {
   updated_at: string;
 }
 
+export interface RunRow {
+  ref: string;
+  item: string;
+  task: string | null;
+  agent: string;
+  model: string;
+  state: string;
+  started_at: string;
+  ended_at: string | null;
+}
+
 export interface VerbAnswer {
   message: string;
   awaitingHuman?: boolean;

@@ -214,6 +214,22 @@ const runs = [
   ended_at: at(Number(ended)),
 }));
 
+/** The runs that run now, as many as the status counts. */
+const running = [
+  ["r-0040", "K-8", "K-8/t1", "implement"],
+  ["r-0041", "K-9", null, "explorer"],
+].map(([ref, item, task, agent]) => ({
+  ref,
+  item,
+  task,
+  parent: null,
+  agent,
+  model: "claude-sonnet-5-5",
+  state: "running",
+  started_at: at(4),
+  ended_at: null,
+}));
+
 function detailOf(ref: string) {
   if (/^r-\d+$/.test(ref)) {
     const run = runs.find((candidate) => candidate.ref === ref);
@@ -388,6 +404,7 @@ const server = Bun.serve({
     "/api/ls/inbox": () => list(inbox),
     "/api/ls/items": () => list(items),
     "/api/ls/tasks": () => list(tasks),
+    "/api/ls/runs": () => list([...runs, ...running]),
   },
   fetch(request) {
     const path = decodeURIComponent(new URL(request.url).pathname);

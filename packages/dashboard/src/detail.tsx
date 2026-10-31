@@ -246,7 +246,7 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
       <div class="detail-body">
         <div class="detail-main">
           {kind === "item" && detail.item ? (
-            <ItemBody item={detail.item} tasks={detail.tasks ?? []} />
+            <ItemBody refName={refName} item={detail.item} tasks={detail.tasks ?? []} />
           ) : null}
           {kind === "task" && detail.task ? (
             <TaskBody
@@ -413,7 +413,18 @@ function Properties({
   );
 }
 
-function PlanView({ plan, title }: { plan: Plan; title: string }) {
+/** A plan; once a planned task exists, its id leads to it. */
+function PlanView({
+  plan,
+  title,
+  itemRef,
+  made,
+}: {
+  plan: Plan;
+  title: string;
+  itemRef: string;
+  made: Set<string>;
+}) {
   return (
     <section class="card">
       <h2>{title}</h2>
@@ -428,7 +439,14 @@ function PlanView({ plan, title }: { plan: Plan; title: string }) {
       <ol>
         {plan.tasks.map((task) => (
           <li key={task.id}>
-            <span class="ref">{task.id}</span> {task.goal}
+            {made.has(`${itemRef}/${task.id}`) ? (
+              <a class="ref" href={detailHash(`${itemRef}/${task.id}`)}>
+                {task.id}
+              </a>
+            ) : (
+              <span class="ref">{task.id}</span>
+            )}{" "}
+            {task.goal}
             {task.characterize ? <span class="meta"> characterizes first</span> : null}
             {task.depends_on.length > 0 ? (
               <span class="meta"> after {task.depends_on.join(", ")}</span>
@@ -445,11 +463,27 @@ function PlanView({ plan, title }: { plan: Plan; title: string }) {
   );
 }
 
-function ItemBody({ item, tasks }: { item: NonNullable<Detail["item"]>; tasks: Row[] }) {
+function ItemBody({
+  refName,
+  item,
+  tasks,
+}: {
+  refName: string;
+  item: NonNullable<Detail["item"]>;
+  tasks: Row[];
+}) {
+  const made = new Set(tasks.map((task) => text(task.ref)));
   return (
     <>
-      {item.draft ? <PlanView plan={item.draft} title="Draft plan waiting for approval" /> : null}
-      {item.plan ? <PlanView plan={item.plan} title="Plan" /> : null}
+      {item.draft ? (
+        <PlanView
+          plan={item.draft}
+          title="Draft plan waiting for approval"
+          itemRef={refName}
+          made={made}
+        />
+      ) : null}
+      {item.plan ? <PlanView plan={item.plan} title="Plan" itemRef={refName} made={made} /> : null}
       {tasks.length > 0 ? (
         <section class="card">
           <h2>Tasks</h2>

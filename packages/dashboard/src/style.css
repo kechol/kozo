@@ -260,7 +260,8 @@ button.icon-button {
   padding: 0;
 }
 
-button.primary {
+button.primary,
+.button-link.primary {
   --button-bg: var(--primary);
   --button-fg: var(--on-primary);
   --button-hover: var(--primary-hover);
@@ -460,6 +461,46 @@ select:focus-visible {
 
 .mode {
   text-transform: capitalize;
+}
+
+.runs-now {
+  position: relative;
+}
+
+.runs-now > summary {
+  list-style: none;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.runs-now > summary::-webkit-details-marker {
+  display: none;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  min-width: 240px;
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-floating);
+  white-space: nowrap;
+}
+
+.popover p,
+.popover ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.popover ul {
+  display: grid;
+  gap: var(--space-1);
 }
 
 .problem {

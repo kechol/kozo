@@ -158,6 +158,8 @@ describe("format", () => {
   test("routes the inbox, the board and a reference's detail", () => {
     expect(routeOf("")).toEqual({ page: "inbox" });
     expect(routeOf("#/board")).toEqual({ page: "board" });
+    expect(routeOf("#/board?view=tasks")).toEqual({ page: "board", view: "tasks" });
+    expect(routeOf("#/board?view=runs")).toEqual({ page: "inbox" });
     expect(routeOf("#/ref/shop%2312%2Ft1")).toEqual({ page: "detail", ref: "shop#12/t1" });
     expect(routeOf("#/ref/%E0%A4%A")).toEqual({ page: "inbox" });
   });

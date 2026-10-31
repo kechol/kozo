@@ -53,7 +53,7 @@ function View({ api, route, count }: { api: Api; route: Route; count: number }) 
     return (
       <>
         <PageHead title="Board" />
-        <Board api={api} />
+        <Board api={api} asked={route.view} />
       </>
     );
   }

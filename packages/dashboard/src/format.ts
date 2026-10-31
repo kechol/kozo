@@ -13,11 +13,18 @@ export function ago(iso: string, now: Date = new Date()): string {
 
 export const usd = (amount: number) => `$${amount.toFixed(2)}`;
 
-/** The page a hash names: the inbox, the board, or one reference's detail. */
-export type Route = { page: "inbox" } | { page: "board" } | { page: "detail"; ref: string };
+/** What the board shows: items or tasks. */
+export type BoardView = "items" | "tasks";
+
+/** The page a hash names: the inbox, the board with what it shows, or one reference's detail. */
+export type Route =
+  | { page: "inbox" }
+  | { page: "board"; view?: BoardView }
+  | { page: "detail"; ref: string };
 
 export function routeOf(hash: string): Route {
-  if (hash === "#/board") return { page: "board" };
+  const board = /^#\/board(?:\?view=(items|tasks))?$/.exec(hash);
+  if (board) return board[1] ? { page: "board", view: board[1] as BoardView } : { page: "board" };
   const detail = /^#\/ref\/(.+)$/.exec(hash);
   if (!detail?.[1]) return { page: "inbox" };
   try {
@@ -28,6 +35,8 @@ export function routeOf(hash: string): Route {
 }
 
 export const detailHash = (ref: string) => `#/ref/${encodeURIComponent(ref)}`;
+
+export const boardHash = (view: BoardView) => `#/board?view=${view}`;
 
 /** The tab's title for a view, with how many wait in the inbox, so a background tab shows it. */
 export function titleOf(route: Route, waiting: number): string {

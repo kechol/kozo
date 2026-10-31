@@ -1,10 +1,10 @@
-import { ActionButton, actionKey, inboxActions } from "./actions.tsx";
+import { type Action, ActionButton, actionKey, inboxActions } from "./actions.tsx";
 import type { Api, InboxRow } from "./api.ts";
 import { HoldBadge } from "./badge.tsx";
 import { detailHash } from "./format.ts";
 import { Icon } from "./icons.tsx";
 import { Loading, Placeholder, Unread } from "./placeholder.tsx";
-import { inbox, loaded, problem } from "./store.ts";
+import { inbox, items, loaded, problem, status } from "./store.ts";
 import { Time } from "./time.tsx";
 
 /** The line under a row's title; an approval's reason only repeats its badge. */
@@ -17,9 +17,21 @@ function Note({ row }: { row: InboxRow }) {
   return text ? <p class="reason">{text}</p> : null;
 }
 
+/**
+ * A plan is read before it is approved, so a plan approval's row leads with reading it and keeps
+ * approving and rejecting as secondary verbs.
+ */
+const planRead = (row: InboxRow, action: Action): Action =>
+  row.approval === "plan" && action.emphasis === "primary"
+    ? { ...action, emphasis: undefined }
+    : action;
+
 /** What waits for the human, oldest first, each with the verbs that settle it. */
 export function Inbox({ api }: { api: Api }) {
   const rows = inbox.value;
+  // A factory with one repository need not say which one each row is in.
+  const several = (status.value?.repositories.length ?? 0) > 1;
+  const repositoryOf = new Map(items.value.map((item) => [item.ref, item.repository]));
   if (!loaded.value) {
     if (problem.value) return <Unread what="the inbox" />;
     return (
@@ -56,12 +68,25 @@ export function Inbox({ api }: { api: Api }) {
               </a>
             </h2>
             <span class="ref">{row.ref}</span>
+            {several ? (
+              <span class="ref">{repositoryOf.get(row.ref.replace(/\/t\d+$/, ""))}</span>
+            ) : null}
             <Time iso={row.since} />
           </div>
           <Note row={row} />
           <div class="row actions">
+            {row.approval === "plan" ? (
+              <a class="button-link primary" href={detailHash(row.ref)}>
+                Read the plan
+              </a>
+            ) : null}
             {inboxActions(row.kind, row.waiting, row.approval).map((action) => (
-              <ActionButton key={actionKey(action)} api={api} refName={row.ref} action={action} />
+              <ActionButton
+                key={actionKey(action)}
+                api={api}
+                refName={row.ref}
+                action={planRead(row, action)}
+              />
             ))}
             {row.waiting === "merge" ? (
               <a class="button-link" href={detailHash(row.ref)}>

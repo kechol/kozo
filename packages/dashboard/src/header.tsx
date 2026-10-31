@@ -1,5 +1,6 @@
-import type { Api } from "./api.ts";
-import { usd } from "./format.ts";
+import { useEffect, useRef, useState } from "preact/hooks";
+import type { Api, RunRow } from "./api.ts";
+import { detailHash, usd } from "./format.ts";
 import { Icon } from "./icons.tsx";
 import { run, status, waiting } from "./store.ts";
 
@@ -40,23 +41,81 @@ export function Header({ api, page }: { api: Api; page: string }) {
               {current.pausedReason}
             </span>
           ) : null}
-          <span>
-            {current.activeRuns} {current.activeRuns === 1 ? "run" : "runs"}
-          </span>
+          <RunsNow api={api} count={current.activeRuns} />
           <span>{usd(current.costTodayUsd)} today</span>
           <span class="mode">{current.mode}</span>
           <button
             type="button"
-            aria-label={paused ? "Resume the factory" : "Pause the factory"}
             onClick={() =>
               void run(api, () => api.post(paused ? "/api/factory/resume" : "/api/factory/pause"))
             }
           >
             <Icon name={paused ? "play" : "pause"} />
-            {paused ? "Resume" : "Pause"}
+            {paused ? "Resume factory" : "Pause factory"}
           </button>
         </fieldset>
       ) : null}
     </header>
+  );
+}
+
+/**
+ * How many runs run now, opening onto which they are; the list is read when it opens, and it
+ * closes on Escape, on a click outside it or on following one of its links.
+ */
+function RunsNow({ api, count }: { api: Api; count: number }) {
+  const [open, setOpen] = useState(false);
+  const [runs, setRuns] = useState<RunRow[] | null>(null);
+  const holder = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    setRuns(null);
+    void api
+      .get<RunRow[]>("/api/ls/runs")
+      .then((all) => setRuns(all.filter((run) => run.state === "running")))
+      .catch(() => setRuns([]));
+    const outside = (event: PointerEvent) => {
+      if (!holder.current?.contains(event.target as Node)) holder.current?.removeAttribute("open");
+    };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, [api, open]);
+  const label = `${count} ${count === 1 ? "run" : "runs"}`;
+  if (count === 0) return <span>{label}</span>;
+  return (
+    <details
+      ref={holder}
+      class="runs-now"
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.currentTarget.open = false;
+        event.currentTarget.querySelector("summary")?.focus();
+      }}
+    >
+      <summary>{label}</summary>
+      <div class="popover">
+        {runs === null ? (
+          <p>Reading the runs…</p>
+        ) : runs.length === 0 ? (
+          <p>No run is running now.</p>
+        ) : (
+          <ul>
+            {runs.map((run) => (
+              <li key={run.ref}>
+                <a
+                  class="ref"
+                  href={detailHash(run.ref)}
+                  onClick={() => holder.current?.removeAttribute("open")}
+                >
+                  {run.ref}
+                </a>{" "}
+                {run.agent} on {run.task ?? run.item}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </details>
   );
 }

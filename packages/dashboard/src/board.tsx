@@ -1,16 +1,27 @@
 import { signal } from "@preact/signals";
+import { useEffect } from "preact/hooks";
 import { AddItem } from "./add-item.tsx";
 import type { Api, ItemRow, TaskRow } from "./api.ts";
 import { HoldBadge } from "./badge.tsx";
-import { detailHash, isClosedStage, moveTarget, stages } from "./format.ts";
+import {
+  type BoardView,
+  boardHash,
+  detailHash,
+  isClosedStage,
+  moveTarget,
+  stages,
+} from "./format.ts";
 import { Icon } from "./icons.tsx";
 import { Loading, Placeholder, Unread } from "./placeholder.tsx";
 import { items, loaded, problem, run, status, tasks } from "./store.ts";
 
-/** Whether the board shows items or tasks; the viewer's choice, kept in this browser. */
-const view = signal<"items" | "tasks">(readView());
+/**
+ * Whether the board shows items or tasks: the viewer's choice, kept in this browser and in the
+ * address, so that a link or a bookmark opens the same board.
+ */
+const view = signal<BoardView>(readView());
 
-function readView(): "items" | "tasks" {
+function readView(): BoardView {
   try {
     return localStorage.getItem("kozo.board") === "tasks" ? "tasks" : "items";
   } catch {
@@ -18,8 +29,10 @@ function readView(): "items" | "tasks" {
   }
 }
 
-function choose(next: "items" | "tasks") {
+function choose(next: BoardView) {
   view.value = next;
+  // Replacing the address fires no hashchange, so the board keeps focus on the switch.
+  history.replaceState(null, "", boardHash(next));
   try {
     localStorage.setItem("kozo.board", next);
   } catch {}
@@ -29,11 +42,18 @@ function choose(next: "items" | "tasks") {
 const closedShown = 10;
 
 /** Items or tasks in one column per stage, with their holds, progress and autonomy level. */
-export function Board({ api }: { api: Api }) {
+export function Board({ api, asked }: { api: Api; asked?: BoardView }) {
+  // The address names what the board shows once it opens, whichever way it was opened.
+  useEffect(() => {
+    choose(asked ?? view.value);
+  }, [asked]);
   const showItems = view.value === "items";
   const allItems = items.value;
   const order = allItems.filter((item) => !isClosedStage(item.stage)).map((item) => item.ref);
   const ready = loaded.value;
+  // A factory with one repository need not say which one each card is in.
+  const several = (status.value?.repositories.length ?? 0) > 1;
+  const repositoryOf = new Map(allItems.map((item) => [item.ref, item.repository]));
   // Each card counts its item's tasks, so they are counted in one pass rather than per card.
   const tally = new Map<string, Tally>();
   for (const task of tasks.value) {
@@ -94,11 +114,16 @@ export function Board({ api }: { api: Api }) {
                   api={api}
                   item={card as ItemRow}
                   tally={tally.get(card.ref)}
+                  repository={several ? (card as ItemRow).repository : undefined}
                   up={closed ? undefined : moveTarget(column, order, index, "up")}
                   down={closed ? undefined : moveTarget(column, order, index, "down")}
                 />
               ) : (
-                <TaskCard key={card.ref} task={card as TaskRow} />
+                <TaskCard
+                  key={card.ref}
+                  task={card as TaskRow}
+                  repository={several ? repositoryOf.get((card as TaskRow).item) : undefined}
+                />
               ),
             );
             // A closed column holds what is finished, so it stays folded to its count until opened.
@@ -133,6 +158,16 @@ export function Board({ api }: { api: Api }) {
   );
 }
 
+/** A card's reference, and its repository when the factory has several. */
+function Where({ refName, repository }: { refName: string; repository: string | undefined }) {
+  return (
+    <span>
+      <span class="ref">{refName}</span>
+      {repository ? ` in ${repository}` : null}
+    </span>
+  );
+}
+
 /** A card's title, as the link that the whole card is the target of. */
 function CardTitle({ href, children }: { href: string; children: string }) {
   return (
@@ -154,12 +189,14 @@ function ItemCard({
   api,
   item,
   tally,
+  repository,
   up,
   down,
 }: {
   api: Api;
   item: ItemRow;
   tally: Tally | undefined;
+  repository: string | undefined;
   up: string | null | undefined;
   down: string | null | undefined;
 }) {
@@ -168,7 +205,7 @@ function ItemCard({
   return (
     <article class="card board-card">
       <div class="card-top">
-        <span class="ref">{item.ref}</span>
+        <Where refName={item.ref} repository={repository} />
         {item.level ? <span title="Autonomy level">{item.level}</span> : null}
       </div>
       <CardTitle href={detailHash(item.ref)}>{item.title}</CardTitle>
@@ -212,11 +249,11 @@ function ItemCard({
   );
 }
 
-function TaskCard({ task }: { task: TaskRow }) {
+function TaskCard({ task, repository }: { task: TaskRow; repository: string | undefined }) {
   return (
     <article class="card board-card">
       <div class="card-top">
-        <span class="ref">{task.ref}</span>
+        <Where refName={task.ref} repository={repository} />
       </div>
       <CardTitle href={detailHash(task.ref)}>{task.goal}</CardTitle>
       {task.hold || task.revisions > 0 ? (
