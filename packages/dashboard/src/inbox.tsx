@@ -1,9 +1,10 @@
 import { ActionButton, inboxActions } from "./actions.tsx";
 import type { Api, InboxRow } from "./api.ts";
 import { Badge } from "./badge.tsx";
-import { ago, detailHash } from "./format.ts";
+import { detailHash } from "./format.ts";
 import { Icon, type IconName } from "./icons.tsx";
 import { inbox } from "./store.ts";
+import { Time } from "./time.tsx";
 import { toneOf } from "./tone.ts";
 
 /** What a row waits on, by its approval kind for an approval and by its waiting kind otherwise. */
@@ -21,9 +22,6 @@ const glyph: Partial<Record<InboxRow["waiting"], IconName>> = {
   question: "question",
   merge: "pull-request",
 };
-
-/** The exact time a row began waiting, shown on hover; one formatter serves every row. */
-const exact = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 /** The line under a row's title; an approval's reason only repeats its badge. */
 function Note({ row }: { row: InboxRow }) {
@@ -63,9 +61,7 @@ export function Inbox({ api }: { api: Api }) {
               </a>
             </h2>
             <span class="ref">{row.ref}</span>
-            <time dateTime={row.since} title={exact.format(new Date(row.since))}>
-              {ago(row.since)}
-            </time>
+            <Time iso={row.since} />
           </div>
           <Note row={row} />
           <div class="row actions">

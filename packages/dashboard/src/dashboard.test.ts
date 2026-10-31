@@ -205,6 +205,16 @@ describe("detailActions", () => {
     expect(labels("task", "paused")).toEqual(["Send", "Resume", "Cancel"]);
     expect(labels("task", "taken")).toEqual(["Give it back", "Cancel"]);
   });
+
+  test("offers an approval's decision as the inbox does", () => {
+    expect(labels("item", "approval", "plan")).toEqual(["Approve plan", "Reject plan"]);
+    expect(labels("item", "approval", "start")).toEqual(["Approve start", "Cancel"]);
+  });
+
+  test("offers nothing for closed work or a run that ended", () => {
+    expect(labels("item", null, null, true)).toEqual([]);
+    expect(labels("run", null, null, true)).toEqual([]);
+  });
 });
 
 describe("Api.follow", () => {
