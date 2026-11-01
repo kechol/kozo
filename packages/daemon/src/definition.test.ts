@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { type KozoHome, kozoHome } from "@kozo/core";
 import { gitRepository, tempDirectory } from "@kozo/testing";
-import { DefinitionError, refreshDefinition, startingDefinition } from "./definition.ts";
+import {
+  DefinitionError,
+  refreshDefinition,
+  type StartRefusal,
+  startingDefinition,
+} from "./definition.ts";
 import { EventStore } from "./event-store.ts";
 
 const review = (model?: string) =>
@@ -36,8 +41,11 @@ describe("applying the definition", () => {
     expect(store.state.definition).toEqual({ applied: first, refused: broken });
     expect(reports).toHaveLength(1);
 
-    // At start, an invalid tip falls back to the last applied commit.
-    expect((await startingDefinition(home, store)).commit).toBe(first);
+    // At start, an invalid tip falls back to the last applied commit, and is handed back
+    // as refused, recorded by the earlier refresh.
+    const refusals: StartRefusal[] = [];
+    expect((await startingDefinition(home, store, (r) => refusals.push(r))).commit).toBe(first);
+    expect(refusals).toMatchObject([{ commit: broken, running: first, recorded: false }]);
 
     const fixed = await repo.commit({ "agents/review/agent.md": review() });
     await refreshDefinition(home, store, inUse, report);

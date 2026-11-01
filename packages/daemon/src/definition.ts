@@ -16,11 +16,25 @@ export interface DefinitionInUse {
 /** Thrown at start when neither the definition's tip nor its last applied commit validates. */
 export class DefinitionError extends Error {}
 
+/** A tip that kozod refused at start while it went on with the last applied commit. */
+export interface StartRefusal {
+  commit: string;
+  running: string;
+  issues: string[];
+  /** Whether this start recorded the refusal, rather than an earlier run of kozod. */
+  recorded: boolean;
+}
+
 /**
  * The definition kozod starts with: the tip when it validates, else the last applied commit.
- * Records the tip as applied or refused unless the log already says so.
+ * Records the tip as applied or refused unless the log already says so, and hands a refused
+ * tip to `refused`, since nothing that reports it is running yet.
  */
-export async function startingDefinition(home: KozoHome, store: EventStore): Promise<Definition> {
+export async function startingDefinition(
+  home: KozoHome,
+  store: EventStore,
+  refused: (refusal: StartRefusal) => void = () => {},
+): Promise<Definition> {
   const tip = await definitionTip(home.factory).catch((error: unknown) => {
     if (error instanceof GitError) throw new DefinitionError(`factory/: ${error.message}`);
     throw error;
@@ -30,10 +44,14 @@ export async function startingDefinition(home: KozoHome, store: EventStore): Pro
     await recordApplied(store, result.definition);
     return result.definition;
   }
-  await recordRefused(store, result);
+  const recorded = await recordRefused(store, result);
   const last = store.state.definition.applied;
   const fallback = last && last !== tip ? await readDefinition(home.factory, last) : null;
-  if (fallback?.ok) return fallback.definition;
+  if (fallback?.ok) {
+    if (tip !== null)
+      refused({ commit: tip, running: last ?? "", issues: result.issues, recorded });
+    return fallback.definition;
+  }
   throw new DefinitionError(`the factory definition is invalid: ${result.issues.join("; ")}`);
 }
 
@@ -87,12 +105,17 @@ async function recordApplied(store: EventStore, definition: Definition) {
   await store.append({ type: "factory.applied", data: { commit: definition.commit } });
 }
 
-async function recordRefused(store: EventStore, result: Extract<DefinitionResult, { ok: false }>) {
+/** Records a refused tip once; whether this call recorded it. */
+async function recordRefused(
+  store: EventStore,
+  result: Extract<DefinitionResult, { ok: false }>,
+): Promise<boolean> {
   const [first, ...rest] = result.issues;
-  if (result.commit === null || first === undefined) return;
-  if (store.state.definition.refused === result.commit) return;
+  if (result.commit === null || first === undefined) return false;
+  if (store.state.definition.refused === result.commit) return false;
   await store.append({
     type: "factory.refused",
     data: { commit: result.commit, issues: [first, ...rest] },
   });
+  return true;
 }

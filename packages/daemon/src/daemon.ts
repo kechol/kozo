@@ -7,7 +7,12 @@ import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
 import { Automations } from "./automations.ts";
 import { ControlPlane } from "./control-plane.ts";
-import { type DefinitionInUse, refreshDefinition, startingDefinition } from "./definition.ts";
+import {
+  type DefinitionInUse,
+  refreshDefinition,
+  type StartRefusal,
+  startingDefinition,
+} from "./definition.ts";
 import { EgressProxy, hostAllowed } from "./egress.ts";
 import { evalCaseOf } from "./eval.ts";
 import { EventStore } from "./event-store.ts";
@@ -15,7 +20,7 @@ import { ghGitHub } from "./github.ts";
 import { GitHubSync } from "./github-sync.ts";
 import { readItemFile } from "./item-file.ts";
 import { type Launcher, processLauncher } from "./launcher.ts";
-import { Notifier, type Notify, osNotify } from "./notifier.ts";
+import { Notifier, type Notify, osNotify, refusalNotice } from "./notifier.ts";
 import { pruneRecords } from "./prune.ts";
 import { lastHandoff } from "./queries.ts";
 import { Reconciler } from "./reconcile.ts";
@@ -120,7 +125,16 @@ export class Daemon {
       await rm(home.pidFile, { force: true });
     });
     const report = (line: string) => console.error(line);
-    const definition: DefinitionInUse = { current: await startingDefinition(home, store) };
+    const atStart: { refusal: StartRefusal | null } = { refusal: null };
+    const definition: DefinitionInUse = {
+      current: await startingDefinition(home, store, (refusal) => {
+        atStart.refusal = refusal;
+      }),
+    };
+    if (atStart.refusal)
+      report(
+        `kozod: refused the factory definition at ${atStart.refusal.commit.slice(0, 12)}; running ${atStart.refusal.running.slice(0, 12)}: ${atStart.refusal.issues.join("; ")}`,
+      );
     const claude = process.env.KOZO_CLAUDE ?? Bun.which("claude") ?? "claude";
     // prepare reaches other hosts only through this proxy, which reads the allowlist each time.
     const egress = started.adopt(
@@ -251,6 +265,8 @@ export class Daemon {
     );
     const notifier = new Notifier(store, () => definition.current.factory, notify);
     notifier.start();
+    // The refusal was recorded before the notifier followed the log, so it is told here.
+    if (atStart.refusal?.recorded) void notify("kozo", refusalNotice(atStart.refusal.issues));
     const remind = () =>
       void notifier
         .remind()

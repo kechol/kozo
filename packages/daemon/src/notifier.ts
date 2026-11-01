@@ -2,6 +2,11 @@ import type { Event, Factory, FactoryState, Hold } from "@kozo/core";
 import type { EventStore } from "./event-store.ts";
 import { costToday, midnightOf } from "./queries.ts";
 
+/** The notification for a factory definition kozod refused. */
+export function refusalNotice(issues: readonly string[]): string {
+  return `kozod refused the factory definition: ${issues.join("; ")}`;
+}
+
 /** Shows one notification; it never throws, since a missed notification stops nothing. */
 export type Notify = (title: string, body: string) => Promise<void>;
 
@@ -110,7 +115,7 @@ export class Notifier {
           await send(`the factory paused: ${event.data.reason}`);
         break;
       case "factory.refused":
-        await send(`kozod refused the factory definition: ${event.data.issues.join("; ")}`);
+        await send(refusalNotice(event.data.issues));
         break;
       case "factory.demoted":
         await send(

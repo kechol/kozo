@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { kozoHome } from "@kozo/core";
@@ -32,6 +32,33 @@ describe("Daemon", () => {
       await daemon.stop();
     }
     expect(await Bun.file(home.pidFile).exists()).toBe(false);
+  });
+
+  test("logs and tells a factory definition it refuses at start, and runs the last applied", async () => {
+    await using dir = await tempDirectory();
+    await using factory = await gitRepository();
+    const home = { ...kozoHome(dir.path), factory: factory.path };
+    const first = await factory.commit({ "factory.yml": "concurrency: 2\n" });
+    await (await Daemon.start({ home, port: 0, confine: testConfine, notify: silent })).stop();
+    await factory.commit({ "factory.yml": "concurrency: none\n" });
+    const told: string[] = [];
+    const logged = spyOn(console, "error").mockImplementation(() => {});
+    const notify = async (_title: string, body: string) => {
+      told.push(body);
+    };
+    const daemon = await Daemon.start({ home, port: 0, confine: testConfine, notify });
+    try {
+      expect(logged.mock.calls.map(([line]) => String(line))).toContainEqual(
+        expect.stringContaining(`; running ${first.slice(0, 12)}: factory.yml`),
+      );
+      await eventually(() => told.length > 0, "the notification of the refusal");
+      expect(told).toEqual([
+        expect.stringContaining("kozod refused the factory definition: factory.yml"),
+      ]);
+    } finally {
+      logged.mockRestore();
+      await daemon.stop();
+    }
   });
 
   test("answers status over HTTP", async () => {
