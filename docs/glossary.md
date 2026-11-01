@@ -28,7 +28,7 @@
 > ```
 >
 > **Split signals** (if any applies, split into `docs/glossary/` with one file per category; the procedure is in AGENTS.md):
-> more than 100 terms / more than 300 lines excluding the rules / a category with more than 40 terms
+> more than 300 terms / more than 350 lines excluding the rules / a category with more than 80 terms
 
 ---
 
