@@ -35,6 +35,18 @@ jobs:
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
+      # kozod refuses to start without a sandbox, and the sandbox tests skip where there is none.
+      # On Linux it is bubblewrap, which Ubuntu's AppArmor keeps from creating user namespaces
+      # unless allowed; the last line fails the job rather than letting those tests skip.
+      - name: Set up the Linux sandbox
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap socat lsof
+          if sysctl -n kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          bwrap --ro-bind / / --dev /dev --proc /proc --unshare-all true
       - run: bun test
       - run: bun run compile
       - name: Smoke the binaries
