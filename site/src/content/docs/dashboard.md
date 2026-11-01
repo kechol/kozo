@@ -82,8 +82,12 @@ to Cancelled. The address keeps the view, so a link opens the same one.
 
 ## Detail view
 
-Selecting a reference opens its detail view, with the path from item to task to run above the
-title. The verbs sit under the title, after any hold's reason; the ones you seldom need, such as
+Selecting a reference opens its detail view in a pane beside the inbox or the board, which stays
+usable; on a narrow screen the pane comes up from below. The address names both the list and the
+reference, so a link opens the same pair, and the row or card the pane shows is marked. Escape or
+the close button closes the pane and returns to that row or card.
+
+The path from item to task to run sits above the title. The verbs sit under the title, after any hold's reason; the ones you seldom need, such as
 Pause, Take it over, Close as done and Cancel, sit behind **More**.
 
 ### Item

@@ -12,9 +12,12 @@ import { Api, ApiError, type InboxRow, takeSession } from "./api.ts";
 import { detailActions } from "./detail.tsx";
 import {
   ago,
+  detailHash,
   eventLine,
+  hashOf,
   isClosedStage,
   kindOf,
+  listHash,
   moveTarget,
   routeOf,
   stages,
@@ -152,16 +155,32 @@ describe("format", () => {
   test("titles the tab with the view, and with how many wait while any do", () => {
     expect(titleOf({ page: "inbox" }, 3)).toBe("(3) Inbox · kozo");
     expect(titleOf({ page: "board" }, 0)).toBe("Board · kozo");
-    expect(titleOf({ page: "detail", ref: "K-5/t1" }, 1)).toBe("(1) K-5/t1 · kozo");
+    expect(titleOf({ page: "board", ref: "K-5/t1" }, 1)).toBe("(1) K-5/t1 · kozo");
   });
 
-  test("routes the inbox, the board and a reference's detail", () => {
+  test("routes the inbox and the board, each with a reference's detail in its pane", () => {
     expect(routeOf("")).toEqual({ page: "inbox" });
+    expect(routeOf("#/")).toEqual({ page: "inbox" });
     expect(routeOf("#/board")).toEqual({ page: "board" });
     expect(routeOf("#/board?view=tasks")).toEqual({ page: "board", view: "tasks" });
     expect(routeOf("#/board?view=runs")).toEqual({ page: "inbox" });
-    expect(routeOf("#/ref/shop%2312%2Ft1")).toEqual({ page: "detail", ref: "shop#12/t1" });
-    expect(routeOf("#/ref/%E0%A4%A")).toEqual({ page: "inbox" });
+    expect(routeOf("#/elsewhere")).toEqual({ page: "inbox" });
+    expect(routeOf("#/?ref=shop%2312%2Ft1")).toEqual({ page: "inbox", ref: "shop#12/t1" });
+    expect(routeOf("#/board?view=items&ref=K-5")).toEqual({
+      page: "board",
+      view: "items",
+      ref: "K-5",
+    });
+    for (const at of [
+      { page: "inbox" },
+      { page: "inbox", ref: "shop#12/t1" },
+      { page: "board", view: "tasks", ref: "K-5/t1" },
+    ] as const) {
+      expect(routeOf(hashOf(at))).toEqual(at);
+    }
+    const board = { page: "board", view: "items" } as const;
+    expect(detailHash("K-5/t1", board)).toBe("#/board?view=items&ref=K-5%2Ft1");
+    expect(listHash({ ...board, ref: "K-5" })).toBe("#/board?view=items");
   });
 
   test("tells items, tasks and runs apart by their references", () => {

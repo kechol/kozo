@@ -312,22 +312,14 @@ function More({ api, refName, actions }: { api: Api; refName: string; actions: A
   );
 }
 
-/** What a reference that does not exist shows, with the ways back. */
+/** What a reference that does not exist shows; the pane's close button is the way back. */
 function Missing({ refName }: { refName: string }) {
   return (
-    <div class="panel empty-state">
+    <div class="empty-state">
       <Icon name="question" />
       <div>
         <h1>{t("detail.missing", { ref: refName })}</h1>
         <p>{t("detail.missingBody")}</p>
-        <p class="row">
-          <a class="button-link" href="#/">
-            {t("detail.toInbox")}
-          </a>
-          <a class="button-link" href="#/board">
-            {t("detail.toBoard")}
-          </a>
-        </p>
       </div>
     </div>
   );

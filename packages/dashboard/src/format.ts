@@ -1,3 +1,4 @@
+import { signal } from "@preact/signals";
 import type { Locale } from "./api.ts";
 import { locale, say } from "./words.ts";
 
@@ -29,34 +30,46 @@ export function usd(amount: number, loc: Locale = locale.value): string {
 /** What the board shows: items or tasks. */
 export type BoardView = "items" | "tasks";
 
-/** The page a hash names: the inbox, the board with what it shows, or one reference's detail. */
+/**
+ * What a hash names: the inbox or the board with what it shows, and the reference whose detail
+ * the pane beside it shows, if any.
+ */
 export type Route =
-  | { page: "inbox" }
-  | { page: "board"; view?: BoardView }
-  | { page: "detail"; ref: string };
+  | { page: "inbox"; ref?: string }
+  | { page: "board"; view?: BoardView; ref?: string };
 
 export function routeOf(hash: string): Route {
-  const board = /^#\/board(?:\?view=(items|tasks))?$/.exec(hash);
-  if (board) return board[1] ? { page: "board", view: board[1] as BoardView } : { page: "board" };
-  const detail = /^#\/ref\/(.+)$/.exec(hash);
-  if (!detail?.[1]) return { page: "inbox" };
-  try {
-    return { page: "detail", ref: decodeURIComponent(detail[1]) };
-  } catch {
-    return { page: "inbox" };
-  }
+  const parts = /^#\/(board)?(?:\?(.*))?$/.exec(hash);
+  if (!parts) return { page: "inbox" };
+  const query = new URLSearchParams(parts[2] ?? "");
+  const ref = query.get("ref") || undefined;
+  if (!parts[1]) return ref ? { page: "inbox", ref } : { page: "inbox" };
+  const view = query.get("view");
+  if (view !== null && view !== "items" && view !== "tasks") return { page: "inbox" };
+  return { page: "board", ...(view ? { view } : {}), ...(ref ? { ref } : {}) };
 }
 
-export const detailHash = (ref: string) => `#/ref/${encodeURIComponent(ref)}`;
+/** The hash of a route, the inverse of `routeOf`. */
+export function hashOf(route: Route): string {
+  const query = new URLSearchParams();
+  if (route.page === "board" && route.view) query.set("view", route.view);
+  if (route.ref) query.set("ref", route.ref);
+  const search = query.size > 0 ? `?${query}` : "";
+  return route.page === "board" ? `#/board${search}` : `#/${search}`;
+}
 
-export const boardHash = (view: BoardView) => `#/board?view=${view}`;
+/** The route the address names now; the app keeps it in step with the address. */
+export const route = signal<Route>({ page: "inbox" });
+
+/** The address of a reference's detail: the list shown now, with the reference in its pane. */
+export const detailHash = (ref: string, at: Route = route.value) => hashOf({ ...at, ref });
+
+/** The address of the list shown now, with its pane closed. */
+export const listHash = (at: Route = route.value) => hashOf({ ...at, ref: undefined });
 
 /** The tab's title for a view, with how many wait in the inbox, so a background tab shows it. */
 export function titleOf(route: Route, waiting: number, loc: Locale = locale.value): string {
-  const view =
-    route.page === "detail"
-      ? route.ref
-      : say(loc, route.page === "board" ? "nav.board" : "nav.inbox");
+  const view = route.ref ?? say(loc, route.page === "board" ? "nav.board" : "nav.inbox");
   return `${waiting > 0 ? `(${waiting}) ` : ""}${view} · kozo`;
 }
 

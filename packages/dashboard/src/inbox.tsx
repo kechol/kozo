@@ -1,7 +1,7 @@
 import { type Action, ActionButton, actionKey, inboxActions } from "./actions.tsx";
 import type { Api, InboxRow } from "./api.ts";
 import { HoldBadge } from "./badge.tsx";
-import { detailHash } from "./format.ts";
+import { detailHash, route } from "./format.ts";
 import { Icon } from "./icons.tsx";
 import { Loading, Placeholder, Unread } from "./placeholder.tsx";
 import { inbox, items, loaded, problem, status } from "./store.ts";
@@ -27,6 +27,7 @@ const planRead = (row: InboxRow, action: Action): Action =>
 /** What waits for the human, oldest first, each with the verbs that settle it. */
 export function Inbox({ api }: { api: Api }) {
   const rows = inbox.value;
+  const open = route.value.ref;
   // A factory with one repository need not say which one each row is in.
   const several = (status.value?.repositories.length ?? 0) > 1;
   const repositoryOf = new Map(items.value.map((item) => [item.ref, item.repository]));
@@ -61,7 +62,11 @@ export function Inbox({ api }: { api: Api }) {
           <div class="row-head">
             <HoldBadge hold={row.waiting} approval={row.approval} />
             <h2 class="row-heading">
-              <a href={detailHash(row.ref)} class="row-title">
+              <a
+                href={detailHash(row.ref)}
+                class="row-title"
+                aria-current={row.ref === open ? "true" : undefined}
+              >
                 {row.title}
               </a>
             </h2>

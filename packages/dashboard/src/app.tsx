@@ -1,18 +1,18 @@
-import { signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 import { useEffect, useRef } from "preact/hooks";
 import { type Api, endSession } from "./api.ts";
 import { Board } from "./board.tsx";
 import { DetailView } from "./detail.tsx";
-import { type Route, routeOf, titleOf } from "./format.ts";
+import { listHash, type Route, route, routeOf, titleOf } from "./format.ts";
 import { Header } from "./header.tsx";
+import { Icon } from "./icons.tsx";
 import { Inbox } from "./inbox.tsx";
 import { locale, sessionEnded, waiting } from "./store.ts";
 import { Toasts } from "./toasts.tsx";
 import { Unreachable } from "./unreachable.tsx";
 import { t, tx } from "./words.ts";
 
-const route = signal(routeOf(window.location.hash));
+route.value = routeOf(window.location.hash);
 window.addEventListener("hashchange", () => {
   route.value = routeOf(window.location.hash);
 });
@@ -32,29 +32,83 @@ export function App({ api }: { api: Api }) {
     document.documentElement.lang = language;
   }, [language]);
 
-  // A new view takes focus, so that keyboard and screen reader users start reading it.
+  // A new view takes focus, so that keyboard and screen reader users start reading it; the pane
+  // takes it itself.
   useEffect(() => {
     if (first.current) {
       first.current = false;
       return;
     }
     main.current?.focus();
-  }, [current]);
+  }, [current.page]);
 
   if (sessionEnded.value) return <NoToken ended />;
   return (
     <>
       <Header api={api} page={current.page} />
       <Unreachable api={api} />
-      <main ref={main} tabIndex={-1} class={current.page === "board" ? "wide" : undefined}>
-        <View api={api} route={current} count={count} />
-      </main>
+      <div class={current.ref ? "workspace with-pane" : "workspace"}>
+        <main ref={main} tabIndex={-1} class={current.page === "board" ? "wide" : undefined}>
+          <View api={api} route={current} count={count} />
+        </main>
+        {current.ref ? <Pane api={api} refName={current.ref} main={main} /> : null}
+      </div>
       <Toasts />
     </>
   );
 }
+
+/**
+ * A reference's detail beside the list it was opened from, or over its lower part on a narrow
+ * screen. The list stays usable; the pane takes focus when it opens or shows another reference,
+ * and closing it gives focus back to the row or card that stands for what it showed.
+ */
+function Pane({
+  api,
+  refName,
+  main,
+}: {
+  api: Api;
+  refName: string;
+  main: { current: HTMLElement | null };
+}) {
+  const pane = useRef<HTMLElement>(null);
+  useEffect(() => {
+    pane.current?.focus();
+  }, [refName]);
+  const close = () => {
+    const opener = main.current?.querySelector<HTMLElement>('a[aria-current="true"]');
+    window.location.hash = listHash();
+    (opener ?? main.current)?.focus();
+  };
+  return (
+    <aside
+      ref={pane}
+      class="pane"
+      tabIndex={-1}
+      aria-label={t("pane.label", { ref: refName })}
+      onKeyDown={(event) => {
+        // A field, a disclosure or a dialog inside the pane closes itself first.
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        if ((event.target as Element).closest("dialog")) return;
+        event.preventDefault();
+        close();
+      }}
+    >
+      <button
+        type="button"
+        class="ghost icon-button pane-close"
+        aria-label={t("pane.close")}
+        onClick={close}
+      >
+        <Icon name="x" />
+      </button>
+      <DetailView key={refName} api={api} refName={refName} />
+    </aside>
+  );
+}
+
 function View({ api, route, count }: { api: Api; route: Route; count: number }) {
-  if (route.page === "detail") return <DetailView key={route.ref} api={api} refName={route.ref} />;
   if (route.page === "board") {
     return (
       <>

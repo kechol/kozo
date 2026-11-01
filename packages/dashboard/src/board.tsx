@@ -5,10 +5,11 @@ import type { Api, ItemRow, TaskRow } from "./api.ts";
 import { HoldBadge } from "./badge.tsx";
 import {
   type BoardView,
-  boardHash,
   detailHash,
+  hashOf,
   isClosedStage,
   moveTarget,
+  route,
   stages,
 } from "./format.ts";
 import { Icon } from "./icons.tsx";
@@ -32,8 +33,11 @@ function readView(): BoardView {
 
 function choose(next: BoardView) {
   view.value = next;
-  // Replacing the address fires no hashchange, so the board keeps focus on the switch.
-  history.replaceState(null, "", boardHash(next));
+  // Replacing the address fires no hashchange, so the board keeps focus on the switch; the route
+  // follows by hand, so that the links the board makes name what it shows. The pane stays open.
+  const at = { page: "board", view: next, ref: route.value.ref } as const;
+  route.value = at;
+  history.replaceState(null, "", hashOf(at));
   try {
     localStorage.setItem("kozo.board", next);
   } catch {}
@@ -170,11 +174,15 @@ function Where({ refName, repository }: { refName: string; repository: string | 
   );
 }
 
-/** A card's title, as the link that the whole card is the target of. */
-function CardTitle({ href, children }: { href: string; children: string }) {
+/** A card's title, as the link that the whole card is the target of, marked while it is open. */
+function CardTitle({ refName, children }: { refName: string; children: string }) {
   return (
     <h3 class="card-title">
-      <a href={href} class="card-link">
+      <a
+        href={detailHash(refName)}
+        class="card-link"
+        aria-current={route.value.ref === refName ? "true" : undefined}
+      >
         {children}
       </a>
     </h3>
@@ -211,7 +219,7 @@ function ItemCard({
         <Where refName={item.ref} repository={repository} />
         {item.level ? <span title={t("board.autonomy")}>{item.level}</span> : null}
       </div>
-      <CardTitle href={detailHash(item.ref)}>{item.title}</CardTitle>
+      <CardTitle refName={item.ref}>{item.title}</CardTitle>
       {item.hold || item.class ? (
         <div class="row meta">
           {item.hold ? <HoldBadge hold={item.hold} /> : null}
@@ -260,7 +268,7 @@ function TaskCard({ task, repository }: { task: TaskRow; repository: string | un
       <div class="card-top">
         <Where refName={task.ref} repository={repository} />
       </div>
-      <CardTitle href={detailHash(task.ref)}>{task.goal}</CardTitle>
+      <CardTitle refName={task.ref}>{task.goal}</CardTitle>
       {task.hold || task.awaiting_merge || task.revisions > 0 ? (
         <div class="row meta">
           {task.hold ? <HoldBadge hold={task.hold} /> : null}

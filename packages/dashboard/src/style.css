@@ -55,6 +55,7 @@
   --width-dialog: 440px;
   --width-column: 200px;
   --width-aside: 280px;
+  --width-pane: clamp(400px, 50vw, 960px);
 
   /* Stone leaning toward Graphite, light then dark. */
   --canvas: light-dark(#f7f6f4, #100f0e);
@@ -192,6 +193,91 @@ main {
 
 main:focus {
   outline: none;
+}
+
+/*
+ * The app fills the window: the header on top, and under it the list and the detail pane, each
+ * scrolling on its own so that either stays in view while the other moves.
+ */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+}
+
+/*
+ * Each scroller holds what is positioned inside it, as the screen reader text is, so that the
+ * window itself never scrolls.
+ */
+.workspace > main {
+  position: relative;
+  max-width: none;
+  margin: 0;
+  overflow: auto;
+  padding-inline: max(var(--space-5), calc((100% - var(--width-page)) / 2 + var(--space-5)));
+}
+
+.workspace > main.wide {
+  padding-inline: var(--space-5);
+}
+
+.workspace.with-pane {
+  grid-template-columns: minmax(0, 1fr) var(--width-pane);
+}
+
+.pane {
+  position: relative;
+  container-type: inline-size;
+  overflow: auto;
+  padding: var(--space-5);
+  border-left: 1px solid var(--divider);
+  background: var(--surface);
+}
+
+.pane:focus {
+  outline: none;
+}
+
+.pane-close {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  float: right;
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 0 var(--space-2);
+}
+
+/* What the pane shows is marked in the list it was opened from. */
+.inbox-row:has(.row-title[aria-current="true"]) {
+  background: var(--hover);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.board-card:has(.card-link[aria-current="true"]) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* On a narrow screen the pane comes up from below, over the lower part of the list. */
+@media (max-width: 720px) {
+  .workspace.with-pane {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pane {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: var(--layer-sticky);
+    height: 85dvh;
+    border-left: 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    box-shadow: var(--shadow-floating);
+  }
 }
 
 h1,
@@ -607,10 +693,6 @@ select:focus-visible {
   margin-bottom: var(--space-4);
 }
 
-main.wide {
-  max-width: none;
-}
-
 .segmented {
   display: inline-flex;
   gap: 2px;
@@ -918,14 +1000,14 @@ main.wide {
   min-width: 0;
 }
 
-@media (min-width: 1024px) {
+@container (min-width: 760px) {
   .detail-body {
     grid-template-columns: minmax(0, 1fr) var(--width-aside);
   }
 
   .properties {
     position: sticky;
-    top: calc(var(--control-md) + var(--space-5));
+    top: var(--space-6);
   }
 }
 
@@ -1405,10 +1487,6 @@ pre.diff {
   color: var(--text);
   font-size: var(--text-lg);
   line-height: var(--leading-lg);
-}
-
-.empty-state .row {
-  margin-top: var(--space-3);
 }
 
 .empty-state {
