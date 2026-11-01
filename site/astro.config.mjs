@@ -38,6 +38,11 @@ export default defineConfig({
             { label: 'Operating kozo', translations: { ja: '運用' }, slug: 'operations' },
           ],
         },
+        {
+          label: 'Reference',
+          translations: { ja: 'リファレンス' },
+          items: [{ label: 'CLI', slug: 'cli' }],
+        },
       ],
     }),
   ],
