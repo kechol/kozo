@@ -6,7 +6,11 @@ setup, the checks that must pass, and what to keep out of the repository.
 ## Requirements
 
 - Bun 1.4.2, pinned in `packageManager` in the root `package.json`
-- macOS or Linux
+- macOS, or Linux with bubblewrap (`bwrap`) allowed to create user namespaces
+  and `socat`; the sandbox tests run only where kozo's sandbox works
+- Git and `lsof`
+- For the tests that drive a real `claude` session, Claude Code signed in and
+  `KOZO_LIVE=1`; without them those tests are skipped
 
 ## Getting set up
 
@@ -15,6 +19,16 @@ git clone https://github.com/kechol/kozo.git
 cd kozo
 bun install --frozen-lockfile
 ```
+
+## Building and running kozo from source
+
+```sh
+bun run compile                    # dist/kozo and dist/kozod for this platform
+bun packages/dashboard/preview.ts  # the dashboard against fictional data
+```
+
+Put `dist/kozo` and `dist/kozod` on `PATH` to use them, then follow the
+[Quick Start](https://kechol.github.io/kozo/quick-start/).
 
 ## Checks
 
