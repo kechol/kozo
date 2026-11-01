@@ -1,8 +1,11 @@
 import {
   defaultBranchRuleset,
   type FactoryState,
+  type HoldKind,
   type ItemState,
   itemStage,
+  type Locale,
+  message,
   render,
 } from "@kozo/core";
 
@@ -26,39 +29,50 @@ export function statusBody(
   item: ItemState,
   pulls: ReadonlyMap<string, string>,
   costUsd: number,
+  locale: Locale,
 ): string {
-  const waiting = item.hold
-    ? ` and waits for ${item.hold.kind}: ${quiet(render(item.hold.reason, "en"))}`
-    : "";
-  const lines = [`**kozo**: ${item.ref} is in ${itemStage(state, item)}${waiting}.`];
+  const say = (said: Parameters<typeof render>[0]) => render(said, locale);
+  const kind = (hold: HoldKind) => message(`hold-kind.${hold}`);
+  const stage = itemStage(state, item);
+  const lines = [
+    item.hold
+      ? say(
+          message("github.status-waiting", {
+            item: item.ref,
+            stage,
+            hold: kind(item.hold.kind),
+            reason: quiet(say(item.hold.reason)),
+          }),
+        )
+      : say(message("github.status", { item: item.ref, stage })),
+  ];
   if (item.tasks.length > 0) {
-    lines.push("", "| Task | Stage | Pull request |", "| --- | --- | --- |");
+    lines.push("", say(message("github.table")), "| --- | --- | --- |");
     for (const ref of item.tasks) {
       const task = state.tasks[ref];
       if (!task) continue;
-      const held = task.hold ? ` (waits for ${task.hold.kind})` : "";
-      lines.push(`| ${ref} | ${task.stage}${held} | ${pulls.get(ref) ?? "-"} |`);
+      const shown = task.hold
+        ? say(message("github.task-waits", { stage: task.stage, hold: kind(task.hold.kind) }))
+        : task.stage;
+      lines.push(`| ${ref} | ${shown} | ${pulls.get(ref) ?? "-"} |`);
     }
   }
-  lines.push("", `Cost so far: ${costUsd.toFixed(2)} USD`);
+  lines.push("", say(message("github.cost", { cost: costUsd.toFixed(2) })));
   return lines.join("\n");
 }
 
 /** The install pull request's body: what it adds, what to do next and the ruleset to apply. */
-export function installBody(repository: string, written: readonly string[]): string {
-  return [
-    "This adds what kozo needs in this repository:",
-    "",
-    ...written.map((path) => `- \`${path}\``),
-    "",
-    "Before merging, describe the repository in `AGENTS.md`, replace the commands in `.kozo/constraints.yml` and `.kozo/verify-app.md` with the repository's own, read every setting in `.kozo/charter.yml` and set its `status` to `ready`. kozo works here only after that.",
-    "",
-    "kozo does not change the repository's settings. To protect the default branch so that changes reach it only through pull requests that pass `kozo check`, an admin can apply this ruleset:",
-    "",
-    "```sh",
-    `gh api --method POST repos/${repository}/rulesets --input - <<'EOF'`,
-    JSON.stringify(defaultBranchRuleset, null, 2),
-    "EOF",
-    "```",
-  ].join("\n");
+export function installBody(
+  repository: string,
+  written: readonly string[],
+  locale: Locale,
+): string {
+  return render(
+    message("github.install-body", {
+      files: written.map((path) => `- \`${path}\``).join("\n"),
+      repository,
+      ruleset: JSON.stringify(defaultBranchRuleset, null, 2),
+    }),
+    locale,
+  );
 }

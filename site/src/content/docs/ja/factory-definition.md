@@ -38,6 +38,7 @@ kozod は、作業中のファイルではなく、このリポジトリのデ�
 | `repositories[].path`   |                     | クローンのパス。`~` は展開されます。                                                                                                                       |
 | `repositories[].github` |                     | GitHub モードでの `<owner>/<name>`。GitHub モードでは必須で、同じ名前のリポジトリを 2 つは登録できません。                                                 |
 | `repositories[].label`  |                     | GitHub モードで、このラベルの付いた開いている Issue だけを item にします。`kozo:` で始まる名前は使えません。                                               |
+| `repositories[].locale` |                     | このリポジトリに属するもの（handoff report、status comment と質問のコメント、pull request、ラベルの説明）の言語。省くと factory の `locale` になります。   |
 | `agent_defaults.model`  | `claude-sonnet-5-5` | ほかのキーで指定しない限り、すべてのエージェントが使うモデル。                                                                                             |
 | `agents.<name>.model`   |                     | 1 つのエージェントのモデル。その `agent.md` と `agent_defaults` より優先します。                                                                           |
 | `concurrency`           | `1`                 | kozod が同時に動かす run、確認、下書きの数。すべてのリポジトリを合わせた数です。                                                                           |

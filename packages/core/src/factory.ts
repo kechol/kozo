@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type ParseResult, parseYamlDocument } from "./document.ts";
-import { localeSchema } from "./message.ts";
+import { type Locale, localeSchema } from "./message.ts";
 import { agentNameSchema } from "./work-model.ts";
 
 const githubRepository = z.string().regex(/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/, "Use <owner>/<name>");
@@ -16,6 +16,8 @@ export const repositorySchema = z.strictObject({
     .min(1)
     .refine((label) => !label.startsWith("kozo:"), "kozo: labels are kozo's own")
     .optional(),
+  /** The language of what belongs to this repository; the factory's `locale` when unset. */
+  locale: localeSchema.optional(),
 });
 export type Repository = z.infer<typeof repositorySchema>;
 
@@ -60,6 +62,13 @@ export const factorySchema = z
     });
   });
 export type Factory = z.infer<typeof factorySchema>;
+
+/** The locale of what belongs to the repository at `path`: its own, else the factory's. */
+export function repositoryLocale(factory: Factory, path: string): Locale {
+  return (
+    factory.repositories.find((repository) => repository.path === path)?.locale ?? factory.locale
+  );
+}
 
 export function parseFactory(text: string): ParseResult<Factory> {
   return parseYamlDocument(factorySchema, text);

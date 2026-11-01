@@ -49,10 +49,11 @@ repositories:
   - { path: ~/src/site, github: me/site, label: kozo }
 ```
 
-| Key      | Meaning                                                                                                                                   |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `github` | `<owner>/<name>` of the repository. Required in GitHub mode. Two repositories may not share a name, since references leave the owner out. |
-| `label`  | Optional. Only open Issues with this label become items. It may not start with `kozo:`.                                                   |
+| Key      | Meaning                                                                                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `github` | `<owner>/<name>` of the repository. Required in GitHub mode. Two repositories may not share a name, since references leave the owner out.                           |
+| `label`  | Optional. Only open Issues with this label become items. It may not start with `kozo:`.                                                                             |
+| `locale` | Optional. The language of the comments, pull requests and label descriptions kozod writes here; `locale` in `factory.yml` when unset. Label names stay as they are. |
 
 Commit the change, then restart kozod with `kozo down` and `kozo up`: kozod refuses a change of
 mode while it runs.

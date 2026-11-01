@@ -10,11 +10,13 @@ import {
   isClosed,
   itemStage,
   type KozoHome,
+  type Locale,
   type Message,
   message,
   parseReference,
   type Repository,
   render,
+  repositoryLocale,
   runFiles,
   sha256,
   stageSchema,
@@ -49,16 +51,30 @@ const needsLabels: Partial<Record<HoldKind, string>> = {
 // The labels kozod sets and clears; any other label, kozo:accept included, is the humans'.
 const managed = new Set([...stageLabels, ...Object.values(needsLabels)]);
 
-const labelSpecs = [
-  ...stageLabels.map((name) => ({ name, color: "c5def5", description: "The stage kozo shows" })),
-  ...Object.values(needsLabels).map((name) => ({
-    name,
-    color: "fbca04",
-    description: "kozo waits for a human",
-  })),
-  { name: acceptLabel, color: "0e8a16", description: "Approve kozo's start on this Issue" },
-  { name: pausedLabel, color: "b60205", description: "Pause the kozo factory" },
-];
+/** The labels kozod creates, described in the repository's locale. */
+const labelSpecs = (locale: Locale) => {
+  const describe = (
+    code:
+      | "github.label-stage"
+      | "github.label-needs"
+      | "github.label-accept"
+      | "github.label-paused",
+  ) => render(message(code), locale);
+  return [
+    ...stageLabels.map((name) => ({
+      name,
+      color: "c5def5",
+      description: describe("github.label-stage"),
+    })),
+    ...Object.values(needsLabels).map((name) => ({
+      name,
+      color: "fbca04",
+      description: describe("github.label-needs"),
+    })),
+    { name: acceptLabel, color: "0e8a16", description: describe("github.label-accept") },
+    { name: pausedLabel, color: "b60205", description: describe("github.label-paused") },
+  ];
+};
 
 const writers: readonly GitHubPermission[] = ["admin", "maintain", "write"];
 
@@ -128,8 +144,8 @@ export class GitHubSync {
       const pull = await this.github.createPull(github, {
         head: branch,
         base: base.branch,
-        title: "Install kozo",
-        body: installBody(github, written),
+        title: render(message("github.install-title"), this.localeOf(repository.path)),
+        body: installBody(github, written, this.localeOf(repository.path)),
       });
       return { message: message("api.install-opened", { url: pull.url }) };
     } finally {
@@ -231,7 +247,7 @@ export class GitHubSync {
       });
     }
     await this.followClosedIssues(github, name, closed);
-    await this.createLabels(github);
+    await this.createLabels(github, path);
     // A closed Issue is read only in the pass that sees it closed, so its labels follow then.
     for (const issue of closed) {
       const ref = `${name}#${issue.number}`;
@@ -415,6 +431,11 @@ export class GitHubSync {
     }
   }
 
+  /** The locale of what kozod writes for the repository at `path`. */
+  private localeOf(path: string): Locale {
+    return repositoryLocale(this.definition.current.factory, path);
+  }
+
   private heldFor(task: string, reason: Message): boolean {
     return heldBefore(this.store.db, task, reason);
   }
@@ -542,7 +563,13 @@ export class GitHubSync {
     if (!item) return;
     this.self ??= await this.github.login();
     const self = this.self;
-    const status = statusBody(this.store.state, item, this.pulls(ref), this.costOf(ref));
+    const status = statusBody(
+      this.store.state,
+      item,
+      this.pulls(ref),
+      this.costOf(ref),
+      this.localeOf(path),
+    );
     if (this.statuses.get(ref) !== status) {
       await upsertComment(this.github, self, github, issue, `kozo:status:${ref}`, status);
       this.statuses.set(ref, status);
@@ -560,9 +587,13 @@ export class GitHubSync {
         github,
         issue,
         marker,
-        `**Question about ${subject.ref}:** ${quiet(render(subject.hold.reason, "en"))}
-
-Answer with a reply here if you may write to this repository, or with \`kozo say ${subject.ref} <answer>\`.`,
+        render(
+          message("github.question", {
+            ref: subject.ref,
+            question: quiet(render(subject.hold.reason, this.localeOf(path))),
+          }),
+          this.localeOf(path),
+        ),
       );
       await this.wrote(ref, null, "comment", marker);
     }
@@ -614,9 +645,7 @@ Answer with a reply here if you may write to this repository, or with \`kozo say
     const text = await Bun.file(join(this.home.root, report))
       .text()
       .catch(() => "");
-    const body = `${quiet(text)}
-
-Part of #${issue}`;
+    const body = `${quiet(text)}\n\n${render(message("github.part-of", { issue }), this.localeOf(path))}`;
     const open = (await this.github.pullsFor(github, branch)).find((pull) => pull.state === "open");
     const goal = this.store.state.tasks[task]?.goal ?? task;
     const pull =
@@ -635,7 +664,7 @@ Part of #${issue}`;
       github,
       issue,
       `kozo:handoff:${task}:${head.slice(0, 12)}`,
-      `${task} is ready for you to review and merge: ${pull.url}`,
+      render(message("github.ready", { task, url: pull.url }), this.localeOf(path)),
     );
     await this.wrote(item, task, "handoff", head);
   }
@@ -704,9 +733,10 @@ Part of #${issue}`;
     );
   }
 
-  private async createLabels(github: string) {
+  private async createLabels(github: string, path: string) {
     if (this.labelled.has(github)) return;
-    for (const label of labelSpecs) await this.github.createLabel(github, label);
+    for (const label of labelSpecs(this.localeOf(path)))
+      await this.github.createLabel(github, label);
     this.labelled.add(github);
   }
 

@@ -1,6 +1,14 @@
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { ItemState, TaskState } from "@kozo/core";
+import {
+  type ItemState,
+  type Locale,
+  type Message,
+  message,
+  render,
+  repositoryLocale,
+  type TaskState,
+} from "@kozo/core";
 import { GitError, git } from "@kozo/verify";
 import { handoffReportPath } from "./item-file.ts";
 import type { Runner } from "./runner.ts";
@@ -19,6 +27,8 @@ export interface HandoffInputs {
   branch: string;
   /** Whether the task's blueprint reproduces the problem with a failing test first. */
   reproduce: boolean;
+  /** The repository's locale, which the report's own words are in. */
+  locale: Locale;
 }
 
 /** The handoff report a human reads before merging a task. */
@@ -30,7 +40,9 @@ export function handoffReport({
   stat,
   branch,
   reproduce,
+  locale,
 }: HandoffInputs): string {
+  const say = (said: Message) => render(said, locale);
   const report = runs.findLast((run) => run.report !== null)?.report ?? null;
   const outOfScope = report?.out_of_scope ?? [];
   const verdict = {
@@ -44,38 +56,62 @@ export function handoffReport({
   return [
     `# ${task.ref}: ${task.goal}`,
     "",
-    "## Why",
+    say(message("handoff.why")),
     "",
-    `${item?.title ?? itemRef} — task ${(item?.tasks.indexOf(task.ref) ?? 0) + 1} of ${item?.tasks.length ?? 1}.`,
+    say(
+      message("handoff.task-of", {
+        title: item?.title ?? itemRef,
+        index: (item?.tasks.indexOf(task.ref) ?? 0) + 1,
+        count: item?.tasks.length ?? 1,
+      }),
+    ),
     "",
     ...task.done_when.map((condition) => `- ${condition}`),
     "",
-    "## What changed",
+    say(message("handoff.what")),
     "",
-    report?.summary ?? "(no run report)",
+    report?.summary ?? say(message("handoff.no-report")),
     "",
     ...(report?.changes ?? []).map((change) => `- ${change}`),
-    ...(decisions ? ["", "Decisions:", "", decisions] : []),
+    ...(decisions ? ["", say(message("handoff.decisions")), "", decisions] : []),
     "",
-    "## Out of scope",
+    say(message("handoff.scope")),
     "",
     ...(outOfScope.length > 0
       ? outOfScope.map((note) => `- ${note.path ? `${note.path}: ` : ""}${note.note}`)
-      : ["Nothing noted."]),
+      : [say(message("handoff.nothing"))]),
     "",
-    "## Why it is safe",
+    say(message("handoff.safe")),
     "",
-    `- prove: the changed tests ${reproduce ? "fail" : "pass"} without the change (${(report?.tests ?? []).join(", ") || "tests"})`,
-    `- review: ${verdict.review ? `${verdict.review.verdict} — ${verdict.review.summary}` : "not recorded"}`,
-    `- verify: ${verdict.verify ? `${verdict.verify.result} — ${verdict.verify.summary}` : "not run"}`,
+    say(
+      message(reproduce ? "handoff.prove-fail" : "handoff.prove-pass", {
+        tests: (report?.tests ?? []).join(", ") || "tests",
+      }),
+    ),
+    say(
+      verdict.review
+        ? message("handoff.review", {
+            verdict: verdict.review.verdict,
+            summary: verdict.review.summary,
+          })
+        : message("handoff.review-none"),
+    ),
+    say(
+      verdict.verify
+        ? message("handoff.verify", {
+            result: verdict.verify.result,
+            summary: verdict.verify.summary,
+          })
+        : message("handoff.verify-none"),
+    ),
     "",
-    "## Verification",
+    say(message("handoff.verification")),
     "",
     "```text",
     stat.trim(),
     "```",
     "",
-    `Merge it with: git merge --no-ff ${branch}`,
+    say(message("handoff.merge", { branch })),
     "",
   ].join("\n");
 }
@@ -102,6 +138,10 @@ export async function writeHandoffReport(
     stat,
     branch: taskBranch(runner.store.factoryId, task.ref),
     reproduce,
+    locale: repositoryLocale(
+      runner.deps.definition.current.factory,
+      runner.store.state.items[itemRef]?.repository ?? "",
+    ),
   });
   const path = handoffReportPath(runner.home, itemRef, task.ref);
   await mkdir(dirname(path), { recursive: true });
