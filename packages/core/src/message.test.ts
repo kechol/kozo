@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { message, messageSchema, render } from "./message.ts";
+import { message, messageSchema, proseLanguage, render } from "./message.ts";
 import { en } from "./messages/en.ts";
 import { ja } from "./messages/ja.ts";
 
@@ -41,5 +41,13 @@ describe("messages", () => {
     expect(messageSchema.safeParse({ code: "notice.ready", values: { task: true } }).success).toBe(
       false,
     );
+  });
+});
+
+describe("proseLanguage", () => {
+  test("tells an agent the language of its prose, and nothing in English", () => {
+    expect(proseLanguage("en")).toBeNull();
+    expect(proseLanguage("ja")).toStartWith("Write the prose you give people in Japanese");
+    expect(proseLanguage("ja")).toContain("copy it unchanged");
   });
 });

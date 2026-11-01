@@ -9,7 +9,9 @@ import {
   type Plan,
   planNeeded,
   planSchema,
+  proseLanguage,
   render,
+  repositoryLocale,
   runFiles,
   runReportSchema,
   triageAnswerJsonSchema,
@@ -107,6 +109,9 @@ async function draftPlan(
     `LIMITS      a task changes at most ${limits.max_changed_lines} lines in ${limits.max_files} files; an item has at most ${limits.max_tasks_per_item} tasks`,
     `PROTECTED   ${repository.charter.protected_paths.join(", ")}`,
     `REQUEST     ${wrapRequest(requestText(file))}`,
+    ...[proseLanguage(repositoryLocale(definition.factory, repository.path))]
+      .filter((rule) => rule !== null)
+      .map((rule) => `LANGUAGE    ${rule}`),
     // The draft came from a session that read the request, so it is data like the request.
     ...(agent === "plan" && current
       ? [`DRAFT       ${wrapRequest(JSON.stringify(draftOf(current), null, 2))}`]

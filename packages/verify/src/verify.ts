@@ -50,6 +50,8 @@ export interface VerifyOptions {
   doneWhen: readonly string[];
   /** What the owner said about the task since it was planned, such as an answer to a question. */
   ownerNotes?: readonly string[];
+  /** What the judge is told about the language of its prose, if anything. */
+  language?: string | null;
   verifier: Verifier;
   model: string;
   /** The verify agent's instructions with the verify-app skill; kozod passes its definition's. */
@@ -92,7 +94,13 @@ async function verify(options: VerifyOptions, spend: Spend): Promise<VerifyResul
         cwd,
         instructions:
           options.instructions ?? verifyInstructions(verifyAgent, verifyAppSkillDefinition),
-        prompt: verifyPrompt(options.goal, options.doneWhen, procedure, options.ownerNotes),
+        prompt: verifyPrompt(
+          options.goal,
+          options.doneWhen,
+          procedure,
+          options.ownerNotes,
+          options.language,
+        ),
         schema: verifyJudgmentJsonSchema,
         model: options.model,
         maxCostUsd: options.maxCostUsd,
@@ -153,6 +161,7 @@ export function verifyPrompt(
   doneWhen: readonly string[],
   procedure: string,
   ownerNotes: readonly string[] = [],
+  language: string | null = null,
 ): string {
   const defuse = (text: string) => defuseSections(text, ["instructions", "verify-app"]);
   return [
@@ -161,6 +170,7 @@ export function verifyPrompt(
     "DONE_WHEN:",
     ...doneWhen.map((condition) => `- ${defuse(condition)}`),
     ...ownerNotesSection(ownerNotes, defuse),
+    ...(language ? [`LANGUAGE: ${language}`] : []),
     "</instructions>",
     "",
     "<verify-app>",

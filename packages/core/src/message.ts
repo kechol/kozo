@@ -52,6 +52,17 @@ const catalogs: Record<Locale, Record<MessageCode, string>> = { en, ja };
 // How a list of messages joins into one text.
 const separators: Record<Locale, string> = { en: "; ", ja: "。" };
 
+const languages: Record<Locale, string> = { en: "English", ja: "Japanese" };
+
+/**
+ * What an agent is told about the language of the prose it writes for people, or null in
+ * English. Its prompt stays English; what kozod or a check compares stays as given.
+ */
+export function proseLanguage(locale: Locale): string | null {
+  if (locale === "en") return null;
+  return `Write the prose you give people in ${languages[locale]}: summaries, changes, questions, notes, findings and decisions, and a plan's approach, goals and conditions. Keep JSON keys, enum values, file paths, commands, code and identifiers exactly as they are, write code, comments and commit messages as the repository's own conventions ask, and when you repeat a condition or other text kozo gave you, copy it unchanged.`;
+}
+
 /** Whether `text` names a message, as a schema's own issue does. */
 export const isMessageCode = (text: string): text is MessageCode => text in en;
 

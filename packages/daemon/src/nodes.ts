@@ -4,8 +4,10 @@ import {
   type Brief,
   type Message,
   message,
+  proseLanguage,
   render,
   renderBrief,
+  repositoryLocale,
   runFiles,
   runReportJsonSchema,
   runReportSchema,
@@ -37,6 +39,10 @@ import { type BlueprintRun, describe, type Node, type RunEnd, tail } from "./tas
 import { externalWrite } from "./transitions.ts";
 import { takePorts } from "./worktree-ports.ts";
 import { claimTask, servicesCheckout } from "./worktrees.ts";
+
+/** What the run's agents are told about the language of their prose, in its repository's locale. */
+const languageOf = (run: BlueprintRun) =>
+  proseLanguage(repositoryLocale(run.definition.factory, run.repository.path));
 
 /** Why a judge session failed, its own message when it has one. */
 const errorOf = (result: { message: string; reason?: Message }) =>
@@ -191,6 +197,7 @@ const brief: NodeStep = async (run, current) => {
       decisions: earlier.slice(-20),
       rules: [
         "Read AGENTS.md before you change anything.",
+        ...[languageOf(run)].filter((rule) => rule !== null),
         ...(blueprint.reproduce
           ? []
           : [
@@ -516,6 +523,7 @@ const review: NodeStep = async (run, current) => {
     goal: current.goal,
     doneWhen: current.done_when,
     ownerNotes: run.ownerWords().map((note) => render(note.text, "en")),
+    language: languageOf(run),
     judge: runner.deps.judge,
     model: modelFor(definition, "review"),
     instructions: definition.agents.review.instructions,
@@ -607,6 +615,7 @@ const verifyApp: NodeStep = async (run, current) => {
       goal: current.goal,
       doneWhen: current.done_when,
       ownerNotes: run.ownerWords().map((note) => render(note.text, "en")),
+      language: languageOf(run),
       verifier: runner.deps.verifier,
       model: modelFor(definition, "verify"),
       instructions: verifyInstructions(definition.agents.verify, definition.verifyApp),

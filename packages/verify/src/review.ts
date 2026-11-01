@@ -31,6 +31,8 @@ export interface ReviewOptions {
   doneWhen: readonly string[];
   /** What the owner said about the task since it was planned, such as an answer to a question. */
   ownerNotes?: readonly string[];
+  /** What the judge is told about the language of its prose, if anything. */
+  language?: string | null;
   judge: Judge;
   model: string;
   /** The review agent's instructions; kozod passes its factory definition's. */
@@ -70,6 +72,7 @@ async function review(options: ReviewOptions, spend: Spend): Promise<ReviewRecor
         shown.diff,
         options.ownerNotes,
         shown.unseen,
+        options.language,
       ),
       schema: reviewJudgmentJsonSchema,
       model,
@@ -136,6 +139,7 @@ export function reviewPrompt(
   diff: string,
   ownerNotes: readonly string[] = [],
   unseen: readonly string[] = [],
+  language: string | null = null,
 ): string {
   const defuse = (text: string) => defuseSections(text, ["instructions", "diff"]);
   const conditions = doneWhen.map((condition) => `- ${defuse(condition)}`).join("\n");
@@ -153,6 +157,7 @@ export function reviewPrompt(
     conditions,
     ...ownerNotesSection(ownerNotes, defuse),
     ...cut,
+    ...(language ? [`LANGUAGE: ${language}`] : []),
     "</instructions>",
     "",
     '<diff trust="untrusted">',

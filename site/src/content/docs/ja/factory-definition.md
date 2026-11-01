@@ -28,22 +28,22 @@ kozod は、作業中のファイルではなく、このリポジトリのデ�
 
 すべてのキーを厳密に確かめるので、知らないキーはエラーになります。省いたキーは既定値になり、オブジェクトを書いたときは、既定のオブジェクト全体がそれに置き換わります。
 
-| キー                    | 既定値              | 意味                                                                                                                                                       |
-| ----------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`               | `1`                 | 形式のバージョン。いつも `1` です。                                                                                                                        |
-| `mode`                  | `local`             | `local` か `github`。[GitHub モード](../github-mode/) を参照してください。モードの変更は、kozod を起動し直したときに適用されます。                         |
-| `runtime`               | `sdk`               | エージェントがあなたの `claude` を動かす方法。`sdk` は Agent SDK 経由、`cli` は `claude -p` です。review と verify は、いつも Agent SDK を使います。       |
-| `locale`                | `en`                | `kozo` の出力、通知、kozo が自分の言葉で記録するもの（hold、stage の移動、run の理由など）の言語。`en` か `ja` です。起動し直さなくても適用されます。      |
-| `repositories`          | `[]`                | kozo が作業するローカルのクローン。                                                                                                                        |
-| `repositories[].path`   |                     | クローンのパス。`~` は展開されます。                                                                                                                       |
-| `repositories[].github` |                     | GitHub モードでの `<owner>/<name>`。GitHub モードでは必須で、同じ名前のリポジトリを 2 つは登録できません。                                                 |
-| `repositories[].label`  |                     | GitHub モードで、このラベルの付いた開いている Issue だけを item にします。`kozo:` で始まる名前は使えません。                                               |
-| `repositories[].locale` |                     | このリポジトリに属するもの（handoff report、status comment と質問のコメント、pull request、ラベルの説明）の言語。省くと factory の `locale` になります。   |
-| `agent_defaults.model`  | `claude-sonnet-5-5` | ほかのキーで指定しない限り、すべてのエージェントが使うモデル。                                                                                             |
-| `agents.<name>.model`   |                     | 1 つのエージェントのモデル。その `agent.md` と `agent_defaults` より優先します。                                                                           |
-| `concurrency`           | `1`                 | kozod が同時に動かす run、確認、下書きの数。すべてのリポジトリを合わせた数です。                                                                           |
-| `budget.daily_usd`      | `15`                | 1 日の支出の上限。ローカル時刻の午前 0 時から数えます。[運用](../operations/#予算) を参照してください。                                                    |
-| `prepare_hosts`         |                     | prepare がパッケージのレジストリ以外に接続してよいホスト。レジストリのミラーなどを、名前か `*.` で始まる接尾辞で書きます。起動し直さなくても適用されます。 |
+| キー                    | 既定値              | 意味                                                                                                                                                                                       |
+| ----------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `version`               | `1`                 | 形式のバージョン。いつも `1` です。                                                                                                                                                        |
+| `mode`                  | `local`             | `local` か `github`。[GitHub モード](../github-mode/) を参照してください。モードの変更は、kozod を起動し直したときに適用されます。                                                         |
+| `runtime`               | `sdk`               | エージェントがあなたの `claude` を動かす方法。`sdk` は Agent SDK 経由、`cli` は `claude -p` です。review と verify は、いつも Agent SDK を使います。                                       |
+| `locale`                | `en`                | `kozo` の出力、通知、kozo が自分の言葉で記録するもの（hold、stage の移動、run の理由など）の言語。`en` か `ja` です。起動し直さなくても適用されます。                                      |
+| `repositories`          | `[]`                | kozo が作業するローカルのクローン。                                                                                                                                                        |
+| `repositories[].path`   |                     | クローンのパス。`~` は展開されます。                                                                                                                                                       |
+| `repositories[].github` |                     | GitHub モードでの `<owner>/<name>`。GitHub モードでは必須で、同じ名前のリポジトリを 2 つは登録できません。                                                                                 |
+| `repositories[].label`  |                     | GitHub モードで、このラベルの付いた開いている Issue だけを item にします。`kozo:` で始まる名前は使えません。                                                                               |
+| `repositories[].locale` |                     | このリポジトリに属するもの（エージェントが人に向けて書く文章、handoff report、status comment と質問のコメント、pull request、ラベルの説明）の言語。省くと factory の `locale` になります。 |
+| `agent_defaults.model`  | `claude-sonnet-5-5` | ほかのキーで指定しない限り、すべてのエージェントが使うモデル。                                                                                                                             |
+| `agents.<name>.model`   |                     | 1 つのエージェントのモデル。その `agent.md` と `agent_defaults` より優先します。                                                                                                           |
+| `concurrency`           | `1`                 | kozod が同時に動かす run、確認、下書きの数。すべてのリポジトリを合わせた数です。                                                                                                           |
+| `budget.daily_usd`      | `15`                | 1 日の支出の上限。ローカル時刻の午前 0 時から数えます。[運用](../operations/#予算) を参照してください。                                                                                    |
+| `prepare_hosts`         |                     | prepare がパッケージのレジストリ以外に接続してよいホスト。レジストリのミラーなどを、名前か `*.` で始まる接尾辞で書きます。起動し直さなくても適用されます。                                 |
 
 ```yaml
 version: 1

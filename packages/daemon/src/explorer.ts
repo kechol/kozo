@@ -5,6 +5,7 @@ import {
   itemStage,
   type KozoHome,
   message,
+  proseLanguage,
   render,
 } from "@kozo/core";
 import { baseOf, defuseSections, git, modelFor, SessionError } from "@kozo/verify";
@@ -91,7 +92,11 @@ export async function explorerRecords(
 }
 
 /** The explorer's prompt: the owner's question, and the records as untrusted data. */
-export function explorerPrompt(question: string, records: string): string {
+export function explorerPrompt(
+  question: string,
+  records: string,
+  language: string | null = null,
+): string {
   const defuse = (text: string) => defuseSections(text, ["question", "records"]);
   return [
     "<question>",
@@ -101,6 +106,7 @@ export function explorerPrompt(question: string, records: string): string {
     '<records trust="untrusted">',
     defuse(records),
     "</records>",
+    ...(language ? ["", `<language>${language}</language>`] : []),
   ].join("\n");
 }
 
@@ -128,7 +134,7 @@ export async function askExplorer(
     const records = await explorerRecords(runner.home, runner.store, mode, itemRef, taskRef);
     const answer = await runner.deps.judge.judge({
       instructions: definition.agents.explorer.instructions,
-      prompt: explorerPrompt(question, records),
+      prompt: explorerPrompt(question, records, proseLanguage(definition.factory.locale)),
       schema: explorerAnswerJsonSchema,
       model: modelFor(definition, "explorer"),
       maxCostUsd,
