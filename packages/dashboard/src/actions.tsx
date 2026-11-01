@@ -297,7 +297,7 @@ export function ActionButton({
   );
   const opener = (
     <button type="button" ref={trigger} class={action.emphasis} onClick={() => setOpen(true)}>
-      {action.label}…
+      {action.label}
     </button>
   );
   if (action.confirm) {

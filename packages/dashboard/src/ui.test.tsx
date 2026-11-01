@@ -206,7 +206,7 @@ describe("in Japanese", () => {
     );
     expect(root.textContent).toContain("Resume factory");
     expect(root.textContent).toContain("Plan approval");
-    expect(button("Reject plan…")).toBeDefined();
+    expect(button("Reject plan")).toBeDefined();
 
     await act(() => {
       locale.value = "ja";
@@ -216,8 +216,8 @@ describe("in Japanese", () => {
     expect(root.textContent).toContain("計画を読む");
     expect(root.textContent).toContain("たった今");
     expect(root.textContent).toContain("今日 $3.40");
-    expect(button("計画を承認…")).toBeDefined();
-    expect(button("計画を差し戻す…")).toBeDefined();
+    expect(button("計画を承認")).toBeDefined();
+    expect(button("計画を差し戻す")).toBeDefined();
     expect(root.textContent).not.toContain("Resume factory");
   });
 
@@ -230,7 +230,7 @@ describe("in Japanese", () => {
         action={cancelAction()}
       />,
     );
-    await act(() => button("取り消す…")?.click());
+    await act(() => button("取り消す")?.click());
     const dialog = root.querySelector("dialog");
     const named = dialog?.getAttribute("aria-labelledby") ?? "";
     expect(window.document.getElementById(named)?.textContent).toBe("K-7 を取り消しますか？");

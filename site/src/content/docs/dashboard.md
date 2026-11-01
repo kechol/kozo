@@ -46,19 +46,19 @@ The inbox lists what waits for you, oldest first, which is what `kozo ls` prints
 why it waits, the title, the reference, how long it has waited, and its repository when kozo
 works in several.
 
-| Row            | Verbs                                                                                |
-| -------------- | ------------------------------------------------------------------------------------ |
-| Start approval | **Approve start…**, **Cancel…**                                                      |
-| Plan approval  | **Read the plan**, which opens the item, then **Approve plan…** and **Reject plan…** |
-| Question       | **Answer…**, and for a task **Take it over**                                         |
-| Attention      | **Retry…**, for a task **Take it over**, **Close as done…**, **Cancel…**             |
-| Ready to merge | **Read the diff**, which opens the task                                              |
+| Row            | Verbs                                                                              |
+| -------------- | ---------------------------------------------------------------------------------- |
+| Start approval | **Approve start**, **Cancel**                                                      |
+| Plan approval  | **Read the plan**, which opens the item, then **Approve plan** and **Reject plan** |
+| Question       | **Answer**, and for a task **Take it over**                                        |
+| Attention      | **Retry**, for a task **Take it over**, **Close as done**, **Cancel**              |
+| Ready to merge | **Read the diff**, which opens the task                                            |
 
-- **A verb whose label ends in "…" asks for something first.** It opens a text field in place
-  of the button, and Cmd+Enter or Ctrl+Enter sends it. Escape and **Back** close it. Text is
+- **Approving, answering, rejecting, retrying, instructing and giving back ask for text first.**
+  Each opens a text field in place of the button, and Cmd+Enter or Ctrl+Enter sends it. Escape and **Back** close it. Text is
   required where the verb needs it: an answer, or the reason for rejecting a plan.
-- **Closing verbs confirm in a dialog.** **Cancel…** names what goes with the item or task (its
-  runs, its worktrees and its branches) and asks why. **Close as done…** says the item or task
+- **Closing verbs confirm in a dialog.** **Cancel** names what goes with the item or task (its
+  runs, its worktrees and its branches) and asks why. **Close as done** says the item or task
   closes as Complete.
 - **A row leaves the inbox once it is settled.** Focus then moves to the next row's first verb,
   so you can work down the list from the keyboard.
@@ -103,19 +103,19 @@ A task still in progress shows the same sections, led by its completion conditio
 diff last; **Show the diff** reads it. The dashboard cuts a long diff short; `kozo show --diff`
 prints all of it.
 
-| State     | Verbs                                                                                           |
-| --------- | ----------------------------------------------------------------------------------------------- |
-| Working   | **Instruct…**, which reaches the running run at its next turn and every run after it, **Pause** |
-| Question  | **Answer…**, **Take it over**, **Cancel…**                                                      |
-| Attention | **Retry…**, **Instruct…**, **Take it over**, **Close as done…**, **Cancel…**                    |
-| Taken     | **Give it back…**, once your work is committed, **Cancel…**                                     |
+| State     | Verbs                                                                                          |
+| --------- | ---------------------------------------------------------------------------------------------- |
+| Working   | **Instruct**, which reaches the running run at its next turn and every run after it, **Pause** |
+| Question  | **Answer**, **Take it over**, **Cancel**                                                       |
+| Attention | **Retry**, **Instruct**, **Take it over**, **Close as done**, **Cancel**                       |
+| Taken     | **Give it back**, once your work is committed, **Cancel**                                      |
 
 Pause in the detail view stops the work at once, as `kozo pause --now` does.
 
 ### Run
 
 A run's page shows its agent, its model, when it started and ended, and its cost. While it
-runs, **Instruct…** and **Pause** act on its task or item.
+runs, **Instruct** and **Pause** act on its task or item.
 
 ### Events and properties
 
