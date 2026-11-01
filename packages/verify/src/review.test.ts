@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
-import { verdictFileSchema } from "@kozo/core";
+import { message, verdictFileSchema } from "@kozo/core";
 import { gitRepository, tempDirectory } from "@kozo/testing";
 import { parseAgentDefinition } from "./agent-definition.ts";
 import { type Judge, SessionError, type SessionRequest } from "./judge.ts";
@@ -100,7 +100,7 @@ describe("runReview", () => {
     await using _ = repo;
     const judge: Judge = {
       async judge() {
-        throw new SessionError("the session ended with error_max_turns", 0.25);
+        throw new SessionError(message("session.ended", { subtype: "error_max_turns" }), 0.25);
       },
     };
     const { result } = await review(repo.path, base, judge);

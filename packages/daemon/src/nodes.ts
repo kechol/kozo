@@ -2,6 +2,7 @@ import { join, relative } from "node:path";
 import {
   afterReview,
   type Brief,
+  type Message,
   message,
   render,
   renderBrief,
@@ -37,6 +38,10 @@ import { externalWrite } from "./transitions.ts";
 import { takePorts } from "./worktree-ports.ts";
 import { claimTask, servicesCheckout } from "./worktrees.ts";
 
+/** Why a judge session failed, its own message when it has one. */
+const errorOf = (result: { message: string; reason?: Message }) =>
+  result.reason ?? message("text", { text: result.message });
+
 /**
  * One node of a blueprint run: it ends the run with how it ended, or returns nothing for the
  * run to go on to the next node. `current` is the task as the node starts.
@@ -58,7 +63,7 @@ const claim: NodeStep = async (run, current) => {
       hold: "attention",
       reason: claimed.reason,
       end: "failed",
-      why: render(claimed.reason, "en"),
+      why: claimed.reason,
     });
   }
   if (claimed.created) {
@@ -100,7 +105,7 @@ export async function startServices(run: BlueprintRun): Promise<RunEnd | undefin
         reason: message("hold.prepare-failed", { command, code }),
         summary: `${command} exited with ${code}`,
         end: "failed",
-        why: "prepare failed",
+        why: message("run.prepare-failed"),
       });
     }
   }
@@ -131,7 +136,7 @@ const prepare: NodeStep = async (run) => {
         reason: message("hold.prepare-failed", { command, code }),
         summary: `${command} exited with ${code}`,
         end: "failed",
-        why: "prepare failed",
+        why: message("run.prepare-failed"),
       });
     }
   }
@@ -290,7 +295,7 @@ const implement: NodeStep = async (run, current) => {
       reason: message("hold.refs-moved", { refs: moved.join(", ") }),
       summary: `refs changed outside the task branch: ${moved.join(", ")}`,
       end: "failed",
-      why: "refs changed outside the task branch",
+      why: message("run.refs-moved"),
     });
   }
   if (result.status === "stopped") {
@@ -300,15 +305,14 @@ const implement: NodeStep = async (run, current) => {
   if (result.status !== "answered") {
     return await run.halt("implement", {
       hold: "attention",
-      reason: message("hold.run-failed", { outcome: describe(result) }),
-      summary: describe(result),
+      reason: describe(result, "implement"),
+      summary: render(describe(result, "implement"), "en"),
       end: result.status === "lost" ? "lost" : "failed",
-      why: describe(result),
+      why: describe(result, "implement"),
     });
   }
   const report = runReportSchema.safeParse(result.outcome.output);
-  if (!report.success)
-    return await run.retry("implement", "the run report does not match its schema");
+  if (!report.success) return await run.retry("implement", message("run.report-invalid"));
   await Bun.write(run.files.report, JSON.stringify(report.data, null, 2));
   if (report.data.outcome === "blocked") {
     const { blocked } = report.data;
@@ -331,7 +335,7 @@ const implement: NodeStep = async (run, current) => {
   if (dirty !== "")
     return await run.retry(
       "implement",
-      `the run left uncommitted changes: ${dirty.split("\n").slice(0, 5).join(", ")}`,
+      message("run.uncommitted", { files: dirty.split("\n").slice(0, 5).join(", ") }),
     );
   await run.exit("implement", true, report.data.summary);
 };
@@ -359,7 +363,7 @@ async function applyCodemod(run: BlueprintRun, codemod: string): Promise<RunEnd 
       reason: message("hold.codemod-failed", { codemod, code }),
       summary: `codemod exited with ${code}`,
       end: "failed",
-      why: "codemod failed",
+      why: message("run.codemod-failed"),
     });
   }
   await git(worktree, ["add", "--all"]);
@@ -396,10 +400,7 @@ const verifyDeterministic: NodeStep = async (run, current) => {
   if (current.characterize) {
     const changed = await firstNonTestChange(worktree, repository.base, run.constraints.tests);
     if (changed) {
-      return await run.retry(
-        node,
-        `the task characterizes, so its diff changes only test files, but it changes ${changed}`,
-      );
+      return await run.retry(node, message("run.characterize-changed", { file: changed }));
     }
   }
   const recorded = await runner.recordedGates(
@@ -421,11 +422,11 @@ const verifyDeterministic: NodeStep = async (run, current) => {
       reason: message("hold.gates-misconfigured", { level: run.level, reason: gates.reason }),
       summary: `gates are MISCONFIGURED: ${gates.reason}`,
       end: "failed",
-      why: "gates misconfigured",
+      why: message("run.gates-misconfigured"),
     });
   }
   if (gates.status === "fail")
-    return await run.retry(node, `the ${gates.failed} gate failed:\n${tail(output)}`);
+    return await run.retry(node, message("run.gate-failed", { gate: gates.failed }), tail(output));
   output = "";
   // A task that characterizes is its tests, so prove checks it whatever the risk tier.
   if (run.layers.prove || current.characterize) {
@@ -452,16 +453,17 @@ const verifyDeterministic: NodeStep = async (run, current) => {
         hold: "attention",
         reason: message("hold.prove-misconfigured", { reason: prove.reason }),
         end: "failed",
-        why: "prove misconfigured",
+        why: message("run.prove-misconfigured"),
       });
     }
     if (prove.status !== "pass")
-      return await run.retry(node, `${proveLine(prove)}\n${tail(output)}`);
-    if (current.characterize && prove.runs.length === 0)
       return await run.retry(
         node,
-        "the task characterizes, but its diff adds no test that a prove entry of the constraints runs",
+        message("run.prove-failed", { line: proveLine(prove) }),
+        tail(output),
       );
+    if (current.characterize && prove.runs.length === 0)
+      return await run.retry(node, message("run.characterize-no-test"));
   }
   const guard = await runDiffGuard({
     cwd: worktree,
@@ -480,7 +482,7 @@ const verifyDeterministic: NodeStep = async (run, current) => {
       reason: message("hold.diff-guard", { line }),
       summary: line,
       end: "failed",
-      why: "diff-guard refused the diff",
+      why: message("run.diff-guard"),
     });
   }
   await run.exit(node, true);
@@ -488,7 +490,7 @@ const verifyDeterministic: NodeStep = async (run, current) => {
     current,
     "reviewing",
     run.run,
-    `the checks of the ${runner.store.state.tasks[run.task.ref]?.risk} risk tier passed`,
+    message("stage.checks-passed", { risk: runner.store.state.tasks[run.task.ref]?.risk ?? "" }),
   );
 };
 
@@ -519,13 +521,13 @@ const review: NodeStep = async (run, current) => {
     log: (text) => void run.log(text),
   });
   if (reviewed.status !== "reviewed") {
-    await runner.endRun(child, "failed", reviewed.message, reviewed.costUsd);
+    await runner.endRun(child, "failed", errorOf(reviewed), reviewed.costUsd);
     return await run.halt("review", {
       hold: "attention",
-      reason: message("hold.review-failed", { error: reviewed.message }),
+      reason: message("hold.review-failed", { error: errorOf(reviewed) }),
       summary: reviewed.message,
       end: "failed",
-      why: "review failed",
+      why: message("run.review-failed"),
     });
   }
   const childEnvelope = { run_id: child, item: item.ref, task: run.task.ref, parent_run: run.run };
@@ -559,7 +561,7 @@ const review: NodeStep = async (run, current) => {
     await run.exit("review", false, `revise: ${reviewed.record.summary}`);
     return await run.sendBack(
       `review asked for a revision: ${reviewed.record.summary} ${findings}`.trim(),
-      `review asked for a revision: ${reviewed.record.summary}`,
+      message("stage.review-revise", { summary: reviewed.record.summary }),
     );
   }
   await run.exit("review", true, reviewed.record.summary);
@@ -583,7 +585,7 @@ const verifyApp: NodeStep = async (run, current) => {
   };
   for (let round = 0; round < 2; round += 1) {
     if (child && verify.status === "error")
-      await runner.endRun(child, "failed", verify.message, verify.costUsd);
+      await runner.endRun(child, "failed", errorOf(verify), verify.costUsd);
     child = await runner.startRun(
       { item: item.ref, task: run.task.ref, parent_run: run.run },
       "verify",
@@ -605,7 +607,7 @@ const verifyApp: NodeStep = async (run, current) => {
     if (verify.status !== "error") break;
   }
   if (verify.status === "MISCONFIGURED") {
-    await runner.endRun(child, "succeeded", "no verify-app.md");
+    await runner.endRun(child, "succeeded", message("run.no-verify-app"));
     await run.exit(node, true, "skipped: the repository has no verify-app.md");
     return;
   }
@@ -628,13 +630,13 @@ const verifyApp: NodeStep = async (run, current) => {
       ? `; kozod discarded what it left in the worktree: ${left.slice(0, 5).join(", ")}`
       : "";
   if (verify.status === "error") {
-    await runner.endRun(child, "failed", verify.message, verify.costUsd);
+    await runner.endRun(child, "failed", errorOf(verify), verify.costUsd);
     return await run.halt(node, {
       hold: "attention",
-      reason: message("hold.verify-not-run", { error: verify.message }),
+      reason: message("hold.verify-not-run", { error: errorOf(verify) }),
       summary: `${verify.message}${discarded}`,
       end: "failed",
-      why: "verify failed to run",
+      why: message("run.verify-not-run"),
     });
   }
   await runner.endRun(child, "succeeded", undefined, verify.record.costUsd);
@@ -659,7 +661,10 @@ const verifyApp: NodeStep = async (run, current) => {
       );
       return await run.stopHere("succeeded");
     }
-    return await run.sendBack(`verify found DONE_WHEN unmet: ${verify.record.summary}`);
+    return await run.sendBack(
+      `verify found DONE_WHEN unmet: ${verify.record.summary}`,
+      message("stage.verify-unmet", { summary: verify.record.summary }),
+    );
   }
   await run.exit(node, true, `${verify.record.summary}${discarded}`);
 };
@@ -682,7 +687,7 @@ async function discardChanges(worktree: string): Promise<string[]> {
 
 const handoff: NodeStep = async (run, current) => {
   await run.enter("handoff", "D");
-  await run.runner.moveTask(current, "handoff", run.run, "the checks of its risk tier passed");
+  await run.runner.moveTask(current, "handoff", run.run, message("stage.ready"));
   await run.runner.writeHandoffReport(
     run.item.ref,
     current,
@@ -702,9 +707,11 @@ const finalVerify: NodeStep = async (run) => {
     await git(worktree, ["-c", "core.hooksPath=/dev/null", "rebase", "--quiet", latest]);
   } catch (error) {
     await git(worktree, ["rebase", "--abort"]).catch(() => {});
+    const text = (error as Error).message.slice(0, 500);
     return await run.backToBuilding(
       node,
-      `the diff conflicts with the latest ${repository.branch}: ${(error as Error).message.slice(0, 500)}`,
+      `the diff conflicts with the latest ${repository.branch}: ${text}`,
+      message("stage.conflict", { branch: repository.branch, error: text }),
     );
   }
   const { result: deep, output } = await runner.recordedGates(
@@ -719,6 +726,7 @@ const finalVerify: NodeStep = async (run) => {
     return await run.backToBuilding(
       node,
       `the deep gates failed after rebasing on ${repository.branch}:\n${tail(output)}`,
+      message("stage.deep-failed", { branch: repository.branch }),
     );
   }
   const verified = (await git(worktree, ["rev-parse", "HEAD"])).trim();

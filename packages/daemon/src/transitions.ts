@@ -22,12 +22,13 @@ type Actor = "human" | "kozod";
 // The longest reason an event keeps, the length the event schema allows.
 const cut = (reason: string) => reason.slice(0, 2000);
 
-const cutValues = ({ code, values }: Message): Message => ({
+/** `message` with each text in it kept to the length an event holds. */
+export const cutValues = ({ code, values }: Message): Message => ({
   code,
   values: Object.fromEntries(
     Object.entries(values).map(([name, value]) => [
       name,
-      typeof value === "string" ? cut(value) : value,
+      typeof value === "string" ? cut(value) : typeof value === "object" ? cutValues(value) : value,
     ]),
   ),
 });
@@ -116,7 +117,7 @@ export async function move(
   store: EventStore,
   subject: Subject,
   to: Stage,
-  reason: string,
+  reason: Message,
   { by = "kozod", run, from }: { by?: Actor; run?: string; from?: Stage } = {},
 ): Promise<boolean> {
   const event = await store.appendIf((state) => {
@@ -128,7 +129,7 @@ export async function move(
       item: subject.item,
       task: subject.task,
       ...(run ? { run_id: run } : {}),
-      data: { target: targetOf(subject), from: current.stage, to, by, reason: cut(reason) },
+      data: { target: targetOf(subject), from: current.stage, to, by, reason: cutValues(reason) },
     };
   });
   return event !== null;

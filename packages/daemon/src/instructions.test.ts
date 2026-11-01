@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type Plan, replay } from "@kozo/core";
+import { message, type Plan, replay } from "@kozo/core";
 import { eventWriter } from "@kozo/testing";
 import { taskOwnerNotes } from "./instructions.ts";
 
@@ -47,14 +47,26 @@ test("a task follows what was said about it, and about its item from its plan on
     ),
     write(
       "stage.changed",
-      { target: "item", from: "intake", to: "triage", by: "kozod", reason: "test" },
+      {
+        target: "item",
+        from: "intake",
+        to: "triage",
+        by: "kozod",
+        reason: message("text", { text: "test" }),
+      },
       item,
     ),
     write("note.added", { kind: "answer", text: "Add a header switcher too." }, item),
     write("plan.proposed", { plan }, item),
     write(
       "stage.changed",
-      { target: "item", from: "triage", to: "planning", by: "kozod", reason: "test" },
+      {
+        target: "item",
+        from: "triage",
+        to: "planning",
+        by: "kozod",
+        reason: message("text", { text: "test" }),
+      },
       item,
     ),
     write("plan.accepted", { plan, by: "human" }, item),

@@ -73,7 +73,7 @@ export interface RunnerOps {
     charterCommit: string,
     definition: Definition,
   ): Promise<string>;
-  endRun(run: string, to: RunState, reason?: string, costUsd?: number): Promise<void>;
+  endRun(run: string, to: RunState, reason?: Message, costUsd?: number): Promise<void>;
   hold(
     item: string,
     task: string | null,
@@ -82,7 +82,7 @@ export interface RunnerOps {
     run?: string,
     blocked?: BlockedReason,
   ): Promise<void>;
-  moveTask(task: TaskState, to: Stage, run: string | null, reason: string): Promise<void>;
+  moveTask(task: TaskState, to: Stage, run: string | null, reason: Message): Promise<void>;
   splitAgain(taskRef: string, question: string): Promise<void>;
   recordedGates(
     where: { run_id?: string; item: string; task: string | null; node: string },
@@ -111,7 +111,7 @@ interface Halt {
   /** What the node's exit says, the reason when unset. */
   summary?: string;
   end: "succeeded" | "failed" | "lost";
-  why?: string;
+  why?: Message;
   ok?: boolean;
   /** The `kozo_blocked` reason when a session's block holds the task. */
   blocked?: BlockedReason;
@@ -236,7 +236,7 @@ export class BlueprintRun {
     });
   }
 
-  async stopHere(state: RunState, reason?: string): Promise<RunEnd> {
+  async stopHere(state: RunState, reason?: Message): Promise<RunEnd> {
     await this.runner.endRun(this.run, state, reason);
     return { kind: "done" };
   }
@@ -255,47 +255,53 @@ export class BlueprintRun {
     return await this.stopHere(held.end, held.why);
   }
 
-  async retry(node: Node, why: string): Promise<RunEnd> {
-    await this.exit(node, false, why);
-    await this.runner.endRun(this.run, "failed", why.slice(0, 500));
-    return { kind: "retry", failure: why, rounds: this.charter.limits.no_progress_rounds };
+  /** Ends the run to try again; the next attempt reads the reason and `details` in English. */
+  async retry(node: Node, reason: Message, details?: string): Promise<RunEnd> {
+    const failure = details ? `${render(reason, "en")}:\n${details}` : render(reason, "en");
+    await this.exit(node, false, failure);
+    await this.runner.endRun(this.run, "failed", reason);
+    return { kind: "retry", failure, rounds: this.charter.limits.no_progress_rounds };
   }
 
   /** Sends the task back to Building; the next run starts from `failure`. */
-  async sendBack(failure: string, reason = failure): Promise<RunEnd> {
+  async sendBack(failure: string, reason: Message): Promise<RunEnd> {
     await this.runner.moveTask(this.task, "building", this.run, reason);
     await this.runner.endRun(this.run, "succeeded");
     return { kind: "retry", failure, rounds: this.charter.limits.no_progress_rounds };
   }
 
   /** A failed final verification goes back to Building until the fix rounds run out. */
-  async backToBuilding(node: Node, why: string): Promise<RunEnd> {
+  async backToBuilding(node: Node, why: string, reason: Message): Promise<RunEnd> {
     await this.exit(node, false, why);
     const fixes = this.runner.store.state.tasks[this.task.ref]?.handoffFixes ?? 0;
-    if (fixes < this.charter.limits.ci_fix_rounds) return await this.sendBack(why);
+    if (fixes < this.charter.limits.ci_fix_rounds) return await this.sendBack(why, reason);
     await this.runner.hold(
       this.item.ref,
       this.task.ref,
       "attention",
-      message("hold.final-verification", { fixes, failure: why }),
+      message("hold.final-verification", { fixes, failure: reason }),
       this.run,
     );
-    return await this.stopHere("failed", "final verification failed");
+    return await this.stopHere("failed", message("run.final-verification"));
   }
 }
 
-export function describe(result: SessionResult): string {
+/** How `agent`'s session ended, as people read it. */
+export function describe(result: SessionResult, agent: string): Message {
   switch (result.status) {
     case "lost":
-      return "lost its worker";
+      return message("session.lost", { agent });
     case "timed-out":
-      return "ran out of time";
+      return message("session.timed-out", { agent });
     case "stopped":
-      return "was stopped";
+      return message("session.stopped", { agent });
     case "failed":
-      return `failed: ${result.outcome.status === "failed" ? result.outcome.reason : "unknown"}`;
+      return message("session.failed", {
+        agent,
+        reason: result.outcome.status === "failed" ? result.outcome.reason : "unknown",
+      });
     case "answered":
-      return "answered";
+      return message("session.answered", { agent });
   }
 }
 

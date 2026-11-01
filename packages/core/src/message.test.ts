@@ -25,6 +25,14 @@ describe("messages", () => {
     );
   });
 
+  test("a message inside another renders in the same locale", () => {
+    const why = message("stage.plan-level", { level: "L2" });
+    expect(render(message("stage.plan-feature", { why }), "ja")).toBe(
+      "L2 では計画の承認が要ります。plan エージェントが先に、受け入れ条件をあなたと詰めます",
+    );
+    expect(messageSchema.safeParse(message("stage.plan-feature", { why })).success).toBe(true);
+  });
+
   test("a recorded message must name a known code and carry strings or numbers", () => {
     expect(
       messageSchema.safeParse({ code: "notice.ready", values: { task: "K-1/t1" } }).success,

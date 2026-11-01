@@ -164,7 +164,7 @@ export class ControlPlane {
       });
       return false;
     }
-    await move(this.store, subject, "triage", "its autonomy level needs no start approval", {
+    await move(this.store, subject, "triage", message("stage.no-start-approval"), {
       from: "intake",
     });
     return true;
@@ -234,7 +234,7 @@ export class ControlPlane {
   }
 
   /** Moves an item or a task as a human asked, with the command that asked as the reason. */
-  private async move(kind: "item" | "task", ref: string, to: Stage, reason: string) {
+  private async move(kind: "item" | "task", ref: string, to: Stage, reason: Message) {
     const { item, task } = this.subject(ref, kind);
     await move(this.store, { item, task }, to, reason, { by: "human" });
   }
@@ -248,7 +248,7 @@ export class ControlPlane {
     await this.clearHold("item", ref, said(body.text));
     if (start) {
       if (body.text) await this.note(ref, ref, "approval", body.text);
-      await this.move("item", ref, "triage", "kozo approve");
+      await this.move("item", ref, "triage", message("stage.approve"));
       return { message: `approved the start of ${ref}; it goes to Triage` };
     }
     const plan = item.draft;
@@ -370,11 +370,11 @@ export class ControlPlane {
     if (body.text) await this.note(item, ref, "instruction", body.text);
     await this.clearHold(kind, ref, said(body.text));
     if (sendBack) {
-      await this.move("task", ref, "building", "kozo retry");
+      await this.move("task", ref, "building", message("stage.retry"));
       return { message: `retrying ${ref} from Building with its fix rounds given back` };
     }
     if (kind === "item" && subject.stage === "planning")
-      await this.move("item", ref, "triage", "kozo retry");
+      await this.move("item", ref, "triage", message("stage.retry"));
     return {
       message:
         kind === "task"
@@ -444,7 +444,7 @@ export class ControlPlane {
     await this.note(item, ref, "instruction", body.text);
     await this.store.append({ type: "task.returned", item, task: ref, data: {} });
     await this.clearHold("task", ref, said(body.text));
-    await this.move("task", ref, "building", "kozo return");
+    await this.move("task", ref, "building", message("stage.return"));
     return { message: `gave ${ref} back; its checks run on your commits` };
   }
 
@@ -473,7 +473,7 @@ export class ControlPlane {
       ref,
       kind,
       done ? "complete" : "cancelled",
-      done ? "kozo close --done" : `kozo close --cancel: ${body.cancel}`,
+      done ? message("stage.done") : message("stage.cancel", { reason: body.cancel }),
     );
     return {
       message: "done" in body ? `closed ${ref} as done` : `cancelled ${ref}: ${body.cancel}`,
@@ -489,7 +489,7 @@ export class ControlPlane {
     ref: string,
     kind: "item" | "task",
     to: "complete" | "cancelled",
-    reason: string,
+    reason: Message,
   ): Promise<void> {
     const { item } = this.subject(ref, kind);
     const tasks = kind === "item" ? (this.store.state.items[ref]?.tasks ?? []) : [ref];

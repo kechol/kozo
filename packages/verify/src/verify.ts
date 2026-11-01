@@ -1,7 +1,12 @@
 import { constants } from "node:fs";
 import { mkdir, open, realpath, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { type VerifyRecord, verifyJudgmentJsonSchema, verifyJudgmentSchema } from "@kozo/core";
+import {
+  message,
+  type VerifyRecord,
+  verifyJudgmentJsonSchema,
+  verifyJudgmentSchema,
+} from "@kozo/core";
 import verifyDefinition from "../../../templates/factory/agents/verify/agent.md" with {
   type: "text",
 };
@@ -102,28 +107,29 @@ async function verify(options: VerifyOptions, spend: Spend): Promise<VerifyResul
   const { result, conditions } = judgment;
   if (conditions.length !== options.doneWhen.length) {
     throw new SessionError(
-      `the verify answer covers ${conditions.length} conditions, not the ${options.doneWhen.length} given`,
+      message("session.conditions-count", {
+        count: conditions.length,
+        expected: options.doneWhen.length,
+      }),
     );
   }
   const reordered = conditions.findIndex(
     (condition, index) => condition.condition.trim() !== options.doneWhen[index]?.trim(),
   );
   if (reordered !== -1) {
-    throw new SessionError(
-      `the verify answer's condition ${reordered + 1} is not DONE_WHEN condition ${reordered + 1}`,
-    );
+    throw new SessionError(message("session.condition-order", { index: reordered + 1 }));
   }
   if (result === "pass" && conditions.some((condition) => !condition.met)) {
-    throw new SessionError("the verify answer passed with a condition that was not met");
+    throw new SessionError(message("session.pass-unmet"));
   }
   const unproven = conditions.findIndex(
     (condition) => condition.met && condition.evidence.length === 0,
   );
   if (unproven !== -1) {
-    throw new SessionError(`the verify answer met condition ${unproven + 1} without evidence`);
+    throw new SessionError(message("session.no-evidence", { index: unproven + 1 }));
   }
   if (result === "pass" && !judgment.cleanedUp) {
-    throw new SessionError("the verify answer passed without cleaning up after the app");
+    throw new SessionError(message("session.not-cleaned"));
   }
   for (const path of conditions.flatMap((condition) => condition.evidence)) {
     await resolveEvidence(cwd, path);
@@ -176,24 +182,23 @@ export async function writeVerifyVerdict(
   const root = await realpath(cwd);
   // Checked before anything is created, against the deepest part of the path that exists.
   if (isInside(root, await realpathOfExisting(dir))) {
-    throw new SessionError("the verdict directory must be outside the worktree");
+    throw new SessionError(message("session.verdict-inside"));
   }
   await mkdir(dir, { recursive: true });
   if (isInside(root, await realpath(dir))) {
-    throw new SessionError("the verdict directory must be outside the worktree");
+    throw new SessionError(message("session.verdict-inside"));
   }
   for (const path of record.conditions.flatMap((condition) => condition.evidence)) {
     const { source, inside, identity } = await resolveEvidence(cwd, path);
     // The file is opened without following a final link and must still be the file resolved
     // above, so a link swapped in after the check cannot redirect the copy.
     const handle = await open(source, constants.O_RDONLY | constants.O_NOFOLLOW).catch(() => null);
-    if (handle === null)
-      throw new SessionError(`evidence file ${path} changed while it was copied`);
+    if (handle === null) throw new SessionError(message("session.evidence-changed", { path }));
     try {
       const opened = await handle.stat();
       const same = opened.ino === identity.ino && opened.dev === identity.dev;
       if (!opened.isFile() || opened.nlink !== 1 || !same) {
-        throw new SessionError(`evidence file ${path} changed while it was copied`);
+        throw new SessionError(message("session.evidence-changed", { path }));
       }
       const target = join(dir, "evidence", inside);
       await mkdir(dirname(target), { recursive: true });
@@ -209,15 +214,15 @@ export async function writeVerifyVerdict(
 async function resolveEvidence(cwd: string, path: string) {
   const root = await realpath(cwd);
   const source = await realpath(join(root, path)).catch(() => null);
-  if (source === null) throw new SessionError(`evidence file ${path} does not exist`);
+  if (source === null) throw new SessionError(message("session.evidence-missing", { path }));
   if (!isInside(root, source)) {
-    throw new SessionError(`evidence file ${path} is outside the worktree`);
+    throw new SessionError(message("session.evidence-outside", { path }));
   }
   const inside = relative(root, source);
   const identity = await stat(source);
   // A hard link would let a file elsewhere on the machine pose as one inside the worktree.
   if (!identity.isFile() || identity.nlink !== 1) {
-    throw new SessionError(`evidence file ${path} is not a regular file with a single link`);
+    throw new SessionError(message("session.evidence-not-file", { path }));
   }
   return { source, inside, identity };
 }

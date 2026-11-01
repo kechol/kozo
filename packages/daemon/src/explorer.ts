@@ -4,6 +4,7 @@ import {
   type Hold,
   itemStage,
   type KozoHome,
+  message,
   render,
 } from "@kozo/core";
 import { baseOf, defuseSections, git, modelFor, SessionError } from "@kozo/verify";
@@ -134,14 +135,18 @@ export async function askExplorer(
     });
     const parsed = explorerAnswerSchema.safeParse(answer.output);
     if (!parsed.success) {
-      await runner.endRun(run, "failed", "the answer does not match its schema", answer.costUsd);
+      await runner.endRun(run, "failed", message("run.answer-invalid"), answer.costUsd);
       throw new RunnerError("the explorer's answer does not match its schema");
     }
     await runner.endRun(run, "succeeded", undefined, answer.costUsd);
     return parsed.data.answer;
   } catch (error) {
     const spent = error instanceof SessionError ? error.costUsd : 0;
-    await runner.endRun(run, "failed", String((error as Error).message).slice(0, 500), spent);
+    const reason =
+      error instanceof SessionError
+        ? error.reason
+        : message("text", { text: String((error as Error).message) });
+    await runner.endRun(run, "failed", reason, spent);
     throw error;
   } finally {
     release();

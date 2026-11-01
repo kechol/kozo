@@ -192,7 +192,7 @@ export class Runner implements RunnerOps {
     await hold(this.store, { item, task }, kind, reason, { run, blocked });
   }
 
-  async moveTask(task: TaskState, to: Stage, run: string | null, reason: string) {
+  async moveTask(task: TaskState, to: Stage, run: string | null, reason: Message) {
     await move(this.store, { item: task.item, task: task.ref }, to, reason, {
       ...(run ? { run } : {}),
     });
@@ -279,12 +279,12 @@ export class Runner implements RunnerOps {
     });
     const stopReason = (task: TaskState | undefined) =>
       !task || isClosed(task.stage)
-        ? "the task is closed"
+        ? message("run.closed")
         : task.hold
-          ? "the task is held"
+          ? message("run.held")
           : this.records.stopping
-            ? "kozod stopped"
-            : "a human stopped it";
+            ? message("run.kozod-stopped")
+            : message("run.human-stopped");
 
     // A human's stop ends a command with CommandStopped; the next run resumes at `node`.
     const stoppedAt = async (node: typeof start, error: unknown) => {
@@ -396,7 +396,7 @@ export class Runner implements RunnerOps {
         }
       }
     }
-    const reason = `${taskRef} cannot be done within its scope, so the item is split again: ${question}`;
+    const reason = message("stage.split-again", { task: taskRef, question });
     for (const ref of stopped) {
       const task = this.store.state.tasks[ref];
       if (!task) continue;

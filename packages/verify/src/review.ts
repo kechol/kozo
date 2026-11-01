@@ -1,4 +1,9 @@
-import { type ReviewRecord, reviewJudgmentJsonSchema, reviewJudgmentSchema } from "@kozo/core";
+import {
+  message,
+  type ReviewRecord,
+  reviewJudgmentJsonSchema,
+  reviewJudgmentSchema,
+} from "@kozo/core";
 import reviewDefinition from "../../../templates/factory/agents/review/agent.md" with {
   type: "text",
 };
@@ -52,7 +57,7 @@ async function review(options: ReviewOptions, spend: Spend): Promise<ReviewRecor
   const { cwd, judge, model } = options;
   const { head, mergeBase: base } = await resolveRange(cwd, options.base, "HEAD");
   const diff = await git(cwd, [...(await diffCommand(cwd)), "-U5", base, head, "--"]);
-  if (diff.trim() === "") throw new SessionError("there is no diff to review");
+  if (diff.trim() === "") throw new SessionError(message("session.no-diff"));
   const shown = capDiff(diff);
 
   const answer = await spending(
@@ -74,7 +79,7 @@ async function review(options: ReviewOptions, spend: Spend): Promise<ReviewRecor
   const judgment = parseAnswer(reviewJudgmentSchema, "review", answer.output);
   const blocking = judgment.findings.some((finding) => finding.severity === "blocking");
   if (judgment.verdict === "accept" && blocking) {
-    throw new SessionError("the review accepted the diff despite a blocking finding");
+    throw new SessionError(message("session.accept-blocking"));
   }
   return {
     ...judgment,

@@ -1,3 +1,4 @@
+import type { Message } from "@kozo/core";
 import { type CommandSandbox, type Confine, withSandboxTemp } from "./sandbox.ts";
 
 /** A sandbox and the way to confine a command to it. */
@@ -199,14 +200,14 @@ export async function guarded<T>(
   log: (text: string) => void,
   expected: readonly ErrorClass[],
   layer: () => Promise<T>,
-): Promise<T | { status: "error"; message: string }> {
+): Promise<T | { status: "error"; message: string; reason?: Message }> {
   try {
     return await layer();
   } catch (error) {
     if (!expected.some((type) => error instanceof type)) throw error;
-    const { message } = error as Error;
+    const { message, reason } = error as Error & { reason?: Message };
     log(`kozo: ${message}\n`);
-    return { status: "error", message };
+    return { status: "error", message, ...(reason ? { reason } : {}) };
   }
 }
 

@@ -293,7 +293,7 @@ describe("GitHubSync", () => {
         type: "stage.changed",
         item: ref,
         task,
-        data: { target: "task", from, to, by: "kozod", reason: "checks passed" },
+        data: { target: "task", from, to, by: "kozod", reason: message("stage.ready") },
       });
     }
     await Bun.write(join(env.home.root, "items", ref, "handoff-t1.md"), "# Report\n\nCloses #9.\n");
@@ -654,7 +654,13 @@ describe("GitHubSync", () => {
           type: "stage.changed",
           item: ref,
           task,
-          data: { target: "task", from: a, to: b, by: "kozod", reason: "checks passed" },
+          data: {
+            target: "task",
+            from: a,
+            to: b,
+            by: "kozod",
+            reason: message("text", { text: "checks passed" }),
+          },
         });
       }
       await passedRun(env.store, ref, task);
@@ -688,7 +694,7 @@ describe("GitHubSync", () => {
         type: "stage.changed",
         item: ref,
         task,
-        data: { target: "task", from, to, by: "kozod", reason: "test" },
+        data: { target: "task", from, to, by: "kozod", reason: message("stage.ready") },
       });
     await move("building", "reviewing");
     await move("reviewing", "handoff");
@@ -706,7 +712,13 @@ describe("GitHubSync", () => {
       type: "stage.changed",
       item: ref,
       task,
-      data: { target: "task", from: "handoff", to: "building", by: "human", reason: "test" },
+      data: {
+        target: "task",
+        from: "handoff",
+        to: "building",
+        by: "human",
+        reason: message("text", { text: "test" }),
+      },
     });
 
     const second = await handOff("building");

@@ -77,7 +77,10 @@ export async function completeTask(
     task,
     "complete",
     null,
-    `merged into ${repository.branch}; the ${level} gates ${result.status === "pass" ? "passed" : "failed"} there`,
+    message(result.status === "pass" ? "stage.merged" : "stage.merged-failed", {
+      branch: repository.branch,
+      level,
+    }),
   );
   await releaseTask(runner.home, repository.path, taskRef, {
     factory: runner.store.factoryId,
@@ -93,7 +96,7 @@ export async function completeTask(
     runner.store,
     { item: item.ref, task: null },
     defective ? "triage" : "complete",
-    defective ? "the check after the merge failed, a post-merge defect" : "every task is complete",
+    defective ? message("stage.defect") : message("stage.complete"),
     { from: owner.stage },
   );
 }

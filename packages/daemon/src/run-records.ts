@@ -1,6 +1,14 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { type AgentName, isRunOver, type KozoHome, runFiles, sha256 } from "@kozo/core";
+import {
+  type AgentName,
+  isRunOver,
+  type KozoHome,
+  type Message,
+  message,
+  runFiles,
+  sha256,
+} from "@kozo/core";
 import { type Definition, modelFor } from "@kozo/verify";
 import type { WorkerSpec } from "@kozo/worker";
 import pkg from "../package.json" with { type: "json" };
@@ -8,6 +16,7 @@ import type { EventStore } from "./event-store.ts";
 import { readItemFile, requestText } from "./item-file.ts";
 import type { LaunchedSession, Launcher } from "./launcher.ts";
 import { type Envelope, pumpSession, type SessionResult } from "./session-pump.ts";
+import { cutValues } from "./transitions.ts";
 
 /**
  * The runs kozod starts and ends, the sessions and blueprint work running now, which a human may
@@ -154,7 +163,7 @@ export class RunRecords {
   async endRun(
     run: string,
     to: "succeeded" | "failed" | "stopped" | "lost",
-    reason?: string,
+    reason?: Message,
     costUsd = 0,
   ) {
     const current = this.store.state.runs[run];
@@ -165,7 +174,7 @@ export class RunRecords {
       item: current.item,
       task: current.task,
       parent_run: current.parent,
-      data: { from: current.state, to, ...(reason ? { reason } : {}) },
+      data: { from: current.state, to, ...(reason ? { reason: cutValues(reason) } : {}) },
       ...(costUsd > 0 ? { cost: { usd: costUsd, in: 0, out: 0, cache_read: 0 } } : {}),
     });
   }
@@ -175,11 +184,11 @@ export class RunRecords {
    * the scheduler starts the work again once its hold clears.
    */
   async failOpenRuns(ref: string, error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const text = error instanceof Error ? error.message : String(error);
     for (const run of Object.values(this.store.state.runs)) {
       if (run.task !== ref && !(run.task === null && run.item === ref)) continue;
       if (!isRunOver(run.state))
-        await this.endRun(run.ref, "failed", `kozod could not finish it: ${message}`.slice(0, 500));
+        await this.endRun(run.ref, "failed", message("run.unfinished", { error: text }));
     }
   }
 

@@ -132,7 +132,7 @@ export class Reconciler {
         item: run.item,
         task: run.task,
         parent_run: run.parent,
-        data: { from: run.state, to: "lost", reason: "kozod stopped while the run was going" },
+        data: { from: run.state, to: "lost", reason: message("run.interrupted") },
       });
     }
   }
@@ -215,7 +215,7 @@ export class Reconciler {
         this.store,
         { item: item.ref, task: task.ref },
         "reviewing",
-        `a human committed to ${branch}`,
+        message("stage.human-commit", { branch }),
         { from: "handoff" },
       );
     }

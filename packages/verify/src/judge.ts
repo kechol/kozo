@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
+import { type Message, message, render } from "@kozo/core";
 import type { z } from "zod";
 import { pickEnvironment } from "./command.ts";
 import { deniedCredentials } from "./sandbox.ts";
@@ -33,11 +34,12 @@ export interface Verifier {
 
 export class SessionError extends Error {
   constructor(
-    message: string,
+    /** Why the session failed, as people read it; `message` is its English sentence. */
+    readonly reason: Message,
     /** What the session spent before it failed, when it ran at all. */
     readonly costUsd = 0,
   ) {
-    super(message);
+    super(render(reason, "en"));
   }
 }
 
@@ -85,9 +87,7 @@ export function ownerNotesSection(
 export function parseAnswer<T>(schema: z.ZodType<T>, name: string, output: unknown): T {
   const judgment = schema.safeParse(output);
   if (!judgment.success) {
-    throw new SessionError(
-      `the ${name} answer does not match its schema: ${judgment.error.message}`,
-    );
+    throw new SessionError(message("session.schema", { name, issues: judgment.error.message }));
   }
   return judgment.data;
 }
@@ -212,7 +212,7 @@ async function runSession(
   const env = { ...sessionEnvironmentFrom(process.env), ...extra };
   try {
     let answer: SessionAnswer | undefined;
-    for await (const message of query({
+    for await (const result of query({
       prompt: request.prompt,
       options: {
         ...session,
@@ -229,21 +229,24 @@ async function runSession(
         outputFormat: { type: "json_schema", schema: request.schema },
       },
     })) {
-      if (message.type !== "result") continue;
-      if (message.subtype !== "success") {
-        throw new SessionError(`the session ended with ${message.subtype}`, message.total_cost_usd);
+      if (result.type !== "result") continue;
+      if (result.subtype !== "success") {
+        throw new SessionError(
+          message("session.ended", { subtype: result.subtype }),
+          result.total_cost_usd,
+        );
       }
       answer = {
-        output: message.structured_output,
+        output: result.structured_output,
         model: request.model,
-        costUsd: message.total_cost_usd,
+        costUsd: result.total_cost_usd,
       };
     }
-    if (!answer) throw new SessionError("the session ended without a result");
+    if (!answer) throw new SessionError(message("session.no-result"));
     return answer;
   } catch (error) {
     // The SDK reports a failed session, such as a rejected option, as a plain Error.
     if (error instanceof SessionError) throw error;
-    throw new SessionError(`the session failed: ${(error as Error).message}`);
+    throw new SessionError(message("session.failed-error", { error: (error as Error).message }));
   }
 }

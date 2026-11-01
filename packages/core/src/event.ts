@@ -104,7 +104,11 @@ export const eventSchema = z
     ),
     event(
       "run.changed",
-      z.strictObject({ from: runStateSchema, to: runStateSchema, reason: text.optional() }),
+      z.strictObject({
+        from: runStateSchema,
+        to: runStateSchema,
+        reason: messageSchema.optional(),
+      }),
     ),
     event(
       "item.created",
@@ -173,7 +177,7 @@ export const eventSchema = z
         from: stageSchema.nullable(),
         to: stageSchema,
         by: actor,
-        reason: text,
+        reason: messageSchema,
       }),
     ),
     event(

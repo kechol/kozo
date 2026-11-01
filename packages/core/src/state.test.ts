@@ -47,13 +47,25 @@ function planned(write = eventWriter(), accepted = plan()): Event[] {
     ),
     write(
       "stage.changed",
-      { target: "item", from: "intake", to: "triage", by: "kozod", reason: "test" },
+      {
+        target: "item",
+        from: "intake",
+        to: "triage",
+        by: "kozod",
+        reason: message("text", { text: "test" }),
+      },
       item,
     ),
     write("plan.proposed", { plan: accepted }, item),
     write(
       "stage.changed",
-      { target: "item", from: "triage", to: "planning", by: "kozod", reason: "test" },
+      {
+        target: "item",
+        from: "triage",
+        to: "planning",
+        by: "kozod",
+        reason: message("text", { text: "test" }),
+      },
       item,
     ),
     write("plan.accepted", { plan: accepted, by: "human" }, item),
@@ -156,32 +168,68 @@ describe("replay", () => {
       ...planned(write),
       write(
         "stage.changed",
-        { target: "task", from: "building", to: "reviewing", by: "kozod", reason: "test" },
+        {
+          target: "task",
+          from: "building",
+          to: "reviewing",
+          by: "kozod",
+          reason: message("text", { text: "test" }),
+        },
         task,
       ),
       write(
         "stage.changed",
-        { target: "task", from: "reviewing", to: "building", by: "kozod", reason: "test" },
+        {
+          target: "task",
+          from: "reviewing",
+          to: "building",
+          by: "kozod",
+          reason: message("text", { text: "test" }),
+        },
         task,
       ),
       write(
         "stage.changed",
-        { target: "task", from: "building", to: "reviewing", by: "kozod", reason: "test" },
+        {
+          target: "task",
+          from: "building",
+          to: "reviewing",
+          by: "kozod",
+          reason: message("text", { text: "test" }),
+        },
         task,
       ),
       write(
         "stage.changed",
-        { target: "task", from: "reviewing", to: "handoff", by: "kozod", reason: "test" },
+        {
+          target: "task",
+          from: "reviewing",
+          to: "handoff",
+          by: "kozod",
+          reason: message("text", { text: "test" }),
+        },
         task,
       ),
       write(
         "stage.changed",
-        { target: "task", from: "handoff", to: "complete", by: "kozod", reason: "test" },
+        {
+          target: "task",
+          from: "handoff",
+          to: "complete",
+          by: "kozod",
+          reason: message("text", { text: "test" }),
+        },
         task,
       ),
       write(
         "stage.changed",
-        { target: "item", from: "building", to: "complete", by: "kozod", reason: "test" },
+        {
+          target: "item",
+          from: "building",
+          to: "complete",
+          by: "kozod",
+          reason: message("text", { text: "test" }),
+        },
         task,
       ),
     ]);
@@ -326,7 +374,13 @@ describe("replay", () => {
         ),
         write(
           "stage.changed",
-          { target: "item", from: "intake", to: "planning", by: "kozod", reason: "test" },
+          {
+            target: "item",
+            from: "intake",
+            to: "planning",
+            by: "kozod",
+            reason: message("text", { text: "test" }),
+          },
           item,
         ),
       ]),
@@ -337,7 +391,13 @@ describe("replay", () => {
         ...planned(later),
         later(
           "stage.changed",
-          { target: "task", from: "reviewing", to: "handoff", by: "kozod", reason: "test" },
+          {
+            target: "task",
+            from: "reviewing",
+            to: "handoff",
+            by: "kozod",
+            reason: message("text", { text: "test" }),
+          },
           {
             item: "K-1",
             task: "K-1/t1",
@@ -368,7 +428,13 @@ describe("replay", () => {
         ...held,
         write(
           "stage.changed",
-          { target: "task", from: "building", to: "reviewing", by: "kozod", reason: "test" },
+          {
+            target: "task",
+            from: "building",
+            to: "reviewing",
+            by: "kozod",
+            reason: message("text", { text: "test" }),
+          },
           task,
         ),
       ]),
@@ -388,7 +454,13 @@ describe("replay", () => {
       ),
       write2(
         "stage.changed",
-        { target: "task", from: "building", to: "cancelled", by: "kozod", reason: "test" },
+        {
+          target: "task",
+          from: "building",
+          to: "cancelled",
+          by: "kozod",
+          reason: message("text", { text: "test" }),
+        },
         task,
       ),
     ]);
@@ -416,12 +488,24 @@ describe("itemStage", () => {
       ...planned(write, plan(2)),
       write(
         "stage.changed",
-        { target: "task", from: "building", to: "reviewing", by: "kozod", reason: "test" },
+        {
+          target: "task",
+          from: "building",
+          to: "reviewing",
+          by: "kozod",
+          reason: message("text", { text: "test" }),
+        },
         t1,
       ),
       write(
         "stage.changed",
-        { target: "task", from: "reviewing", to: "handoff", by: "kozod", reason: "test" },
+        {
+          target: "task",
+          from: "reviewing",
+          to: "handoff",
+          by: "kozod",
+          reason: message("text", { text: "test" }),
+        },
         t1,
       ),
     ]);
@@ -435,7 +519,13 @@ describe("itemStage", () => {
       ...[t1, t2].map((task) =>
         write2(
           "stage.changed",
-          { target: "task", from: "building", to: "reviewing", by: "kozod", reason: "test" },
+          {
+            target: "task",
+            from: "building",
+            to: "reviewing",
+            by: "kozod",
+            reason: message("text", { text: "test" }),
+          },
           task,
         ),
       ),
@@ -578,7 +668,13 @@ describe("holds", () => {
       ...planned(write),
       write(
         "stage.changed",
-        { target: "task", from: "building", to: "reviewing", by: "kozod", reason: "test" },
+        {
+          target: "task",
+          from: "building",
+          to: "reviewing",
+          by: "kozod",
+          reason: message("text", { text: "test" }),
+        },
         task,
       ),
       write(
@@ -594,7 +690,13 @@ describe("holds", () => {
       write("hold.cleared", { target: "task", hold: "question", by: "human" }, task),
       write(
         "stage.changed",
-        { target: "task", from: "reviewing", to: "handoff", by: "kozod", reason: "test" },
+        {
+          target: "task",
+          from: "reviewing",
+          to: "handoff",
+          by: "kozod",
+          reason: message("text", { text: "test" }),
+        },
         task,
       ),
     ]);
@@ -686,12 +788,24 @@ describe("applyEvent in place", () => {
       ),
       write(
         "stage.changed",
-        { target: "task", from: "reviewing", to: "handoff", by: "kozod", reason: "x" },
+        {
+          target: "task",
+          from: "reviewing",
+          to: "handoff",
+          by: "kozod",
+          reason: message("text", { text: "x" }),
+        },
         task,
       ),
       write(
         "stage.changed",
-        { target: "task", from: "building", to: "intake", by: "kozod", reason: "x" },
+        {
+          target: "task",
+          from: "building",
+          to: "intake",
+          by: "kozod",
+          reason: message("text", { text: "x" }),
+        },
         task,
       ),
       write("hold.cleared", { target: "task", hold: "attention", by: "human" }, task),

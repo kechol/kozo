@@ -34,21 +34,21 @@ not from the working files, and checks for a new commit once a minute.
 Every key is checked strictly: an unknown key is an error. A key you leave out takes its default,
 and an object you write replaces the default object as a whole.
 
-| Key                     | Default             | Meaning                                                                                                                                        |
-| ----------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`               | `1`                 | The format version. Always `1`.                                                                                                                |
-| `mode`                  | `local`             | `local` or `github`; see [GitHub mode](../github-mode/). kozod applies a change of mode only when it starts again.                             |
-| `runtime`               | `sdk`               | How agents run your `claude`: `sdk` through the Agent SDK, or `cli` as `claude -p`. Review and verify always use the Agent SDK.                |
-| `locale`                | `en`                | The language of kozo's notifications and of the reasons it gives for a hold: `en` or `ja`. It applies without restarting kozod.                |
-| `repositories`          | `[]`                | The local clones kozo works in.                                                                                                                |
-| `repositories[].path`   |                     | The clone's path; `~` is expanded.                                                                                                             |
-| `repositories[].github` |                     | In GitHub mode, `<owner>/<name>`. Required there, and two repositories may not share a name.                                                   |
-| `repositories[].label`  |                     | In GitHub mode, only open Issues with this label become items. It may not start with `kozo:`.                                                  |
-| `agent_defaults.model`  | `claude-sonnet-5-5` | The model every agent uses unless another key names one.                                                                                       |
-| `agents.<name>.model`   |                     | The model of one agent, which wins over its `agent.md` and `agent_defaults`.                                                                   |
-| `concurrency`           | `1`                 | How many runs, checks and drafts kozod runs at once, across every repository.                                                                  |
-| `budget.daily_usd`      | `15`                | The cap on a day's spending, counted from local midnight; see [Operating kozo](../operations/#the-budget).                                     |
-| `prepare_hosts`         |                     | Hosts that prepare may reach besides the package registries, as a name or a `*.` suffix, such as a registry mirror. Applies without a restart. |
+| Key                     | Default             | Meaning                                                                                                                                                  |
+| ----------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`               | `1`                 | The format version. Always `1`.                                                                                                                          |
+| `mode`                  | `local`             | `local` or `github`; see [GitHub mode](../github-mode/). kozod applies a change of mode only when it starts again.                                       |
+| `runtime`               | `sdk`               | How agents run your `claude`: `sdk` through the Agent SDK, or `cli` as `claude -p`. Review and verify always use the Agent SDK.                          |
+| `locale`                | `en`                | The language of kozo's notifications and of the reasons it records for holds, stage changes and runs: `en` or `ja`. It applies without restarting kozod. |
+| `repositories`          | `[]`                | The local clones kozo works in.                                                                                                                          |
+| `repositories[].path`   |                     | The clone's path; `~` is expanded.                                                                                                                       |
+| `repositories[].github` |                     | In GitHub mode, `<owner>/<name>`. Required there, and two repositories may not share a name.                                                             |
+| `repositories[].label`  |                     | In GitHub mode, only open Issues with this label become items. It may not start with `kozo:`.                                                            |
+| `agent_defaults.model`  | `claude-sonnet-5-5` | The model every agent uses unless another key names one.                                                                                                 |
+| `agents.<name>.model`   |                     | The model of one agent, which wins over its `agent.md` and `agent_defaults`.                                                                             |
+| `concurrency`           | `1`                 | How many runs, checks and drafts kozod runs at once, across every repository.                                                                            |
+| `budget.daily_usd`      | `15`                | The cap on a day's spending, counted from local midnight; see [Operating kozo](../operations/#the-budget).                                               |
+| `prepare_hosts`         |                     | Hosts that prepare may reach besides the package registries, as a name or a `*.` suffix, such as a registry mirror. Applies without a restart.           |
 
 ```yaml
 version: 1

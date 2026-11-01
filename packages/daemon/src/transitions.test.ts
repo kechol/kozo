@@ -63,11 +63,17 @@ describe("transitions", () => {
     ).toBe(true);
     expect(await clearHold(env.store, item, { kind: "dependency" })).toBe(false);
     expect(await clearHold(env.store, item, { kind: "paused", by: "human" })).toBe(true);
-    expect(await move(env.store, item, "triage", "no approval needed")).toBe(true);
-    expect(await move(env.store, item, "triage", "again")).toBe(false);
+    expect(
+      await move(env.store, item, "triage", message("text", { text: "no approval needed" })),
+    ).toBe(true);
+    expect(await move(env.store, item, "triage", message("text", { text: "again" }))).toBe(false);
     expect(env.store.state.items["K-1"]?.stage).toBe("triage");
     // A move from a stage the subject has since left is stale and does nothing.
-    expect(await move(env.store, item, "complete", "stale", { from: "intake" })).toBe(false);
+    expect(
+      await move(env.store, item, "complete", message("text", { text: "stale" }), {
+        from: "intake",
+      }),
+    ).toBe(false);
     expect(env.store.state.items["K-1"]?.stage).toBe("triage");
   });
 

@@ -168,7 +168,12 @@ export class GitHubSync {
     });
     const issue = `${repository.github}#${number}`;
     await this.wrote(ref, null, "issue", issue);
-    await this.control.closeWork(ref, "item", "cancelled", `moved to ${issue}`);
+    await this.control.closeWork(
+      ref,
+      "item",
+      "cancelled",
+      message("stage.moved-to-issue", { issue }),
+    );
     const name = repository.github.slice(repository.github.indexOf("/") + 1);
     return { message: `moved ${ref} to ${issue}; kozod takes it up as ${name}#${number}` };
   }
@@ -325,7 +330,7 @@ export class GitHubSync {
       item.ref,
       "item",
       cancelled ? "cancelled" : "complete",
-      `the Issue was closed as ${reason ?? "completed"}`,
+      message("stage.issue-closed", { reason: reason ?? "completed" }),
     );
   }
 
@@ -471,7 +476,12 @@ export class GitHubSync {
         "instruction",
         review.body.trim() || `${review.author} requested changes`,
       );
-      await this.sendBack(item, task, "human", `${review.author} requested changes on ${pull.url}`);
+      await this.sendBack(
+        item,
+        task,
+        "human",
+        message("stage.changes-requested", { author: review.author, url: pull.url }),
+      );
       return;
     }
     if (pull.headSha !== head) return;
@@ -496,10 +506,15 @@ export class GitHubSync {
       "check",
       `The CI checks ${failed.join(", ")} failed on ${head}.`,
     );
-    await this.sendBack(item, task, "kozod", `CI failed: ${failed.join(", ")}`);
+    await this.sendBack(
+      item,
+      task,
+      "kozod",
+      message("stage.ci-failed", { checks: failed.join(", ") }),
+    );
   }
 
-  private async sendBack(item: string, task: string, by: "kozod" | "human", reason: string) {
+  private async sendBack(item: string, task: string, by: "kozod" | "human", reason: Message) {
     await move(this.store, { item, task }, "building", reason, { by, from: "handoff" });
   }
 

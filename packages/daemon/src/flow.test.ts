@@ -6,6 +6,7 @@ import {
   kozoHome,
   parseAutomation,
   parseEvalCase,
+  render,
   runFiles,
   sha256,
   type TaskState,
@@ -164,7 +165,7 @@ describe("feature items", () => {
         "select json_extract(line, '$.data.reason') as reason from events where type = 'stage.changed' and json_extract(line, '$.data.to') = 'planning'",
       )
       .get();
-    expect(moved?.reason).toBe(
+    expect(render(JSON.parse(moved?.reason ?? "null"), "en")).toBe(
       "the plan needs an approval at L2; the plan agent first works out its acceptance criteria with the owner",
     );
 
@@ -1662,7 +1663,7 @@ describe("the minimal path", () => {
     const task = `${ref}/t1`;
     expect(env.store.state.tasks[task]?.hold).toMatchObject({
       kind: "attention",
-      reason: { code: "hold.run-failed", values: { outcome: "lost its worker" } },
+      reason: { code: "session.lost", values: { agent: "implement" } },
     });
     expect(
       Object.values(env.store.state.runs).find((run) => run.agent === "implement")?.state,

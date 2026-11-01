@@ -68,13 +68,17 @@ const examples: Record<EventType, unknown> = {
   "factory.created": { factory_id: "k3x9q2" },
   "factory.changed": { paused: true, reason: "kozo pause" },
   "log.sealed": { run: "r-0193", lines: 58, last: "a".repeat(64) },
-  "run.changed": { from: "running", to: "failed", reason: "max_turns" },
+  "run.changed": {
+    from: "running",
+    to: "failed",
+    reason: { code: "run.gate-failed", values: { gate: "lint" } },
+  },
   "stage.changed": {
     target: "task",
     from: "building",
     to: "reviewing",
     by: "kozod",
-    reason: "test",
+    reason: { code: "stage.ready", values: {} },
   },
   "hold.set": {
     target: "item",

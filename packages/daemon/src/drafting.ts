@@ -155,17 +155,11 @@ async function draftPlan(
   );
   if (result.status !== "answered") {
     if (result.status !== "stopped")
-      await runner.hold(
-        itemRef,
-        null,
-        "attention",
-        message("hold.draft-failed", { agent, outcome: describe(result) }),
-        run,
-      );
+      await runner.hold(itemRef, null, "attention", describe(result, agent), run);
     await runner.endRun(
       run,
       result.status === "lost" || result.status === "stopped" ? result.status : "failed",
-      describe(result),
+      describe(result, agent),
     );
     return { plan: null };
   }
@@ -203,7 +197,7 @@ async function draftPlan(
   }
   if (proposed === null || issues.length > 0) {
     if (round < draftRounds) {
-      await runner.endRun(run, "failed", "kozod refused the plan draft");
+      await runner.endRun(run, "failed", message("run.draft-refused"));
       return { refused: issues };
     }
     await runner.hold(
@@ -213,7 +207,7 @@ async function draftPlan(
       message("hold.draft-refused", { issues: issues.join("; ") }),
       run,
     );
-    await runner.endRun(run, "failed", "kozod refused the plan draft");
+    await runner.endRun(run, "failed", message("run.draft-refused"));
     return { plan: null };
   }
   await runner.store.append({ ...envelope, type: "plan.proposed", data: { plan: proposed } });
@@ -240,14 +234,12 @@ async function afterTriage(
     return;
   }
   const why =
-    approvals === "always"
-      ? "the request has no trusted requester, so its plan always needs an approval"
-      : `the plan needs an approval at ${level}`;
+    approvals === "always" ? message("stage.plan-always") : message("stage.plan-level", { level });
   await move(
     runner.store,
     { item: itemRef, task: null },
     "planning",
-    feature ? `${why}; the plan agent first works out its acceptance criteria with the owner` : why,
+    feature ? message("stage.plan-feature", { why }) : why,
     { from: "triage" },
   );
   // A feature's plan agent runs from Planning without a hold, and its plan then waits.

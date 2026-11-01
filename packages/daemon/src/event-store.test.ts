@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { cp, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { kozoHome, runFiles, StateError, sha256 } from "@kozo/core";
+import { kozoHome, message, runFiles, StateError, sha256 } from "@kozo/core";
 import { recordedLogs, tempDirectory } from "@kozo/testing";
 import { EventLogError, EventStore } from "./event-store.ts";
 import { lastFailure, lastHandoff, pullsOf } from "./queries.ts";
@@ -34,7 +34,13 @@ describe("EventStore", () => {
     await store.append({
       type: "stage.changed",
       item: "K-1",
-      data: { target: "item", from: "intake", to: "triage", by: "kozod", reason: "test" },
+      data: {
+        target: "item",
+        from: "intake",
+        to: "triage",
+        by: "kozod",
+        reason: message("text", { text: "test" }),
+      },
     });
     await store.append({
       type: "run.started",
@@ -88,7 +94,13 @@ describe("EventStore", () => {
       store.append({
         type: "stage.changed",
         item: "K-1",
-        data: { target: "item", from: "intake", to: "planning", by: "kozod", reason: "test" },
+        data: {
+          target: "item",
+          from: "intake",
+          to: "planning",
+          by: "kozod",
+          reason: message("text", { text: "test" }),
+        },
       }),
     ).rejects.toThrow(StateError);
     await expect(store.append({ ...created, item: "nope" } as never)).rejects.toThrow();
@@ -97,7 +109,13 @@ describe("EventStore", () => {
     await store.append({
       type: "stage.changed",
       item: "K-1",
-      data: { target: "item", from: "intake", to: "triage", by: "kozod", reason: "test" },
+      data: {
+        target: "item",
+        from: "intake",
+        to: "triage",
+        by: "kozod",
+        reason: message("text", { text: "test" }),
+      },
     });
     expect((await lines(home.eventsLog)).map((event) => event.seq)).toEqual([0, 1, 2]);
     store.close();

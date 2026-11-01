@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { kozoHome, runFiles } from "@kozo/core";
+import { kozoHome, message, runFiles } from "@kozo/core";
 import { tempDirectory } from "@kozo/testing";
 import { EventStore } from "./event-store.ts";
 import { pruneRecords } from "./prune.ts";
@@ -24,7 +24,13 @@ async function factory(dir: string) {
     await store.append({
       type: "stage.changed",
       item,
-      data: { target: "item", from: "intake", to: "triage", by: "kozod", reason: "test" },
+      data: {
+        target: "item",
+        from: "intake",
+        to: "triage",
+        by: "kozod",
+        reason: message("text", { text: "test" }),
+      },
     });
     const run = item === "K-1" ? "r-0001" : "r-0002";
     await store.append({
@@ -59,7 +65,13 @@ async function factory(dir: string) {
   await store.append({
     type: "stage.changed",
     item: "K-1",
-    data: { target: "item", from: "triage", to: "complete", by: "human", reason: "test" },
+    data: {
+      target: "item",
+      from: "triage",
+      to: "complete",
+      by: "human",
+      reason: message("text", { text: "test" }),
+    },
   });
   return { home, store };
 }
