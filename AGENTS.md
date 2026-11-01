@@ -32,6 +32,7 @@ entries and commits are linked by IDs such as `T-012` and `D-003`.
 | File | Contents | In git |
 | --- | --- | --- |
 | `README.md` | Overview for users | yes |
+| `site/` | User documentation, each page in English and in Japanese | yes |
 | `AGENTS.md` | Instructions for coding agents | yes |
 | `docs/glossary.md` | Terms and their names in code | yes |
 | `docs/decisions.md` | Decisions (`D-NNN`) | no, maintainer-local |
@@ -77,6 +78,17 @@ entries and commits are linked by IDs such as `T-012` and `D-003`.
   code and ledgers in the same commit. A rename that reaches a public API or
   the data model needs a line in `docs/decisions.md` first.
 - Follow the format rules at the top of the glossary.
+
+### User documentation
+
+- A change to a command, a flag, a configuration key, an environment variable
+  or what the dashboard shows changes its pages in `site/src/content/docs/` in
+  the same commit, the English page and its Japanese page together.
+- Every English page has a Japanese page at the same path under `ja/`.
+- Write the Japanese pages as natural Japanese, translating the meaning rather
+  than the English sentence structure. Keep glossary terms, commands, keys and
+  paths in their English or code form, and put no ASCII space between Japanese
+  words.
 
 ### Commit messages
 
@@ -185,13 +197,23 @@ bun run compile       # dist/kozo and dist/kozod for the current platform
 bun packages/dashboard/preview.ts  # the dashboard against fictional data
 ```
 
+The documentation site in `site/` is an npm package of its own on Node 22.23.4
+or later. Its `.npmrc` keeps registry URLs out of `site/package-lock.json`.
+
+```sh
+npm --prefix site ci
+npm --prefix site run dev           # serve the site locally
+npm --prefix site run build         # astro check and the static build
+npm --prefix site run format:check  # Prettier; `format` fixes it
+```
+
 ## Releases and external actions
 
 - Add a changeset (`bunx changeset`) for every user-visible change. All
   `@kozo/*` packages share one version through a fixed group.
 - Releases come only from GitHub Actions: merging the version pull request
   bumps the version, and a matching `v<version>` tag publishes the GitHub
-  Release. Never build or publish release artifacts from a laptop.
+  Release and the documentation site. Never build or publish release artifacts from a laptop.
 - Pushes, pull requests, issues, tags, releases, publication and other changes
   to external services require explicit authorization in the task. Permission
   to implement or commit locally does not authorize them.
