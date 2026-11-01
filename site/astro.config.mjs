@@ -41,7 +41,18 @@ export default defineConfig({
         {
           label: 'Reference',
           translations: { ja: 'リファレンス' },
-          items: [{ label: 'CLI', slug: 'cli' }],
+          items: [
+            { label: 'CLI', slug: 'cli' },
+            {
+              label: 'Factory definition',
+              translations: { ja: 'factory definition' },
+              slug: 'factory-definition',
+            },
+            { label: 'Charter', slug: 'charter' },
+            { label: 'Constraints', translations: { ja: 'constraints' }, slug: 'constraints' },
+            { label: 'Security model', translations: { ja: '安全の仕組み' }, slug: 'security' },
+            { label: 'Architecture', translations: { ja: 'アーキテクチャ' }, slug: 'architecture' },
+          ],
         },
       ],
     }),
