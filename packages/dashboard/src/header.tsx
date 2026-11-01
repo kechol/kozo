@@ -13,7 +13,6 @@ export function Header({ api, page }: { api: Api; page: string }) {
   return (
     <header class="appbar">
       <a class="brand" href="#/">
-        <span class="brand-mark" aria-hidden="true" />
         kozo
       </a>
       <nav class="tabs" aria-label={t("nav.views")}>

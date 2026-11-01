@@ -71,7 +71,6 @@
   --on-primary: light-dark(#ffffff, #ffffff);
   --primary-hover: light-dark(#264fa7, #335eb7);
   --accent: light-dark(#3d6cce, #79a3f6);
-  --brand: light-dark(#1c1a19, #ecebe9);
   --secondary-bg: light-dark(#e4efff, #1d2d4c);
   --secondary-fg: light-dark(#2b55ae, #afcbff);
   --secondary-hover: light-dark(#d5e5ff, #24375c);
@@ -465,19 +464,9 @@ select:focus-visible {
 }
 
 .brand {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
   color: var(--text);
   font-weight: var(--weight-strong);
   text-decoration: none;
-}
-
-.brand-mark {
-  width: 14px;
-  height: 14px;
-  border-radius: var(--radius-sm);
-  background: var(--brand);
 }
 
 .tabs {
