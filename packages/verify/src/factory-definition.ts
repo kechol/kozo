@@ -26,6 +26,7 @@ export const builtInFactory: Factory = {
   version: 1,
   mode: "local",
   runtime: "sdk",
+  locale: "en",
   repositories: [],
   agent_defaults: { model: "claude-sonnet-5-5" },
   concurrency: 1,

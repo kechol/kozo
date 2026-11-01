@@ -59,7 +59,8 @@ kozod notifies you through the operating system when you must act:
 - kozod lowered a class's autonomy level.
 
 macOS shows them in Notification Center; Linux shows them through `notify-send` when it is
-installed. Set `KOZO_NOTIFY=off` in kozod's environment to turn them off.
+installed. They are in the language that `locale` in `factory.yml` sets. Set `KOZO_NOTIFY=off`
+in kozod's environment to turn them off.
 
 ## The budget
 

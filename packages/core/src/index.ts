@@ -14,6 +14,7 @@ export * from "./factory.ts";
 export * from "./factory-template.ts";
 export * from "./github.ts";
 export * from "./home.ts";
+export * from "./message.ts";
 export * from "./plan.ts";
 export * from "./reference.ts";
 export * from "./repository-template.ts";

@@ -4,15 +4,15 @@ import { tempDirectory } from "@kozo/testing";
 import { EventStore } from "./event-store.ts";
 import { Notifier, osNotify } from "./notifier.ts";
 
-const factory = { budget: { daily_usd: 10 } } as Factory;
+const factory = { locale: "en", budget: { daily_usd: 10 } } as Factory;
 
-async function setup(now: () => Date = () => new Date()) {
+async function setup(now: () => Date = () => new Date(), locale: Factory["locale"] = "en") {
   const dir = await tempDirectory();
   const store = await EventStore.open(kozoHome(dir.path));
   const sent: string[] = [];
   const notifier = new Notifier(
     store,
-    () => factory,
+    () => ({ ...factory, locale }),
     async (_title, body) => {
       sent.push(body);
     },
@@ -82,6 +82,30 @@ describe("Notifier", () => {
       "K-1 waits for your approval: start approval",
       "the factory paused: three sessions in a row failed on the API",
       "kozod refused the factory definition: factory.yml: concurrency: Expected int",
+    ]);
+  });
+
+  test("speaks the factory's locale", async () => {
+    await using env = await setup(undefined, "ja");
+    await env.store.append({
+      type: "hold.set",
+      item: "K-1",
+      data: {
+        target: "item",
+        hold: "approval",
+        by: "kozod",
+        reason: "start approval",
+        approval: "start",
+      },
+    });
+    await env.store.append({
+      type: "factory.changed",
+      data: { paused: true, reason: "three sessions in a row failed on the API" },
+    });
+    await env.notifier.settled();
+    expect(env.sent).toEqual([
+      "K-1 があなたの承認を待っています（start approval）",
+      "ファクトリーが止まりました（three sessions in a row failed on the API）",
     ]);
   });
 

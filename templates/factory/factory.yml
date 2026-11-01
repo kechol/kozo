@@ -4,6 +4,8 @@ version: 1
 mode: local
 # How agents run your own claude: sdk through the Agent SDK, or cli as `claude -p`.
 runtime: sdk
+# The language of kozo's messages: en or ja.
+locale: en
 # The repositories kozo works in, each a local clone; add one before `kozo add`. In GitHub mode
 # each also names its GitHub repository, and an optional label takes only the Issues that carry it:
 #   - { path: ~/src/shop, github: me/shop, label: kozo }

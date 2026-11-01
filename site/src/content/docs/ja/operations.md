@@ -52,7 +52,7 @@ kozo と kozod は、環境から次の変数を読みます。`kozo up` は自�
 - kozod が新しい factory definition を拒んだ。
 - kozod が class の自律度を下げた。
 
-macOS では通知センターに、Linux では `notify-send` があればそれで表示します。止めるには、kozod の環境で `KOZO_NOTIFY=off` を設定します。
+macOS では通知センターに、Linux では `notify-send` があればそれで表示します。通知の言語は、`factory.yml` の `locale` で決まります。止めるには、kozod の環境で `KOZO_NOTIFY=off` を設定します。
 
 ## 予算
 

@@ -266,7 +266,8 @@ export class Daemon {
     const notifier = new Notifier(store, () => definition.current.factory, notify);
     notifier.start();
     // The refusal was recorded before the notifier followed the log, so it is told here.
-    if (atStart.refusal?.recorded) void notify("kozo", refusalNotice(atStart.refusal.issues));
+    if (atStart.refusal?.recorded)
+      void notify("kozo", refusalNotice(atStart.refusal.issues, definition.current.factory.locale));
     const remind = () =>
       void notifier
         .remind()

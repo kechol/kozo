@@ -39,6 +39,7 @@ and an object you write replaces the default object as a whole.
 | `version`               | `1`                 | The format version. Always `1`.                                                                                                                |
 | `mode`                  | `local`             | `local` or `github`; see [GitHub mode](../github-mode/). kozod applies a change of mode only when it starts again.                             |
 | `runtime`               | `sdk`               | How agents run your `claude`: `sdk` through the Agent SDK, or `cli` as `claude -p`. Review and verify always use the Agent SDK.                |
+| `locale`                | `en`                | The language of kozo's notifications: `en` or `ja`. It applies without restarting kozod.                                                       |
 | `repositories`          | `[]`                | The local clones kozo works in.                                                                                                                |
 | `repositories[].path`   |                     | The clone's path; `~` is expanded.                                                                                                             |
 | `repositories[].github` |                     | In GitHub mode, `<owner>/<name>`. Required there, and two repositories may not share a name.                                                   |
@@ -53,6 +54,7 @@ and an object you write replaces the default object as a whole.
 version: 1
 mode: local
 runtime: sdk
+locale: en
 repositories:
   - { path: ~/src/shop }
 agent_defaults:

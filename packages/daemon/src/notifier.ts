@@ -1,10 +1,18 @@
-import type { Event, Factory, FactoryState, Hold } from "@kozo/core";
+import {
+  type Event,
+  type Factory,
+  type FactoryState,
+  type Locale,
+  type Message,
+  message,
+  render,
+} from "@kozo/core";
 import type { EventStore } from "./event-store.ts";
 import { costToday, midnightOf } from "./queries.ts";
 
 /** The notification for a factory definition kozod refused. */
-export function refusalNotice(issues: readonly string[]): string {
-  return `kozod refused the factory definition: ${issues.join("; ")}`;
+export function refusalNotice(issues: readonly string[], locale: Locale): string {
+  return render(message("notice.refused", { issues: issues.join("; ") }), locale);
 }
 
 /** Shows one notification; it never throws, since a missed notification stops nothing. */
@@ -44,7 +52,6 @@ export function osNotify(env: Record<string, string | undefined> = process.env):
   };
 }
 
-const notifiedHolds: readonly Hold["kind"][] = ["approval", "question", "attention"];
 const budgetShares = [0.5, 0.8, 1] as const;
 const reminderMs = 2 * 24 * 60 * 60 * 1000;
 const reminders = 3;
@@ -99,27 +106,41 @@ export class Notifier {
   }
 
   private async follow(event: Event) {
-    const send = (body: string) => this.notify("kozo", body.slice(0, 240));
+    const send = (body: Message) => this.send(body);
     switch (event.type) {
       case "handoff.ready":
-        await send(`${event.task} is ready for you to review and merge`);
+        await send(message("notice.ready", { task: event.task ?? "" }));
         break;
-      case "hold.set":
-        if (event.data.by === "kozod" && notifiedHolds.includes(event.data.hold))
+      case "hold.set": {
+        const hold = event.data.hold;
+        if (
+          event.data.by === "kozod" &&
+          (hold === "approval" || hold === "question" || hold === "attention")
+        )
           await send(
-            `${event.task ?? event.item} waits for your ${event.data.hold}: ${event.data.reason}`,
+            message(`notice.held.${hold}`, {
+              subject: event.task ?? event.item ?? "",
+              reason: event.data.reason,
+            }),
           );
         break;
+      }
       case "factory.changed":
         if (event.data.paused === true && event.api_call === null)
-          await send(`the factory paused: ${event.data.reason}`);
+          await send(message("notice.paused", { reason: event.data.reason }));
         break;
       case "factory.refused":
-        await send(refusalNotice(event.data.issues));
+        await send(message("notice.refused", { issues: event.data.issues.join("; ") }));
         break;
       case "factory.demoted":
         await send(
-          `kozod lowered ${event.data.class} in ${event.data.repository} from ${event.data.from} to ${event.data.to}: ${event.data.reason}; editing the Charter ends it`,
+          message("notice.demoted", {
+            class: event.data.class,
+            repository: event.data.repository,
+            from: event.data.from,
+            to: event.data.to,
+            reason: event.data.reason,
+          }),
         );
         break;
     }
@@ -127,7 +148,12 @@ export class Notifier {
     if (usd > 0) await this.followSpending(usd, send);
   }
 
-  private async followSpending(usd: number, send: (body: string) => Promise<void>) {
+  /** Shows `body` in the factory's locale, cut to what a notification holds. */
+  private send(body: Message) {
+    return this.notify("kozo", render(body, this.factory().locale).slice(0, 240));
+  }
+
+  private async followSpending(usd: number, send: (body: Message) => Promise<void>) {
     const since = midnightOf(this.now()).getTime();
     if (since !== this.budget.since) this.budget = { since, spent: 0, told: 0 };
     this.budget.spent += usd;
@@ -138,8 +164,8 @@ export class Notifier {
     if (crossed === undefined) return;
     await send(
       crossed === 1
-        ? `the daily budget of ${budget} USD is spent; nothing new starts until midnight`
-        : `kozo has spent ${Math.round(crossed * 100)} percent of the daily budget of ${budget} USD`,
+        ? message("notice.budget-spent", { budget })
+        : message("notice.budget-share", { budget, percent: Math.round(crossed * 100) }),
     );
   }
 
@@ -159,12 +185,12 @@ export class Notifier {
       const due = Math.min(reminders, Math.floor((now - Date.parse(since)) / reminderMs));
       if (due <= (this.reminded.get(key) ?? 0)) continue;
       this.reminded.set(key, due);
-      await this.notify(
-        "kozo",
-        `${subject.ref} has waited ${due * 2} days for your approval: ${subject.hold?.reason ?? ""}`.slice(
-          0,
-          240,
-        ),
+      await this.send(
+        message("notice.reminder", {
+          subject: subject.ref,
+          days: due * 2,
+          reason: subject.hold?.reason ?? "",
+        }),
       );
     }
   }

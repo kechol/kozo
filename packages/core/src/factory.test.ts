@@ -4,6 +4,7 @@ import { parseFactory } from "./factory.ts";
 const example = `version: 1
 mode: github
 runtime: sdk
+locale: en
 repositories:
   - { path: ~/src/app, github: me/app }
   - { path: ~/src/site, github: me/site }
@@ -30,6 +31,11 @@ describe("parseFactory", () => {
   test("runtime is sdk or cli", () => {
     expect(parseFactory(example.replace("runtime: sdk", "runtime: cli")).ok).toBe(true);
     expect(issuesOf(example.replace("runtime: sdk", "runtime: api"))[0]).toStartWith("runtime:");
+  });
+
+  test("locale is en or ja", () => {
+    expect(parseFactory(example.replace("locale: en", "locale: ja")).ok).toBe(true);
+    expect(issuesOf(example.replace("locale: en", "locale: fr"))[0]).toStartWith("locale:");
   });
 
   test("a missing field, an unknown field and a wrong version are issues", () => {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type ParseResult, parseYamlDocument } from "./document.ts";
+import { localeSchema } from "./message.ts";
 import { agentNameSchema } from "./work-model.ts";
 
 const githubRepository = z.string().regex(/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/, "Use <owner>/<name>");
@@ -24,6 +25,7 @@ export const factorySchema = z
     version: z.literal(1),
     mode: z.enum(["local", "github"]),
     runtime: z.enum(["sdk", "cli"]),
+    locale: localeSchema,
     repositories: z.array(repositorySchema),
     agent_defaults: agentSettings,
     agents: z.partialRecord(agentNameSchema, agentSettings).optional(),
