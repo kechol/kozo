@@ -14,7 +14,7 @@ import {
 import { Icon } from "./icons.tsx";
 import { Loading, Placeholder, Unread } from "./placeholder.tsx";
 import { items, loaded, problem, run, status, tasks } from "./store.ts";
-import { t } from "./words.ts";
+import { stageName, t } from "./words.ts";
 
 /**
  * Whether the board shows items or tasks: the viewer's choice, kept in this browser and in the
@@ -106,7 +106,7 @@ export function Board({ api, asked }: { api: Api; asked?: BoardView }) {
             const column = cards.map((card) => card.ref);
             const head = (
               <h2>
-                {stage} {ready ? <span class="column-count">{cards.length}</span> : null}
+                {stageName(stage)} {ready ? <span class="column-count">{cards.length}</span> : null}
               </h2>
             );
             const list = shown.map((card, index) =>
@@ -148,7 +148,7 @@ export function Board({ api, asked }: { api: Api; asked?: BoardView }) {
                 ) : null}
               </details>
             ) : (
-              <section key={stage} class="column" aria-label={stage}>
+              <section key={stage} class="column" aria-label={stageName(stage)}>
                 {head}
                 {body}
               </section>

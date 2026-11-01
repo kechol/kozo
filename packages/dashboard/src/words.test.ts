@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ago, eventLine, titleOf, usd } from "./format.ts";
-import { en, fill, ja, say } from "./words.ts";
+import { en, fill, ja, locale, say, stageName } from "./words.ts";
 
 /** The names of the values a sentence takes, in order of first appearance. */
 const names = (sentence: string) => [
@@ -64,6 +64,14 @@ describe("format in Japanese", () => {
     expect(ago("2026-10-21T09:00:00Z", now, "ja")).toBe("2 日前");
     expect(usd(3.4, "en")).toBe("$3.40");
     expect(usd(3.4, "ja")).toBe("$3.40");
-    expect(titleOf({ page: "board" }, 2, "ja")).toBe("(2) Board · kozo");
+    expect(titleOf({ page: "board" }, 2, "ja")).toBe("(2) ボード · kozo");
+  });
+
+  test("stages read in the locale, and a stage kozod does not name stays as it came", () => {
+    locale.value = "ja";
+    expect(stageName("reviewing")).toBe("レビュー");
+    expect(stageName("unknown")).toBe("unknown");
+    locale.value = "en";
+    expect(stageName("reviewing")).toBe("reviewing");
   });
 });

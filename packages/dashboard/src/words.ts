@@ -120,6 +120,14 @@ export const en = {
   "board.items": "Items",
   "board.tasks": "Tasks",
   "board.stages": "Stages",
+  "stage.intake": "intake",
+  "stage.triage": "triage",
+  "stage.planning": "planning",
+  "stage.building": "building",
+  "stage.reviewing": "reviewing",
+  "stage.handoff": "handoff",
+  "stage.complete": "complete",
+  "stage.cancelled": "cancelled",
   "board.older": "and {n} older",
   "board.in": " in {repository}",
   "board.autonomy": "Autonomy level",
@@ -204,8 +212,8 @@ export type Word = keyof typeof en;
 /** The Japanese of every word, in the style of the Japanese documentation. */
 export const ja: Record<Word, string> = {
   "nav.views": "画面",
-  "nav.inbox": "Inbox",
-  "nav.board": "Board",
+  "nav.inbox": "インボックス",
+  "nav.board": "ボード",
   "nav.waiting": " 件待ち",
 
   "factory.label": "ファクトリー",
@@ -254,7 +262,7 @@ export const ja: Record<Word, string> = {
   "hold.plan": "計画の承認",
   "hold.approval": "承認",
   "hold.question": "質問",
-  "hold.attention": "attention",
+  "hold.attention": "要対応",
   "hold.merge": "マージ待ち",
 
   "ago.now": "たった今",
@@ -304,9 +312,17 @@ export const ja: Record<Word, string> = {
   "action.giveBackHint": "変更した内容と、確認したこと",
 
   "board.show": "表示",
-  "board.items": "Items",
-  "board.tasks": "Tasks",
+  "board.items": "item",
+  "board.tasks": "タスク",
   "board.stages": "stage",
+  "stage.intake": "受付",
+  "stage.triage": "トリアージ",
+  "stage.planning": "計画",
+  "stage.building": "実装",
+  "stage.reviewing": "レビュー",
+  "stage.handoff": "引き渡し",
+  "stage.complete": "完了",
+  "stage.cancelled": "取り消し",
   "board.older": "さらに古い {n} 件",
   "board.in": "（{repository}）",
   "board.autonomy": "自律度",
@@ -425,4 +441,21 @@ export function tx<Key extends Word>(
   ...values: Values<Key, ComponentChildren>
 ): ComponentChildren[] {
   return fill<ComponentChildren>(catalogs[locale.value][key], values[0] ?? {});
+}
+
+const stageWords: Record<string, Word> = {
+  intake: "stage.intake",
+  triage: "stage.triage",
+  planning: "stage.planning",
+  building: "stage.building",
+  reviewing: "stage.reviewing",
+  handoff: "stage.handoff",
+  complete: "stage.complete",
+  cancelled: "stage.cancelled",
+};
+
+/** A stage as people read it in the current locale; one kozod does not name stays as it came. */
+export function stageName(stage: string): string {
+  const word = stageWords[stage];
+  return word ? t(word as "stage.intake") : stage;
 }

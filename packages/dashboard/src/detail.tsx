@@ -18,7 +18,7 @@ import { Loading, Placeholder } from "./placeholder.tsx";
 import { items, notify } from "./store.ts";
 import { Time } from "./time.tsx";
 import { toneOf } from "./tone.ts";
-import { t, tx } from "./words.ts";
+import { stageName, t, tx } from "./words.ts";
 
 type Row = Record<string, unknown>;
 
@@ -230,7 +230,9 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
           )}
         </h1>
         <div class="row">
-          <Badge tone={toneOf(kind === "run" ? "run" : "stage", stage)}>{stage}</Badge>
+          <Badge tone={toneOf(kind === "run" ? "run" : "stage", stage)}>
+            {kind === "run" ? stage : stageName(stage)}
+          </Badge>
           {hold ? <HoldBadge hold={hold} approval={approval} /> : null}
           {awaitingMerge ? <HoldBadge hold="merge" /> : null}
         </div>
@@ -522,10 +524,10 @@ function ItemBody({
                   {text(task.goal)}
                 </a>
                 <span class="ref">{text(task.ref)}</span>
-                <Badge tone={toneOf("stage", text(task.stage))}>{text(task.stage)}</Badge>
-                {task.hold ? (
-                  <Badge tone={toneOf("hold", text(task.hold))}>{text(task.hold)}</Badge>
-                ) : null}
+                <Badge tone={toneOf("stage", text(task.stage))}>
+                  {stageName(text(task.stage))}
+                </Badge>
+                {task.hold ? <HoldBadge hold={text(task.hold)} /> : null}
               </li>
             ))}
           </ul>
