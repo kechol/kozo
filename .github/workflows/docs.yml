@@ -1,7 +1,7 @@
 name: Docs
 
-# Pull requests and pushes to main build the site; a v<version> tag publishes it, so the
-# published pages always describe a release.
+# Pull requests and pushes to main that touch the site build it; a v<version> tag publishes it,
+# so the published pages always describe a release. GitHub does not apply paths to tag pushes.
 on:
   pull_request:
     paths:
@@ -10,14 +10,17 @@ on:
   push:
     branches: [main]
     tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+    paths:
+      - "site/**"
+      - ".github/workflows/docs.yml"
 
 permissions:
   contents: read
 
-# One Pages deployment at a time; cancelling one mid-publish can leave the site half replaced.
+# A newer push to a pull request replaces its build; the deploy job keeps its own group.
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('docs-pr-{0}', github.event.pull_request.number) || 'pages' }}
-  cancel-in-progress: false
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -48,6 +51,10 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
+    # One Pages deployment at a time; cancelling one mid-publish can leave the site half replaced.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write

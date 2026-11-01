@@ -19,39 +19,28 @@ export default defineConfig({
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/kechol/kozo' }],
       editLink: { baseUrl: 'https://github.com/kechol/kozo/edit/main/site/' },
       expressiveCode: { defaultProps: { frame: 'code' } },
+      // Each item takes its label from its page's title, in either language.
       sidebar: [
         {
           label: 'Start Here',
           translations: { ja: 'はじめに' },
-          items: [
-            { label: 'Quick Start', translations: { ja: 'クイックスタート' }, slug: 'quick-start' },
-            { label: 'Concept', translations: { ja: 'コンセプト' }, slug: 'concept' },
-            { label: 'Installation', translations: { ja: 'インストール' }, slug: 'installation' },
-          ],
+          items: [{ slug: 'quick-start' }, { slug: 'concept' }, { slug: 'installation' }],
         },
         {
           label: 'Guides',
           translations: { ja: 'ガイド' },
-          items: [
-            { label: 'GitHub mode', translations: { ja: 'GitHub モード' }, slug: 'github-mode' },
-            { label: 'Dashboard', translations: { ja: 'ダッシュボード' }, slug: 'dashboard' },
-            { label: 'Operating kozo', translations: { ja: '運用' }, slug: 'operations' },
-          ],
+          items: [{ slug: 'github-mode' }, { slug: 'dashboard' }, { slug: 'operations' }],
         },
         {
           label: 'Reference',
           translations: { ja: 'リファレンス' },
           items: [
-            { label: 'CLI', slug: 'cli' },
-            {
-              label: 'Factory definition',
-              translations: { ja: 'factory definition' },
-              slug: 'factory-definition',
-            },
-            { label: 'Charter', slug: 'charter' },
-            { label: 'Constraints', translations: { ja: 'constraints' }, slug: 'constraints' },
-            { label: 'Security model', translations: { ja: '安全の仕組み' }, slug: 'security' },
-            { label: 'Architecture', translations: { ja: 'アーキテクチャ' }, slug: 'architecture' },
+            { slug: 'cli' },
+            { slug: 'factory-definition' },
+            { slug: 'charter' },
+            { slug: 'constraints' },
+            { slug: 'security' },
+            { slug: 'architecture' },
           ],
         },
       ],

@@ -197,13 +197,14 @@ bun run compile       # dist/kozo and dist/kozod for the current platform
 bun packages/dashboard/preview.ts  # the dashboard against fictional data
 ```
 
-The documentation site in `site/` is an npm package of its own on Node 22.23.4
-or later. Its `.npmrc` keeps registry URLs out of `site/package-lock.json`.
+The documentation site in `site/` is an npm package of its own, on a Node
+version Astro supports (CI uses Node 24). Its `.npmrc` keeps registry URLs out of
+`site/package-lock.json`.
 
 ```sh
 npm --prefix site ci
 npm --prefix site run dev           # serve the site locally
-npm --prefix site run build         # astro check and the static build
+npm --prefix site run build         # the static build, which checks each page's front matter
 npm --prefix site run format:check  # Prettier; `format` fixes it
 ```
 

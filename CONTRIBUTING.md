@@ -44,9 +44,9 @@ bun run compile       # dist/kozo and dist/kozod
 Commit `bun.lock` without registry URLs. If a local registry mirror writes its
 URL into the lockfile, replace the URL with `""` before committing.
 
-The documentation site in `site/` is an npm package of its own and needs Node
-22.23.4 or later. Run its checks when you change it, and change the English
-page and its Japanese page under `ja/` together:
+The documentation site in `site/` is an npm package of its own and needs a Node
+version Astro supports; CI uses Node 24. Run its checks when you change it, and
+change the English page and its Japanese page under `ja/` together:
 
 ```sh
 npm --prefix site ci
