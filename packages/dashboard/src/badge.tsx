@@ -24,7 +24,13 @@ export function Badge({
 /** What a hold, or a task awaiting merge, is called wherever it shows, by its approval when it has one. */
 const holdLabel: Record<
   string,
-  "hold.start" | "hold.plan" | "hold.approval" | "hold.question" | "hold.attention" | "hold.merge"
+  | "hold.start"
+  | "hold.plan"
+  | "hold.approval"
+  | "hold.question"
+  | "hold.attention"
+  | "hold.merge"
+  | "hold.taken"
 > = {
   start: "hold.start",
   plan: "hold.plan",
@@ -32,6 +38,7 @@ const holdLabel: Record<
   question: "hold.question",
   attention: "hold.attention",
   merge: "hold.merge",
+  taken: "hold.taken",
 };
 
 /** Glyphs closer to what waits than its tone's own. */

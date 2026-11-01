@@ -69,6 +69,7 @@ export const en = {
   "hold.question": "Question",
   "hold.attention": "Attention",
   "hold.merge": "Ready to merge",
+  "hold.taken": "Taken over",
 
   "ago.now": "just now",
   "ago.min": "{n} min ago",
@@ -264,6 +265,7 @@ export const ja: Record<Word, string> = {
   "hold.question": "質問",
   "hold.attention": "要対応",
   "hold.merge": "マージ待ち",
+  "hold.taken": "自分で作業中",
 
   "ago.now": "たった今",
   "ago.min": "{n} 分前",
@@ -295,7 +297,7 @@ export const ja: Record<Word, string> = {
     "run は止まり、worktree は削除されます。完了として閉じ、閉じたままになります。",
   "action.retry": "やり直す",
   "action.retryHint": "変えてほしい点",
-  "action.take": "引き取る",
+  "action.take": "自分で作業する",
   "action.approvePlan": "計画を承認",
   "action.approvePlanHint": "run に伝えておくこと",
   "action.rejectPlan": "計画を差し戻す",

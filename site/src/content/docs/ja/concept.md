@@ -54,7 +54,7 @@ item と task は同じ stage を進みます。
 | question   | エージェントが質問したか、review が判断を人に回したか、変更が保護されたパスに触れます。   | `kozo say <ref> <answer>`                                                |
 | attention  | タスクが上限で止まったか、kozod が run を見失ったか、ブランチがマージされずに消えました。 | `kozo retry <ref>` か `kozo close`                                       |
 | paused     | あなたが `kozo pause <ref>` で止めました。                                                | `kozo resume <ref>`                                                      |
-| taken      | あなたが `kozo take <task>` でタスクを引き取りました。                                    | 作業をコミットしてから `kozo return <task> <text>`                       |
+| taken      | あなたが `kozo take <task>` で、タスクを自分で作業しています。                            | 作業をコミットしてから `kozo return <task> <text>`                       |
 | dependency | ほかの item か task の完了を待っています。                                                | それが完了すると、kozod が外します                                       |
 | capacity   | backpressure、1 日の予算、同時実行数のせいで始められません。                              | 余裕ができると、kozod が外します                                         |
 

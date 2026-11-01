@@ -249,18 +249,19 @@ export const ja: { readonly [Code in keyof typeof en]: string } = {
   "api.held-until": "{ref} には {hold} の hold があり、それが外れるまで動きません",
   "api.paused-stopped": "{ref} を止め、{run} を停止しました",
   "api.paused": "{ref} を止めました。次のノードで止まります",
-  "api.yours": "{ref} はあなたが引き取っています。kozo return で返します",
+  "api.yours": "{ref} はあなたが自分で作業しています。kozo return で kozo に返します",
   "api.not-paused": "{ref} は止まっていません",
   "api.resumed": "{ref} を再開しました",
   "api.held": "{ref} には {hold} の hold があります",
   "api.retry-building": "{ref} を、修正の回数を戻して Building からやり直します",
   "api.retry-checkpoint": "{ref} を最後のチェックポイントからやり直します",
   "api.retry-plan": "{ref} を計画からやり直します",
-  "api.already-yours": "{ref} はすでにあなたが引き取っています",
+  "api.already-yours": "{ref} はすでにあなたが自分で作業しています",
   "api.no-worktree": "{ref} にはまだ worktree がありません。最初の run が作ります",
   "api.taken":
-    "{ref} を引き取りました。{worktree} の {branch} にコミットしてから、kozo return {ref} <変えたことと確かめたこと> を実行してください",
-  "api.not-taken": "{ref} は引き取られていません。kozo take で引き取れます",
+    "kozo は {ref} の作業を止めました。{worktree} の {branch} で自分で作業してコミットしてから、kozo return {ref} <変えたことと確かめたこと> を実行してください",
+  "api.not-taken":
+    "{ref} はあなたが自分で作業しているタスクではありません。kozo take で自分で作業できます",
   "api.uncommitted": "{worktree} にコミットしていない変更があります。先にコミットしてください",
   "api.wrong-branch": "{worktree} が {branch} にありません。先に戻してください",
   "api.returned": "{ref} を返しました。あなたのコミットに対して確認を実行します",
@@ -347,9 +348,9 @@ export const ja: { readonly [Code in keyof typeof en]: string } = {
   reorder <item> [--before <item>]
       kozod が作業を始める順で、item を別の item の前、または最後に移します
   issue <item>              GitHub モードで、タスクのない ローカルの item を
-      リポジトリの Issue に移します。以降は kozod が引き取ります
-  take <task>               タスクを引き取り、その worktree で作業します
-  return <task> <text>      引き取ったタスクを、作業をコミットしてから返します。
+      リポジトリの Issue に移します。以降は kozod が Issue として扱います
+  take <task>               kozo の作業を止め、タスクの worktree で自分で作業します
+  return <task> <text>      自分で作業したタスクを、コミットしてから kozo に返します。
       返すと、決定的なチェックから順に、あなたのコミットに対して実行されます
   report [--days <n>] [--review | --cost] [--json]
       直近 <n> 日（既定は 30）の指標と失敗、昇格の提案を表示します。
@@ -535,7 +536,7 @@ item の <ref> は K-<n> か <repo>#<n>、タスクは <item>/t<n>、run は r-<
   "hold-kind.question": "回答",
   "hold-kind.attention": "対応",
   "hold-kind.paused": "一時停止",
-  "hold-kind.taken": "引き取り",
+  "hold-kind.taken": "自分で作業中",
   "hold-kind.dependency": "依存先",
   "hold-kind.capacity": "空き",
   "github.status": "**kozo**: {item} は {stage} にあります。",

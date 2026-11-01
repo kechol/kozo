@@ -166,7 +166,7 @@ kozo close <ref> --cancel <reason>
 
 変更が要らなかった item や task を完了にするか、理由を付けて取り消します。タスクを取り消すと、そのブランチも消えます。
 
-## 止める・引き取る
+## 止める・自分で作業する
 
 ### `kozo pause` / `kozo resume`
 
