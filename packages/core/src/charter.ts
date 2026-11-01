@@ -23,7 +23,8 @@ const retries = z.int().nonnegative();
 export const charterSchema = z.strictObject({
   version: z.literal(1),
   status: z.enum(["ready", "incomplete"]),
-  isolation: z.enum(["worktree", "docker"]),
+  // A worktree per task is the only isolation kozo has; a value that changed nothing would mislead.
+  isolation: z.literal("worktree", { error: "Use worktree, the only isolation kozo has" }),
   protected_paths: z.array(z.string().min(1)),
   existing_tests_protected: z.boolean(),
   levels: z.strictObject({

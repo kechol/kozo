@@ -47,7 +47,7 @@ backpressure:
 
 ## `isolation`
 
-`worktree` では、各タスクが専用の git worktree で作業します。スキーマは `docker` も受け付けますが、kozo は実装しておらず、何も変わりません。
+いつも `worktree` で、各タスクが専用の git worktree で作業します。kozo の隔離の方法はこれだけで、ほかの値はエラーになります。
 
 ## `protected_paths`
 

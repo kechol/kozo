@@ -96,7 +96,7 @@ describe("readDefinition", () => {
     });
     const refused = await readDefinition(join(dir.path, "factory"), null);
     expect(refused.ok ? [] : refused.issues).toEqual([
-      expect.stringContaining("blueprints/refactor.yml: nodes: List the nodes in the order"),
+      expect.stringContaining("blueprints/refactor.yml: nodes: List every node in the order"),
     ]);
     await Bun.write(
       join(dir.path, "factory", "blueprints", "refactor.yml"),

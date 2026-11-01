@@ -47,6 +47,12 @@ describe("parseCharter", () => {
     expect(issuesOf(example.replace("deps: L2", "deps: L4"))[0]).toStartWith("levels.deps:");
   });
 
+  test("worktree is the only isolation", () => {
+    expect(issuesOf(example.replace("isolation: worktree", "isolation: docker"))).toEqual([
+      "isolation: Use worktree, the only isolation kozo has",
+    ]);
+  });
+
   test("zero retries are allowed", () => {
     expect(parseCharter(example.replace("inner_retries: 2", "inner_retries: 0")).ok).toBe(true);
   });

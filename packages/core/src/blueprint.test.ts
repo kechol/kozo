@@ -14,7 +14,7 @@ describe("parseBlueprint", () => {
     });
     const docs = parseBlueprint(factoryTemplate["blueprints/docs.yml"]);
     expect(docs).toMatchObject({ ok: true, value: { reproduce: false } });
-    expect(docs.ok && docs.value.nodes).not.toContain("verify-app");
+    expect(docs.ok && docs.value.nodes).toContain("verify-app");
     expect(parseBlueprint(factoryTemplate["blueprints/refactor.yml"])).toMatchObject({
       ok: true,
       value: { reproduce: false },
@@ -32,7 +32,7 @@ describe("parseBlueprint", () => {
     expect(feature.ok && feature.value.nodes).toContain("verify-app");
   });
 
-  test("refuses nodes out of order or a required node left out, and allows leaving out verify-app", () => {
+  test("refuses nodes out of order or any node left out, verify-app included", () => {
     const of = (nodes: string[]) =>
       parseBlueprint(`version: 1\nreproduce: true\nnodes: [${nodes.join(", ")}]\n`).ok;
     const all = [
@@ -47,7 +47,7 @@ describe("parseBlueprint", () => {
       "final-verify",
     ];
     expect(of(all)).toBe(true);
-    expect(of(all.filter((node) => node !== "verify-app"))).toBe(true);
+    expect(of(all.filter((node) => node !== "verify-app"))).toBe(false);
     expect(of(all.filter((node) => node !== "review"))).toBe(false);
     expect(of([...all.slice(1), "claim"])).toBe(false);
   });

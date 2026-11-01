@@ -50,8 +50,8 @@ The values above are the template's.
 
 ## `isolation`
 
-`worktree`: each task works in its own git worktree. The schema also accepts `docker`, which
-kozo does not implement and which changes nothing.
+Always `worktree`: each task works in its own git worktree. It is the only isolation kozo has,
+and any other value is an error.
 
 ## `protected_paths`
 

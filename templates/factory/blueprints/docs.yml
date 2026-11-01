@@ -1,5 +1,5 @@
-# How a documentation change goes from Building to Handoff: nothing to reproduce, and no app to
-# check. The risk tier still runs verify-app for a diff that changes more than documentation.
+# How a documentation change goes from Building to Handoff: nothing to reproduce. verify-app
+# runs as the plan's risk tier decides, as in every blueprint.
 version: 1
 nodes:
   - claim
@@ -8,6 +8,7 @@ nodes:
   - implement
   - verify-deterministic
   - review
+  - verify-app
   - handoff
   - final-verify
 reproduce: false

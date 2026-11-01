@@ -91,12 +91,12 @@ instructions. Its front matter takes `name`, `description` and
 `blueprints/<class>.yml` sets how a task of that work class moves from Building to Handoff. A
 class without a blueprint uses bugfix's.
 
-| Key         | Meaning                                                                                                                                                                                                                                             |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`   | Always `1`.                                                                                                                                                                                                                                         |
-| `nodes`     | The steps, always in this order: `claim`, `prepare`, `brief`, `implement`, `verify-deterministic`, `review`, `verify-app`, `handoff`, `final-verify`. Only `verify-app` may be left out, though whether verify runs depends on the risk tier alone. |
-| `reproduce` | `true`: the changed tests must fail without the change. `false`: work that keeps behaviour, whose added tests must pass without the change too.                                                                                                     |
-| `gates`     | Optional minimum gate level, `fast`, `full` or `deep`, whatever the risk tier.                                                                                                                                                                      |
+| Key         | Meaning                                                                                                                                                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`   | Always `1`.                                                                                                                                                                                                                     |
+| `nodes`     | The steps, always in this order: `claim`, `prepare`, `brief`, `implement`, `verify-deterministic`, `review`, `verify-app`, `handoff`, `final-verify`. Every node is required; whether verify runs is the risk tier's to decide. |
+| `reproduce` | `true`: the changed tests must fail without the change. `false`: work that keeps behaviour, whose added tests must pass without the change too.                                                                                 |
+| `gates`     | Optional minimum gate level, `fast`, `full` or `deep`, whatever the risk tier.                                                                                                                                                  |
 
 ## Automations
 

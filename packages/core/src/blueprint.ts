@@ -16,9 +16,6 @@ export const blueprintNodes = [
 ] as const;
 export type BlueprintNode = (typeof blueprintNodes)[number];
 
-// The one node a blueprint may leave out; the others hold the factory's guarantees.
-const optional: readonly BlueprintNode[] = ["verify-app"];
-
 export const blueprintSchema = z
   .strictObject({
     version: z.literal(1),
@@ -29,14 +26,13 @@ export const blueprintSchema = z
     gates: gateLevelSchema.optional(),
   })
   .superRefine((blueprint, context) => {
-    const expected = blueprintNodes.filter(
-      (node) => !optional.includes(node) || blueprint.nodes.includes(node),
-    );
-    if (blueprint.nodes.join(" ") !== expected.join(" ")) {
+    // Every node holds one of the factory's guarantees, and whether verify-app runs is the risk
+    // tier's to decide, so a blueprint lists them all.
+    if (blueprint.nodes.join(" ") !== blueprintNodes.join(" ")) {
       context.addIssue({
         code: "custom",
         path: ["nodes"],
-        message: `List the nodes in the order ${blueprintNodes.join(", ")}; only ${optional.join(", ")} may be left out`,
+        message: `List every node in the order ${blueprintNodes.join(", ")}; the risk tier decides whether verify-app runs`,
       });
     }
   });
