@@ -43,7 +43,7 @@ tar -xzf kozo-<version>-<target>.tar.gz kozo kozod
 
 ## From source
 
-Building needs [Bun](https://bun.sh) 1.4.2, the version pinned in `package.json`:
+Building needs [Bun](https://bun.sh), at the version `packageManager` pins in `package.json`:
 
 ```sh
 git clone https://github.com/kechol/kozo.git
@@ -68,5 +68,5 @@ kozo. Continue with the [Quick Start](../quick-start/).
 
 ## Where kozo keeps its files
 
-Everything kozo writes lives in `~/.kozo`, or in the directory that `KOZO_HOME` names: the factory
-definition, the event logs, the `kozo.db` index, the API token, and each task's worktree.
+Everything kozo writes lives in `~/.kozo`, or in the directory that `KOZO_HOME` names; see
+[Operating kozo](../operations/#where-kozo-keeps-its-data) for what is there.

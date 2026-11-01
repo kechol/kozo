@@ -28,44 +28,16 @@ Documentation: <https://kechol.github.io/kozo/>
 
 ## Install
 
-kozo needs macOS, or Linux with [bubblewrap](https://github.com/containers/bubblewrap)
-and [socat](http://www.dest-unreach.org/socat/), and
-[Claude Code](https://docs.anthropic.com/en/docs/claude-code) signed in. kozo's
-agents run on your own `claude`.
-
 ```sh
 brew install kechol/tap/kozo
 ```
 
-Release archives and building from source are in
-[Installation](https://kechol.github.io/kozo/installation/).
-
-## Quick start
-
-```sh
-kozo admin init                  # the factory definition in ~/.kozo/factory
-# add your repository to repositories in ~/.kozo/factory/factory.yml and commit
-kozo admin install ~/src/shop    # then edit .kozo/, set status: ready, commit
-kozo check
-kozo up
-kozo add "Fix the broken link in the cart page footer"
-kozo ls                          # approve, answer, then read the diff and merge it
-```
-
-The full walkthrough is the [Quick Start](https://kechol.github.io/kozo/quick-start/).
-
-## Documentation
-
-- [Concept](https://kechol.github.io/kozo/concept/): items, tasks, holds, the inbox and autonomy levels
-- [GitHub mode](https://kechol.github.io/kozo/github-mode/): Issues in, pull requests out
-- [Dashboard](https://kechol.github.io/kozo/dashboard/): the inbox, the board and the detail view
-- [Operating kozo](https://kechol.github.io/kozo/operations/): data, budget, pauses, upgrades and troubleshooting
-- [CLI](https://kechol.github.io/kozo/cli/): every command
-- [Factory definition](https://kechol.github.io/kozo/factory-definition/), [Charter](https://kechol.github.io/kozo/charter/) and [Constraints](https://kechol.github.io/kozo/constraints/): the configuration
-- [Security model](https://kechol.github.io/kozo/security/): what agents and commands can and cannot do
-- [Architecture](https://kechol.github.io/kozo/architecture/): how kozod, the workers and the API fit together
-
-Each page is also in Japanese.
+kozo needs macOS, or Linux with bubblewrap and socat, and Claude Code signed in;
+[Installation](https://kechol.github.io/kozo/installation/) lists every
+requirement and the other ways to install. Then follow the
+[Quick Start](https://kechol.github.io/kozo/quick-start/), which takes one
+request from `kozo add` to your merge. Every page of the
+[documentation](https://kechol.github.io/kozo/) is also in Japanese.
 
 ## Contributing
 

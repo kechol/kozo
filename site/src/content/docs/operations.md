@@ -23,9 +23,9 @@ Everything lives in `~/.kozo`, or in the directory `KOZO_HOME` names.
 | `runs/<run>/`             | Besides the log: the brief, the run report, the verdicts, the decision log, the evidence, long tool output and command logs. | No                                       |
 | `worktrees/`              | Each open task's worktree.                                                                                                   | Removed when the task closes             |
 
-The event logs are the record that everything else is built from. Each is chained line by line
-and sealed when its run ends, and kozod refuses to start when a sealed log is missing or edited.
-Never edit or delete them by hand; prune old runs instead (below).
+The event logs are the record that everything else is built from, as
+[Architecture](../architecture/#state-is-an-event-log) describes, and kozod refuses to start when a
+sealed log is missing or edited. Never edit or delete them by hand; prune old runs instead (below).
 
 Agent sessions keep no transcripts of their own; the run's event log records each message and
 tool call. Nothing in `~/.kozo` is rotated or capped, so the run directories grow with use.

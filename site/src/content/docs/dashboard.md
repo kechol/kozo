@@ -23,8 +23,8 @@ works once, within a minute; `kozo dashboard --url` prints the address instead o
   kozod restarts. The page then says the session ended; open a new one the same way.
 - **When kozod does not answer**, a banner under the header says since when the page shows old
   state. The page tries again every few seconds, and **Try now** tries at once.
-- **The API token never reaches the browser.** kozod answers only on `127.0.0.1`, and only to
-  requests for `127.0.0.1` or `localhost` on its own port.
+- **The API token never reaches the browser.** How kozod guards the page's requests is in
+  [Security model](../security/#the-local-api).
 
 The page refreshes every three seconds while it is visible. The events of a detail view stream as
 they happen.

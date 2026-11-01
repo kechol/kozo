@@ -39,7 +39,7 @@ tar -xzf kozo-<version>-<target>.tar.gz kozo kozod
 
 ## ソースから
 
-ビルドには、`package.json` で固定している [Bun](https://bun.sh) 1.4.2 が要ります。
+ビルドには、`package.json` の `packageManager` で固定しているバージョンの [Bun](https://bun.sh) が要ります。
 
 ```sh
 git clone https://github.com/kechol/kozo.git
@@ -61,4 +61,4 @@ factory definition を作る前は、`kozo check` はそれがないと報告し
 
 ## kozo がファイルを置く場所
 
-kozo が書くものは、すべて `~/.kozo`、または `KOZO_HOME` で指定したディレクトリに入ります。factory definition、event log、`kozo.db` のインデックス、API token、各タスクの worktree です。
+kozo が書くものは、すべて `~/.kozo`、または `KOZO_HOME` で指定したディレクトリに入ります。中身は [運用](../operations/#データの置き場所) にあります。

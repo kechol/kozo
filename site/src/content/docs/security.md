@@ -77,8 +77,8 @@ review reads and the records the explorer reads are wrapped the same way.
 
 In GitHub mode, trust also decides the approvals: an Issue from someone who may not write to the
 repository needs your start and plan approvals at every level, and only a writer's reply answers
-a question. Text from agents in comments and pull requests cannot mention anyone or close an
-Issue.
+a question. Comments kozod writes cannot
+mention anyone or close an Issue; see [GitHub mode](../github-mode/#comments).
 
 ## What only humans change
 
