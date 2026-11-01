@@ -3,7 +3,7 @@ title: CLI
 description: kozo のすべてのコマンドとフラグを、使う場面ごとにまとめました。reference、終了コード、例も載せています。
 ---
 
-`kozo` は kozo のコマンドラインです。状態を持たず、ほとんどのコマンドは kozod の local API を呼ぶので、kozod が動いている必要があります（`kozo up`）。`kozo check`、`kozo admin init`、local モードの `kozo admin install`、`kozo admin eval run` と検証のコマンドは、kozod なしで動きます。`kozo` を引数なしで実行すると、このページと同じ一覧を表示します。
+`kozo` は kozo のコマンドラインです。状態を持たず、ほとんどのコマンドは kozod の local API を呼ぶので、先に `kozo up` で kozod を起動しておきます。`kozo check`、`kozo admin init`、local モードの `kozo admin install`、`kozo admin eval run` と検証のコマンドは、kozod なしで動きます。`kozo` を引数なしで実行すると、このページと同じ一覧を表示します。
 
 ## reference と終了コード
 
@@ -52,7 +52,7 @@ kozod の状態、モード、動いている run、inbox の件数、今日の�
 kozo dashboard [--url] [--json]
 ```
 
-[ダッシュボード](../dashboard/) をブラウザで開きます。`--url` は、開く代わりに URL を表示します。その URL でセッションを開けるのは 1 度だけで、1 分以内に限ります。
+[ダッシュボード](../dashboard/) をブラウザで開きます。`--url` は、開く代わりに URL を表示します。その URL でセッションを開けるのは 1 回だけで、有効なのは 1 分です。
 
 ## 作業を追加する・並べ替える
 
@@ -131,7 +131,7 @@ kozo approve <item> [text]
 kozo reject <item> <reason>
 ```
 
-`approve` は、item が待っている開始か計画を承認します。テキストを付けると、次のエージェントへのメモになります。`reject` は理由を付けて計画を差し戻し、plan エージェントが書き直します。2 度差し戻された計画は、あなたの対応待ち（attention）になります。
+`approve` は、item が待っている開始か計画を承認します。テキストを付けると、次のエージェントへのメモになります。`reject` は理由を付けて計画を差し戻し、plan エージェントが書き直します。2 回差し戻された計画は、あなたの対応待ち（attention）になります。
 
 ### `kozo say`
 
@@ -220,12 +220,12 @@ kozo admin prune --older-than <days> [--dry-run] [--json]
 
 kozod は、各タスクでこれらを実行します。worktree やクローンの中で、手で実行することもできます。kozod は要りません。`--base` と `--head` に続く `<ref>` は、完全なコミット ID、`HEAD`、`refs/remotes/origin/main` のような完全な ref、またはブランチ名です。
 
-| コマンド                                                          | 層  | すること                                                                                                                                                                                                          |
-| ----------------------------------------------------------------- | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kozo gates [--level fast\|full\|deep] [--base <ref>]`            | V1  | 1 つの水準の gate を実行します。既定は `full` です。`--base` を付けると、constraints を worktree ではなくその ref の先端から読みます。                                                                            |
-| `kozo diff-guard --base <ref> [--head <ref>] [--scope <glob>]...` | V2  | `<ref>` とのマージベースから `--head`（既定は `HEAD`）までの差分を、`<ref>` の先端にある Charter と constraints に照らして確かめます。                                                                            |
-| `kozo prove --base <ref> [--preserve]`                            | V3  | 変えたテストが、`HEAD` では通り、テスト以外の変更を戻すと失敗することを求めます。`--preserve` を付けると、振る舞いを変えない変更向けに、戻しても通り続けることを求めます。worktree はきれいである必要があります。 |
-| `kozo review --base <ref> --goal <text> --done-when <text>...`    | V4  | 差分、目的、条件だけを見る別の `claude` のセッションで、差分を判定します。                                                                                                                                        |
-| `kozo verify --base <ref> --goal <text> --done-when <text>...`    | V5  | sandbox の中の `claude` のセッションで、`.kozo/verify-app.md` の手順でアプリを動かし、各条件を確かめます。                                                                                                        |
+| コマンド                                                          | 層  | すること                                                                                                                                                                                                                            |
+| ----------------------------------------------------------------- | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kozo gates [--level fast\|full\|deep] [--base <ref>]`            | V1  | 1 つの水準の gate を実行します。既定は `full` です。`--base` を付けると、constraints を worktree ではなくその ref の先端から読みます。                                                                                              |
+| `kozo diff-guard --base <ref> [--head <ref>] [--scope <glob>]...` | V2  | `<ref>` とのマージベースから `--head`（既定は `HEAD`）までの差分を、`<ref>` の先端にある Charter と constraints に照らして確かめます。                                                                                              |
+| `kozo prove --base <ref> [--preserve]`                            | V3  | 変えたテストが、`HEAD` では通り、テスト以外の変更を戻すと失敗することを求めます。`--preserve` を付けると、振る舞いを変えない変更向けに、戻しても通り続けることを求めます。worktree に、コミットしていない変更があってはいけません。 |
+| `kozo review --base <ref> --goal <text> --done-when <text>...`    | V4  | 差分、目的、条件だけを見る別の `claude` のセッションで、差分を判定します。                                                                                                                                                          |
+| `kozo verify --base <ref> --goal <text> --done-when <text>...`    | V5  | sandbox の中の `claude` のセッションで、`.kozo/verify-app.md` の手順でアプリを動かし、各条件を確かめます。                                                                                                                          |
 
 `review` と `verify` は、`--model <id>`、`--max-cost <usd>`、`--out <dir>` も受け付けます。`--out` は、判定と、`verify` なら証拠も、そのディレクトリに残します。検証のコマンドはどれも `--json` を受け付けます。

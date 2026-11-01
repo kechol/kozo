@@ -3,7 +3,7 @@ title: factory definition
 description: factory.yml のキーと、~/.kozo/factory にある agents、skills、blueprints、automations、eval のケース、kozod が変更を適用する仕組みを説明します。
 ---
 
-factory definition は、`kozo admin init` が作る `~/.kozo/factory` の git リポジトリです。マシン全体の設定と、エージェントが従うものすべてが入っています。
+factory definition は、`kozo admin init` が作る `~/.kozo/factory` の git リポジトリです。マシン全体の設定と、エージェントが従う指示や手順のすべてが入っています。
 
 ```text
 ~/.kozo/factory/
@@ -19,9 +19,9 @@ factory definition は、`kozo admin init` が作る `~/.kozo/factory` の git �
 
 kozod は、作業中のファイルではなく、このリポジトリのデフォルトブランチの先端のコミットから definition 全体を読みます。新しいコミットがないかは、1 分ごとに確かめます。
 
-- **先端が正しければ適用します。** kozod はそれを記録し、以降に始めるすべての作業で使います。
-- **先端が正しくなければ拒みます。** kozod は理由を報告して通知し、最後に適用した definition で動き続けます。コミットする前に `kozo check` で同じエラーを確かめられます。
-- **起動時**は、先端が正しければそれを、そうでなければ最後に適用した definition を使います。どちらも使えなければ起動しません。
+- **先端が有効なら適用します。** kozod はそれを記録し、以降に始めるすべての作業で使います。
+- **先端が無効なら拒みます。** kozod は理由を報告して通知し、最後に適用した definition で動き続けます。コミットする前に `kozo check` で同じエラーを確かめられます。
+- **起動時**は、先端が有効ならそれを、無効なら最後に適用した definition を使います。どちらも使えなければ起動しません。
 - **ファイルがないときは、kozo に組み込まれた同じパスのテンプレートを使います。** ただし automations は例外で、definition 自身にあるファイルだけが数えられます。
 
 ## `factory.yml`

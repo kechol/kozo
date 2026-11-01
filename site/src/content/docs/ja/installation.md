@@ -57,8 +57,8 @@ kozo --version
 kozo check
 ```
 
-factory definition を作る前は、`kozo check` はそれがないと報告します。ほかの確認、つまり `claude` とそのフラグとサインイン、sandbox、`lsof` を見れば、このマシンで kozo を動かせるかが分かります。続きは [クイックスタート](../quick-start/) です。
+factory definition を作る前は、`kozo check` が factory definition がないと報告します。それ以外の確認（`claude` とそのフラグ、サインイン、sandbox、`lsof`）が通れば、このマシンで kozo を動かせます。続きは [クイックスタート](../quick-start/) です。
 
 ## kozo がファイルを置く場所
 
-kozo が書くものは、すべて `~/.kozo`、または `KOZO_HOME` で指定したディレクトリに入ります。中身は [運用](../operations/#データの置き場所) にあります。
+kozo が書くものは、すべて `~/.kozo`、または `KOZO_HOME` で指定したディレクトリに入ります。中身は [運用](../operations/#データの置き場所) で説明しています。

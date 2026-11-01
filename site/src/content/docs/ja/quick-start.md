@@ -11,7 +11,7 @@ local モードで、依頼を 1 件 kozo に通します。依頼を追加し�
 kozo admin init
 ```
 
-kozo のテンプレートを `~/.kozo/factory` に書き出し、コミットします。ここは独立した git リポジトリです。factory definition には、`factory.yml`、agents、skills、blueprints、automations が入っています。kozod はこのリポジトリのデフォルトブランチの先端から読むので、変更はコミットしてはじめて効きます。
+`kozo admin init` は、kozo のテンプレートを `~/.kozo/factory` に書き出してコミットします。ここは独立した git リポジトリです。factory definition には、`factory.yml`、agents、skills、blueprints、automations が入っています。kozod はこのリポジトリのデフォルトブランチの先端から読むので、変更はコミットしてはじめて効きます。
 
 ## 2. リポジトリを登録する
 
@@ -59,7 +59,7 @@ git commit -m "Let kozo work here"
 kozo check
 ```
 
-factory definition、各リポジトリの Charter と constraints、`claude` とそのサインイン、コマンドを閉じ込める sandbox を確かめます。指摘を直しては実行し直し、すべて通るまで繰り返します。`verify-app.md` がないときなどの警告では、kozod は止まりません。
+factory definition、各リポジトリの Charter と constraints、`claude` とそのサインイン、コマンドを閉じ込める sandbox を確かめます。指摘を直して実行し直し、すべての確認が通るまで繰り返します。`verify-app.md` がないといった警告だけなら、kozod は止まりません。
 
 ## 5. kozod を起動する
 
