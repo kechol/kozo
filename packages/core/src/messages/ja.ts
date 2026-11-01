@@ -369,7 +369,7 @@ export const ja: { readonly [Code in keyof typeof en]: string } = {
   admin eval add <run> [--json]
       run の item の eval ケースを、factory definition の evals/ に下書きします
   admin eval run [<case>...] [--json]
-      eval ケース（指定があればそれだけ）を、それぞれ使い捨ての factory home で
+      eval ケース（指定があればそれだけ）を、それぞれ使い捨てのファクトリーのホームで
       実行し、期待した結果に届いた割合と費用を表示します
   admin prune --older-than <days> [--dry-run] [--json]
       item が <days> 日以上前に閉じた run から、イベントログ、report、verdict、
@@ -420,9 +420,9 @@ item の <ref> は K-<n> か <repo>#<n>、タスクは <item>/t<n>、run は r-<
   "cli.kozod-unreachable": "kozod が動いていません。kozo up で起動してください",
   "cli.kozod-timeout": "kozod が {seconds} 秒以内に応答しませんでした",
   "cli.kozod-foreign":
-    "{base} のサーバーはこの home の kozod ではないため、トークンは送っていません",
+    "{base} のサーバーはこのホームの kozod ではないため、トークンは送っていません",
   "cli.kozod-never-ran":
-    "この home ではまだ kozod が動いたことがありません。kozo up で起動してください",
+    "このホームではまだ kozod が動いたことがありません。kozo up で起動してください",
   "cli.kozod-not-json": "kozod が {status} で JSON ではない応答を返しました",
   "cli.kozod-answered": "kozod が {status} を返しました",
   "cli.kozod-already-running": "kozod はすでに動いています",
