@@ -1,6 +1,7 @@
 import type { ComponentChildren } from "preact";
 import { Icon, type IconName, toneIcon } from "./icons.tsx";
 import { type Tone, toneOf } from "./tone.ts";
+import { t } from "./words.ts";
 
 /** A state as a tinted label with its tone's glyph, or with a glyph closer to what it says. */
 export function Badge({
@@ -21,13 +22,16 @@ export function Badge({
 }
 
 /** What a hold, or a task awaiting merge, is called wherever it shows, by its approval when it has one. */
-const holdLabel: Record<string, string> = {
-  start: "Start approval",
-  plan: "Plan approval",
-  approval: "Approval",
-  question: "Question",
-  attention: "Attention",
-  merge: "Ready to merge",
+const holdLabel: Record<
+  string,
+  "hold.start" | "hold.plan" | "hold.approval" | "hold.question" | "hold.attention" | "hold.merge"
+> = {
+  start: "hold.start",
+  plan: "hold.plan",
+  approval: "hold.approval",
+  question: "hold.question",
+  attention: "hold.attention",
+  merge: "hold.merge",
 };
 
 /** Glyphs closer to what waits than its tone's own. */
@@ -48,9 +52,10 @@ export function HoldBadge({
   approval?: "start" | "plan" | null;
 }) {
   const tone = hold === "merge" ? toneOf("waiting", hold) : toneOf("hold", hold);
+  const word = holdLabel[approval ?? hold];
   return (
     <Badge tone={tone} icon={holdGlyph[hold]}>
-      {holdLabel[approval ?? hold] ?? hold}
+      {word ? t(word) : hold}
     </Badge>
   );
 }

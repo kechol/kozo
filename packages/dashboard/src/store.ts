@@ -7,8 +7,10 @@ import {
   type Status,
   type TaskRow,
 } from "./api.ts";
+import { locale } from "./words.ts";
 
 export const status = signal<Status | null>(null);
+export { locale };
 export const inbox = signal<InboxRow[]>([]);
 /** How many rows wait, which changes far less often than the rows a poll brings. */
 export const waiting = computed(() => inbox.value.length);
@@ -103,6 +105,8 @@ export async function refresh(api: Api): Promise<void> {
     ]);
     if (mine !== lastRefresh) return;
     status.value = nextStatus;
+    // A status without a locale leaves the last known one.
+    if (nextStatus.locale) locale.value = nextStatus.locale;
     inbox.value = nextInbox;
     items.value = nextItems;
     tasks.value = nextTasks;

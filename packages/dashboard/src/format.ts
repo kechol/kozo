@@ -1,17 +1,30 @@
+import type { Locale } from "./api.ts";
+import { locale, say } from "./words.ts";
+
 /** How long ago `iso` was, in the largest whole unit, as "3 h ago". */
-export function ago(iso: string, now: Date = new Date()): string {
+export function ago(iso: string, now: Date = new Date(), loc: Locale = locale.value): string {
   const seconds = Math.max(0, Math.round((now.getTime() - Date.parse(iso)) / 1000));
-  if (seconds < 60) return "just now";
-  const units: [number, string][] = [
-    [86_400, "d"],
-    [3600, "h"],
-    [60, "min"],
-  ];
-  const [size, name] = units.find(([unitSize]) => seconds >= unitSize) ?? [60, "min"];
-  return `${Math.floor(seconds / size)} ${name} ago`;
+  if (seconds < 60) return say(loc, "ago.now");
+  const units = [
+    [86_400, "ago.day"],
+    [3600, "ago.hour"],
+    [60, "ago.min"],
+  ] as const;
+  const [size, key] = units.find(([unitSize]) => seconds >= unitSize) ?? units[2];
+  return say(loc, key, { n: Math.floor(seconds / size) });
 }
 
-export const usd = (amount: number) => `$${amount.toFixed(2)}`;
+const currencies = new Map<Locale, Intl.NumberFormat>();
+
+/** An amount in US dollars, as the locale writes them. */
+export function usd(amount: number, loc: Locale = locale.value): string {
+  let format = currencies.get(loc);
+  if (!format) {
+    format = new Intl.NumberFormat(loc, { style: "currency", currency: "USD" });
+    currencies.set(loc, format);
+  }
+  return format.format(amount);
+}
 
 /** What the board shows: items or tasks. */
 export type BoardView = "items" | "tasks";
@@ -39,8 +52,11 @@ export const detailHash = (ref: string) => `#/ref/${encodeURIComponent(ref)}`;
 export const boardHash = (view: BoardView) => `#/board?view=${view}`;
 
 /** The tab's title for a view, with how many wait in the inbox, so a background tab shows it. */
-export function titleOf(route: Route, waiting: number): string {
-  const view = route.page === "detail" ? route.ref : route.page === "board" ? "Board" : "Inbox";
+export function titleOf(route: Route, waiting: number, loc: Locale = locale.value): string {
+  const view =
+    route.page === "detail"
+      ? route.ref
+      : say(loc, route.page === "board" ? "nav.board" : "nav.inbox");
   return `${waiting > 0 ? `(${waiting}) ` : ""}${view} · kozo`;
 }
 
@@ -50,38 +66,56 @@ export function kindOf(ref: string): "item" | "task" | "run" {
   return /\/t\d+$/.test(ref) ? "task" : "item";
 }
 
-/** One line for an event of the timeline: what happened, without its envelope. */
-export function eventLine(event: { type: string; data: Record<string, unknown> }): string {
+/**
+ * One line for an event of the timeline: what happened, without its envelope. The frame is the
+ * page's own words; the reasons, summaries and texts inside it arrive from kozod in its locale.
+ */
+export function eventLine(
+  event: { type: string; data: Record<string, unknown> },
+  loc: Locale = locale.value,
+): string {
   const data = event.data;
+  const said = (suffix: unknown) => (suffix ? `: ${suffix}` : "");
+  const text = (field: string) => String(data[field] ?? "");
   switch (event.type) {
     case "stage.changed":
       return `${data.target} ${data.from} → ${data.to}: ${data.reason}`;
     case "hold.set":
-      return `${data.target} held for ${data.hold}: ${data.reason}`;
+      return say(loc, "event.holdSet", {
+        target: text("target"),
+        hold: text("hold"),
+        reason: text("reason"),
+      });
     case "hold.cleared":
-      return `${data.target} ${data.hold} cleared${data.reason ? `: ${data.reason}` : ""}`;
+      return `${say(loc, "event.holdCleared", { target: text("target"), hold: text("hold") })}${said(data.reason)}`;
     case "run.started":
-      return `${data.agent} run started on ${data.model}`;
+      return say(loc, "event.runStarted", { agent: text("agent"), model: text("model") });
     case "run.changed":
-      return `run ${data.from} → ${data.to}${data.reason ? `: ${data.reason}` : ""}`;
+      return `${say(loc, "event.runChanged", { from: text("from"), to: text("to") })}${said(data.reason)}`;
     case "node.enter":
-      return "entered";
+      return say(loc, "event.entered");
     case "node.exit":
-      return `${data.ok ? "passed" : "failed"}${data.summary ? `: ${data.summary}` : ""}`;
+      return `${say(loc, data.ok ? "event.passed" : "event.failed")}${said(data.summary)}`;
     case "gates.result":
-      return `${data.level} gates ${data.status}${data.failed ? ` at ${data.failed}` : ""}`;
+      return data.failed
+        ? say(loc, "event.gatesAt", {
+            level: text("level"),
+            status: text("status"),
+            failed: text("failed"),
+          })
+        : say(loc, "event.gates", { level: text("level"), status: text("status") });
     case "review.verdict":
-      return `review: ${data.verdict}, ${data.summary}`;
+      return say(loc, "event.review", { verdict: text("verdict"), summary: text("summary") });
     case "note.added":
       return `${data.kind}: ${data.text}`;
     case "agent.message":
       return String(data.text ?? "").split("\n")[0] ?? "";
     case "tool.call":
-      return `called ${data.tool}`;
+      return say(loc, "event.called", { tool: text("tool") });
     case "guard.denied":
-      return `the guard refused ${data.tool}: ${data.reason}`;
+      return say(loc, "event.guard", { tool: text("tool"), reason: text("reason") });
     case "handoff.ready":
-      return `ready at ${String(data.head ?? "").slice(0, 12)}`;
+      return say(loc, "event.ready", { head: text("head").slice(0, 12) });
     default:
       return "";
   }

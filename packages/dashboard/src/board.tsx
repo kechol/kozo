@@ -14,6 +14,7 @@ import {
 import { Icon } from "./icons.tsx";
 import { Loading, Placeholder, Unread } from "./placeholder.tsx";
 import { items, loaded, problem, run, status, tasks } from "./store.ts";
+import { t } from "./words.ts";
 
 /**
  * Whether the board shows items or tasks: the viewer's choice, kept in this browser and in the
@@ -68,7 +69,7 @@ export function Board({ api, asked }: { api: Api; asked?: BoardView }) {
     <>
       <div class="row spread board-tools">
         <fieldset class="segmented">
-          <legend class="sr-only">Show</legend>
+          <legend class="sr-only">{t("board.show")}</legend>
           <label>
             <input
               type="radio"
@@ -76,7 +77,7 @@ export function Board({ api, asked }: { api: Api; asked?: BoardView }) {
               checked={showItems}
               onChange={() => choose("items")}
             />
-            Items
+            {t("board.items")}
           </label>
           <label>
             <input
@@ -85,17 +86,17 @@ export function Board({ api, asked }: { api: Api; asked?: BoardView }) {
               checked={!showItems}
               onChange={() => choose("tasks")}
             />
-            Tasks
+            {t("board.tasks")}
           </label>
         </fieldset>
         {status.value?.mode === "local" ? <AddItem api={api} /> : null}
       </div>
       {!ready && problem.value ? (
-        <Unread what="the board" />
+        <Unread what={t("what.board")} />
       ) : (
         // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroller takes focus so the keyboard can scroll it
-        <section class="board" aria-label="Stages" tabIndex={0}>
-          {ready ? null : <Loading what="the board" />}
+        <section class="board" aria-label={t("board.stages")} tabIndex={0}>
+          {ready ? null : <Loading what={t("what.board")} />}
           {stages.map((stage) => {
             const cards = showItems
               ? allItems.filter((item) => item.shown_stage === stage)
@@ -143,7 +144,7 @@ export function Board({ api, asked }: { api: Api; asked?: BoardView }) {
                 <summary>{head}</summary>
                 {list}
                 {cards.length > closedShown ? (
-                  <p class="more">and {cards.length - closedShown} older</p>
+                  <p class="more">{t("board.older", { n: cards.length - closedShown })}</p>
                 ) : null}
               </details>
             ) : (
@@ -164,7 +165,7 @@ function Where({ refName, repository }: { refName: string; repository: string | 
   return (
     <span>
       <span class="ref">{refName}</span>
-      {repository ? ` in ${repository}` : null}
+      {repository ? t("board.in", { repository }) : null}
     </span>
   );
 }
@@ -208,7 +209,7 @@ function ItemCard({
     <article class="card board-card">
       <div class="card-top">
         <Where refName={item.ref} repository={repository} />
-        {item.level ? <span title="Autonomy level">{item.level}</span> : null}
+        {item.level ? <span title={t("board.autonomy")}>{item.level}</span> : null}
       </div>
       <CardTitle href={detailHash(item.ref)}>{item.title}</CardTitle>
       {item.hold || item.class ? (
@@ -220,8 +221,9 @@ function ItemCard({
       {tally ? (
         <div class="tally">
           <span>
-            {tally.done}/{tally.total} tasks{tally.held > 0 ? `, ${tally.held} held` : ""}
-            {tally.merge > 0 ? `, ${tally.merge} ready to merge` : ""}
+            {t("board.tally", { done: tally.done, total: tally.total })}
+            {tally.held > 0 ? t("board.tallyHeld", { n: tally.held }) : ""}
+            {tally.merge > 0 ? t("board.tallyMerge", { n: tally.merge }) : ""}
           </span>
           <progress value={tally.done} max={tally.total} aria-hidden="true" />
         </div>
@@ -231,7 +233,7 @@ function ItemCard({
           <button
             type="button"
             class="ghost icon-button"
-            aria-label={`Move ${item.ref} up`}
+            aria-label={t("board.moveUp", { ref: item.ref })}
             disabled={up === undefined}
             onClick={() => up !== undefined && move(up)}
           >
@@ -240,7 +242,7 @@ function ItemCard({
           <button
             type="button"
             class="ghost icon-button"
-            aria-label={`Move ${item.ref} down`}
+            aria-label={t("board.moveDown", { ref: item.ref })}
             disabled={down === undefined}
             onClick={() => down !== undefined && move(down)}
           >
@@ -265,7 +267,9 @@ function TaskCard({ task, repository }: { task: TaskRow; repository: string | un
           {task.awaiting_merge ? <HoldBadge hold="merge" /> : null}
           {task.revisions > 0 ? (
             <span>
-              {task.revisions} {task.revisions === 1 ? "revision" : "revisions"}
+              {t(task.revisions === 1 ? "board.revisionsOne" : "board.revisionsOther", {
+                n: task.revisions,
+              })}
             </span>
           ) : null}
         </div>

@@ -1,4 +1,5 @@
 import { Icon } from "./icons.tsx";
+import { t } from "./words.ts";
 
 /**
  * Grey lines where content is loading, at about its final size, so the page does not jump when it
@@ -17,7 +18,7 @@ export function Placeholder({ lines = 3 }: { lines?: number }) {
 export function Loading({ what }: { what: string }) {
   return (
     <p class="sr-only" role="status">
-      Loading {what}…
+      {t("loading", { what })}
     </p>
   );
 }
@@ -28,7 +29,8 @@ export function Unread({ what }: { what: string }) {
     <div class="panel empty-state">
       <Icon name="alert" />
       <p>
-        <strong>kozod has not answered yet.</strong> The page shows {what} once it does.
+        <strong>{t("unread.title")}</strong>
+        {t("unread.body", { what })}
       </p>
     </div>
   );

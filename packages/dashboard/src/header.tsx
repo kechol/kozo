@@ -3,6 +3,7 @@ import type { Api, RunRow } from "./api.ts";
 import { detailHash, usd } from "./format.ts";
 import { Icon } from "./icons.tsx";
 import { run, status, waiting } from "./store.ts";
+import { t } from "./words.ts";
 
 /** The factory at a glance: the views, whether it runs, what runs, and today's cost. */
 export function Header({ api, page }: { api: Api; page: string }) {
@@ -15,26 +16,26 @@ export function Header({ api, page }: { api: Api; page: string }) {
         <span class="brand-mark" aria-hidden="true" />
         kozo
       </a>
-      <nav class="tabs" aria-label="Views">
+      <nav class="tabs" aria-label={t("nav.views")}>
         <a class="tab" href="#/" aria-current={page === "inbox" ? "page" : undefined}>
-          Inbox
+          {t("nav.inbox")}
           {count > 0 ? (
             <span class="count">
               {count}
-              <span class="sr-only"> waiting</span>
+              <span class="sr-only">{t("nav.waiting")}</span>
             </span>
           ) : null}
         </a>
         <a class="tab" href="#/board" aria-current={page === "board" ? "page" : undefined}>
-          Board
+          {t("nav.board")}
         </a>
       </nav>
       {current ? (
         <fieldset class="factory">
-          <legend class="sr-only">Factory</legend>
+          <legend class="sr-only">{t("factory.label")}</legend>
           <span class={`factory-state ${paused ? "neutral" : "positive"}`}>
             <Icon name={paused ? "pause" : "dot"} />
-            {paused ? "Paused" : "Running"}
+            {t(paused ? "factory.paused" : "factory.running")}
           </span>
           {paused && current.pausedReason ? (
             <span class="paused-reason" title={current.pausedReason}>
@@ -42,7 +43,7 @@ export function Header({ api, page }: { api: Api; page: string }) {
             </span>
           ) : null}
           <RunsNow api={api} count={current.activeRuns} />
-          <span>{usd(current.costTodayUsd)} today</span>
+          <span>{t("factory.cost", { cost: usd(current.costTodayUsd) })}</span>
           <span class="mode">{current.mode}</span>
           <button
             type="button"
@@ -51,7 +52,7 @@ export function Header({ api, page }: { api: Api; page: string }) {
             }
           >
             <Icon name={paused ? "play" : "pause"} />
-            {paused ? "Resume factory" : "Pause factory"}
+            {t(paused ? "factory.resume" : "factory.pause")}
           </button>
         </fieldset>
       ) : null}
@@ -80,7 +81,7 @@ function RunsNow({ api, count }: { api: Api; count: number }) {
     document.addEventListener("pointerdown", outside);
     return () => document.removeEventListener("pointerdown", outside);
   }, [api, open]);
-  const label = `${count} ${count === 1 ? "run" : "runs"}`;
+  const label = t(count === 1 ? "runs.one" : "runs.other", { n: count });
   if (count === 0) return <span>{label}</span>;
   return (
     <details
@@ -96,9 +97,9 @@ function RunsNow({ api, count }: { api: Api; count: number }) {
       <summary>{label}</summary>
       <div class="popover">
         {runs === null ? (
-          <p>Reading the runs…</p>
+          <p>{t("runs.reading")}</p>
         ) : runs.length === 0 ? (
-          <p>No run is running now.</p>
+          <p>{t("runs.none")}</p>
         ) : (
           <ul>
             {runs.map((run) => (
@@ -110,7 +111,7 @@ function RunsNow({ api, count }: { api: Api; count: number }) {
                 >
                   {run.ref}
                 </a>{" "}
-                {run.agent} on {run.task ?? run.item}
+                {t("runs.line", { agent: run.agent, target: run.task ?? run.item })}
               </li>
             ))}
           </ul>

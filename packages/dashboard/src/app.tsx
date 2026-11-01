@@ -7,9 +7,10 @@ import { DetailView } from "./detail.tsx";
 import { type Route, routeOf, titleOf } from "./format.ts";
 import { Header } from "./header.tsx";
 import { Inbox } from "./inbox.tsx";
-import { sessionEnded, waiting } from "./store.ts";
+import { locale, sessionEnded, waiting } from "./store.ts";
 import { Toasts } from "./toasts.tsx";
 import { Unreachable } from "./unreachable.tsx";
+import { t, tx } from "./words.ts";
 
 const route = signal(routeOf(window.location.hash));
 window.addEventListener("hashchange", () => {
@@ -21,10 +22,15 @@ export function App({ api }: { api: Api }) {
   const count = waiting.value;
   const main = useRef<HTMLElement>(null);
   const first = useRef(true);
+  const language = locale.value;
 
   useEffect(() => {
-    document.title = titleOf(current, count);
-  }, [current, count]);
+    document.title = titleOf(current, count, language);
+  }, [current, count, language]);
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
 
   // A new view takes focus, so that keyboard and screen reader users start reading it.
   useEffect(() => {
@@ -52,15 +58,15 @@ function View({ api, route, count }: { api: Api; route: Route; count: number }) 
   if (route.page === "board") {
     return (
       <>
-        <PageHead title="Board" />
+        <PageHead title={t("nav.board")} />
         <Board api={api} asked={route.view} />
       </>
     );
   }
   return (
     <>
-      <PageHead title="Inbox">
-        {count > 0 ? <p>{count} waiting for you, oldest first</p> : null}
+      <PageHead title={t("nav.inbox")}>
+        {count > 0 ? <p>{t("inbox.summary", { n: count })}</p> : null}
       </PageHead>
       <Inbox api={api} />
     </>
@@ -84,11 +90,10 @@ export function NoToken({ ended = false }: { ended?: boolean }) {
   }, [ended]);
   return (
     <main class="no-token">
-      <h1>{ended ? "The session ended" : "kozo"}</h1>
+      <h1>{ended ? t("session.ended") : "kozo"}</h1>
       <p>
-        {ended ? "kozod no longer takes this tab's session, as after it starts again. " : null}
-        Open the dashboard with <code>kozo dashboard</code>, which opens a session for this tab.
-        Each link it opens works once, within a minute.
+        {ended ? t("session.endedBody") : null}
+        {tx("session.open", { command: <code>kozo dashboard</code> })}
       </p>
     </main>
   );

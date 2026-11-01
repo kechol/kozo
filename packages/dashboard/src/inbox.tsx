@@ -6,14 +6,12 @@ import { Icon } from "./icons.tsx";
 import { Loading, Placeholder, Unread } from "./placeholder.tsx";
 import { inbox, items, loaded, problem, status } from "./store.ts";
 import { Time } from "./time.tsx";
+import { t } from "./words.ts";
 
 /** The line under a row's title; an approval's reason only repeats its badge. */
 function Note({ row }: { row: InboxRow }) {
   if (row.waiting === "approval") return null;
-  const text =
-    row.waiting === "merge"
-      ? "Read the diff and merge the task branch yourself; kozo never merges."
-      : row.reason;
+  const text = row.waiting === "merge" ? t("inbox.mergeNote") : row.reason;
   return text ? <p class="reason">{text}</p> : null;
 }
 
@@ -33,10 +31,10 @@ export function Inbox({ api }: { api: Api }) {
   const several = (status.value?.repositories.length ?? 0) > 1;
   const repositoryOf = new Map(items.value.map((item) => [item.ref, item.repository]));
   if (!loaded.value) {
-    if (problem.value) return <Unread what="the inbox" />;
+    if (problem.value) return <Unread what={t("what.inbox")} />;
     return (
       <div class="panel rows">
-        <Loading what="the inbox" />
+        <Loading what={t("what.inbox")} />
         {[0, 1, 2].map((index) => (
           <div key={index} class="inbox-row">
             <Placeholder />
@@ -50,8 +48,8 @@ export function Inbox({ api }: { api: Api }) {
       <div class="panel empty-state">
         <Icon name="check" />
         <p>
-          <strong>Nothing waits for you.</strong> kozo asks here when it needs an approval, an
-          answer or your attention, and when a branch is ready to merge.
+          <strong>{t("inbox.emptyTitle")}</strong>
+          {t("inbox.emptyBody")}
         </p>
       </div>
     );
@@ -77,7 +75,7 @@ export function Inbox({ api }: { api: Api }) {
           <div class="row actions">
             {row.approval === "plan" ? (
               <a class="button-link primary" href={detailHash(row.ref)}>
-                Read the plan
+                {t("inbox.readPlan")}
               </a>
             ) : null}
             {inboxActions(row.kind, row.waiting, row.approval).map((action) => (
@@ -90,7 +88,7 @@ export function Inbox({ api }: { api: Api }) {
             ))}
             {row.waiting === "merge" ? (
               <a class="button-link" href={detailHash(row.ref)}>
-                Read the diff
+                {t("inbox.readDiff")}
               </a>
             ) : null}
           </div>

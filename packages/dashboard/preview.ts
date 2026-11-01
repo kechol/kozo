@@ -2,23 +2,27 @@
  * Serves the dashboard against a mock local API with fictional data, so that every view and
  * state can be looked at without a factory. Nothing here reaches kozod.
  *
- *   bun packages/dashboard/preview.ts [--port 7421] [--empty] [--down]
+ *   bun packages/dashboard/preview.ts [--port 7421] [--locale en|ja] [--empty] [--down]
  *
  * Open the address it prints. `--empty` serves an empty inbox and board, and `--down` answers
- * every list with an error, as when kozod cannot be reached.
+ * every list with an error, as when kozod cannot be reached. `--locale ja` makes the status name
+ * Japanese, so the page words itself in Japanese; the fictional data stays in English.
  */
 import { parseArgs } from "node:util";
-import type { InboxRow, ItemRow, Status, TaskRow } from "./src/api.ts";
+import type { InboxRow, ItemRow, Locale, Status, TaskRow } from "./src/api.ts";
 import page from "./src/index.html";
 
 const { values: options } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
     port: { type: "string", default: "7421" },
+    locale: { type: "string", default: "en" },
     empty: { type: "boolean", default: false },
     down: { type: "boolean", default: false },
   },
 });
+
+const locale: Locale = options.locale === "ja" ? "ja" : "en";
 
 const now = Date.now();
 const at = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
@@ -26,6 +30,7 @@ const repository = "example/sample-shop";
 
 const status: Status = {
   mode: "local",
+  locale,
   paused: false,
   pausedReason: null,
   activeRuns: 2,

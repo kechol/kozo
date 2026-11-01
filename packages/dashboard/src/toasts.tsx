@@ -1,5 +1,6 @@
 import { Icon, toneIcon } from "./icons.tsx";
 import { dismiss, holdToasts, type Toast, toasts } from "./store.ts";
+import { t } from "./words.ts";
 
 /**
  * Where actions answer. Both live regions are always in the page, so that a screen reader
@@ -14,7 +15,7 @@ export function Toasts() {
   return (
     <section
       class="toasts"
-      aria-label="Notifications"
+      aria-label={t("toasts.label")}
       // The region lets the pointer through to its toasts, whose pointer events reach it here.
       onPointerOver={() => holdToasts(true)}
       onPointerOut={(event) => {
@@ -46,7 +47,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       <button
         type="button"
         class="ghost icon-button"
-        aria-label="Dismiss"
+        aria-label={t("toasts.dismiss")}
         onClick={() => dismiss(toast.id)}
       >
         <Icon name="x" size={14} />

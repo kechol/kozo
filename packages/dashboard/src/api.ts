@@ -1,4 +1,5 @@
 import type { ApiError as ApiErrorBody, Event, Verb } from "@kozo/core";
+import { locale, say } from "./words.ts";
 
 /** Where the page keeps its session token: this tab's session, never the URL or other tabs. */
 const tokenKey = "kozo.session";
@@ -49,8 +50,12 @@ export class ApiError extends Error {
   }
 }
 
+/** The language kozod words its messages in, and the page its own. */
+export type Locale = "en" | "ja";
+
 export interface Status {
   mode: "local" | "github";
+  locale: Locale;
   paused: boolean;
   pausedReason: string | null;
   activeRuns: number;
@@ -144,7 +149,7 @@ export class Api {
     if (!response.ok) {
       throw new ApiError(
         response.status,
-        answer.error ?? `kozod answered ${response.status}`,
+        answer.error ?? say(locale.value, "error.answered", { status: response.status }),
         answer.issues ?? [],
       );
     }

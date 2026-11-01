@@ -3,6 +3,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "preact/hook
 import type { Api } from "./api.ts";
 import { Modal } from "./dialog.tsx";
 import { run } from "./store.ts";
+import { t } from "./words.ts";
 
 /** One verb on a reference, as the inbox and the detail view offer it. */
 export interface Action {
@@ -22,36 +23,38 @@ export interface Action {
   confirm?: { ask: (ref: string) => string; ends: string };
 }
 
+// The actions are built while rendering, so that their words are in the locale of the moment.
+
 /** Cancelling an item or a task, which asks why. */
-export const cancelAction: Action = {
+export const cancelAction = (): Action => ({
   verb: "close",
-  label: "Cancel",
-  text: { field: "cancel", required: true, placeholder: "Why it is cancelled" },
+  label: t("action.cancel"),
+  text: { field: "cancel", required: true, placeholder: t("action.cancelHint") },
   emphasis: "danger",
   confirm: {
-    ask: (ref) => `Cancel ${ref}?`,
-    ends: "Its runs stop, and its worktrees and task branches are removed. It closes as Cancelled and stays closed.",
+    ask: (ref) => t("action.cancelAsk", { ref }),
+    ends: t("action.cancelEnds"),
   },
-};
+});
 
-const doneAction: Action = {
+const doneAction = (): Action => ({
   verb: "close",
-  label: "Close as done",
+  label: t("action.done"),
   body: { done: true },
   emphasis: "ghost",
   confirm: {
-    ask: (ref) => `Close ${ref} as done?`,
-    ends: "Its runs stop and its worktrees are removed. It closes as Complete and stays closed.",
+    ask: (ref) => t("action.doneAsk", { ref }),
+    ends: t("action.doneEnds"),
   },
-};
+});
 
-export const retryAction: Action = {
+export const retryAction = (): Action => ({
   verb: "retry",
-  label: "Retry",
-  text: { field: "text", required: false, placeholder: "What to do differently" },
-};
+  label: t("action.retry"),
+  text: { field: "text", required: false, placeholder: t("action.retryHint") },
+});
 
-export const takeAction: Action = { verb: "take", label: "Take it over" };
+export const takeAction = (): Action => ({ verb: "take", label: t("action.take") });
 
 /** A sending button stays focusable, so it is marked busy rather than disabled. */
 export const busyAttributes = (busy: boolean) =>
@@ -78,45 +81,49 @@ export function inboxActions(
         ? [
             {
               verb: "approve",
-              label: "Approve plan",
+              label: t("action.approvePlan"),
               emphasis: "primary",
               text: {
                 field: "text",
                 required: false,
-                placeholder: "Anything the runs should know",
+                placeholder: t("action.approvePlanHint"),
               },
             },
             {
               verb: "reject",
-              label: "Reject plan",
-              text: { field: "reason", required: true, placeholder: "What the plan should change" },
+              label: t("action.rejectPlan"),
+              text: {
+                field: "reason",
+                required: true,
+                placeholder: t("action.rejectPlanHint"),
+              },
             },
           ]
         : [
             {
               verb: "approve",
-              label: "Approve start",
+              label: t("action.approveStart"),
               emphasis: "primary",
-              text: { field: "text", required: false, placeholder: "Anything triage should know" },
+              text: { field: "text", required: false, placeholder: t("action.approveStartHint") },
             },
-            cancelAction,
+            cancelAction(),
           ];
     case "question":
       return [
         {
           verb: "say",
-          label: "Answer",
+          label: t("action.answer"),
           emphasis: "primary",
-          text: { field: "text", required: true, placeholder: "Your answer" },
+          text: { field: "text", required: true, placeholder: t("action.answerHint") },
         },
-        ...(kind === "task" ? [takeAction] : []),
+        ...(kind === "task" ? [takeAction()] : []),
       ];
     case "attention":
       return [
-        { ...retryAction, emphasis: "primary" },
-        ...(kind === "task" ? [takeAction] : []),
-        doneAction,
-        cancelAction,
+        { ...retryAction(), emphasis: "primary" },
+        ...(kind === "task" ? [takeAction()] : []),
+        doneAction(),
+        cancelAction(),
       ];
     default:
       return [];
@@ -206,7 +213,7 @@ export function ActionButton({
   // Inside its field, the verb is what the field is for, so it takes the strongest style.
   const sendStyle = action.emphasis === "danger" || action.confirm ? "danger-solid" : "primary";
   const sending = busyAttributes(busy);
-  const label = busy ? "Sending…" : action.label;
+  const label = busy ? t("action.sending") : action.label;
 
   if (!action.text && !action.confirm) {
     return (
@@ -230,7 +237,7 @@ export function ActionButton({
   // An alert dialog puts the way back first, so the verb that closes work is the last stop.
   const backButton = (
     <button type="button" class="ghost" onClick={close} disabled={busy}>
-      Back
+      {t("action.back")}
     </button>
   );
   const fields = (

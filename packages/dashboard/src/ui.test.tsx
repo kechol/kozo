@@ -1,11 +1,13 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { render } from "preact";
 import { act } from "preact/test-utils";
 import { type Action, ActionButton, cancelAction } from "./actions.tsx";
 import { AddItem } from "./add-item.tsx";
-import { Api } from "./api.ts";
-import { status, toasts } from "./store.ts";
+import { Api, type InboxRow } from "./api.ts";
+import { Header } from "./header.tsx";
+import { Inbox } from "./inbox.tsx";
+import { inbox, locale, refreshedAt, status, toasts } from "./store.ts";
 
 // The components run in a DOM of their own; the globals they read are put back afterwards, so
 // the other test files keep Bun's own.
@@ -100,7 +102,7 @@ describe("ActionButton", () => {
       <ActionButton
         api={answering({ status: 200, body: {} })}
         refName="K-7"
-        action={cancelAction}
+        action={cancelAction()}
       />,
     );
     await act(() => button("Cancel")?.click());
@@ -140,6 +142,7 @@ describe("AddItem", () => {
   test("asks for a repository before adding when the factory has several", async () => {
     status.value = {
       mode: "local",
+      locale: "en",
       paused: false,
       pausedReason: null,
       activeRuns: 0,
@@ -158,5 +161,79 @@ describe("AddItem", () => {
     });
     expect(button("Add item")?.disabled).toBe(false);
     status.value = null;
+  });
+});
+
+describe("in Japanese", () => {
+  // The views read the stores, so they come down before another file's tests change them.
+  afterEach(async () => {
+    await act(() => render(null, root));
+    locale.value = "en";
+    status.value = null;
+    inbox.value = [];
+    refreshedAt.value = null;
+  });
+
+  const row: InboxRow = {
+    kind: "item",
+    ref: "K-12",
+    title: "Show the delivery estimate",
+    waiting: "approval",
+    reason: null,
+    approval: "plan",
+    since: new Date().toISOString(),
+  };
+
+  test("words the header, an inbox row and its verbs, and follows a change of locale", async () => {
+    status.value = {
+      mode: "local",
+      locale: "en",
+      paused: true,
+      pausedReason: null,
+      activeRuns: 0,
+      waiting: 1,
+      costTodayUsd: 3.4,
+      repositories: ["example/shop"],
+    };
+    inbox.value = [row];
+    refreshedAt.value = new Date();
+    const api = answering({ status: 200, body: {} });
+    await mount(
+      <>
+        <Header api={api} page="inbox" />
+        <Inbox api={api} />
+      </>,
+    );
+    expect(root.textContent).toContain("Resume factory");
+    expect(root.textContent).toContain("Plan approval");
+    expect(button("Reject plan…")).toBeDefined();
+
+    await act(() => {
+      locale.value = "ja";
+    });
+    expect(root.textContent).toContain("ファクトリーを再開する");
+    expect(root.textContent).toContain("計画の承認");
+    expect(root.textContent).toContain("計画を読む");
+    expect(root.textContent).toContain("たった今");
+    expect(root.textContent).toContain("今日 $3.40");
+    expect(button("計画を承認…")).toBeDefined();
+    expect(button("計画を差し戻す…")).toBeDefined();
+    expect(root.textContent).not.toContain("Resume factory");
+  });
+
+  test("words a dialog's question, its body and its way back", async () => {
+    locale.value = "ja";
+    await mount(
+      <ActionButton
+        api={answering({ status: 200, body: {} })}
+        refName="K-7"
+        action={cancelAction()}
+      />,
+    );
+    await act(() => button("取り消す…")?.click());
+    const dialog = root.querySelector("dialog");
+    const named = dialog?.getAttribute("aria-labelledby") ?? "";
+    expect(window.document.getElementById(named)?.textContent).toBe("K-7 を取り消しますか？");
+    expect(button("戻る")).toBeDefined();
   });
 });

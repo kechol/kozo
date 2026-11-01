@@ -5,6 +5,7 @@ import { Modal } from "./dialog.tsx";
 import { workClasses } from "./format.ts";
 import { Icon } from "./icons.tsx";
 import { run, status } from "./store.ts";
+import { t } from "./words.ts";
 
 /**
  * Adds an item as `kozo add` does, from a dialog: a title, the request, and the repository and
@@ -56,7 +57,7 @@ export function AddItem({ api }: { api: Api }) {
     <>
       <button type="button" class="primary" onClick={() => setOpen(true)}>
         <Icon name="plus" />
-        New item
+        {t("addItem.new")}
       </button>
       {open ? (
         <Modal label={`${id}-title`} onClose={close}>
@@ -67,9 +68,9 @@ export function AddItem({ api }: { api: Api }) {
               void submit();
             }}
           >
-            <h2 id={`${id}-title`}>New item</h2>
+            <h2 id={`${id}-title`}>{t("addItem.new")}</h2>
             <label class="field">
-              <span>Title</span>
+              <span>{t("field.title")}</span>
               <input
                 value={title}
                 required
@@ -77,23 +78,23 @@ export function AddItem({ api }: { api: Api }) {
               />
             </label>
             <label class="field">
-              <span>Request</span>
+              <span>{t("field.request")}</span>
               <textarea
                 rows={5}
                 value={request}
-                placeholder="What to change and why"
+                placeholder={t("addItem.requestHint")}
                 onInput={(event) => setRequest((event.target as HTMLTextAreaElement).value)}
               />
             </label>
             {repositories.length > 1 ? (
               <label class="field">
-                <span>Repository</span>
+                <span>{t("field.repository")}</span>
                 <select
                   value={repository}
                   required
                   onChange={(event) => setRepository((event.target as HTMLSelectElement).value)}
                 >
-                  <option value="">Choose a repository</option>
+                  <option value="">{t("addItem.chooseRepository")}</option>
                   {repositories.map((path) => (
                     <option key={path} value={path}>
                       {path}
@@ -103,12 +104,12 @@ export function AddItem({ api }: { api: Api }) {
               </label>
             ) : null}
             <label class="field">
-              <span>Work class</span>
+              <span>{t("addItem.workClass")}</span>
               <select
                 value={workClass}
                 onChange={(event) => setWorkClass((event.target as HTMLSelectElement).value)}
               >
-                <option value="">Let triage choose</option>
+                <option value="">{t("addItem.triage")}</option>
                 {workClasses.map((name) => (
                   <option key={name} value={name}>
                     {name}
@@ -123,10 +124,10 @@ export function AddItem({ api }: { api: Api }) {
             ) : null}
             <div class="row form-actions">
               <button type="button" class="ghost" onClick={close} disabled={busy}>
-                Back
+                {t("action.back")}
               </button>
               <button type="submit" class="primary" disabled={!ready} {...busyAttributes(busy)}>
-                {busy ? "Adding…" : "Add item"}
+                {t(busy ? "addItem.adding" : "addItem.add")}
               </button>
             </div>
           </form>

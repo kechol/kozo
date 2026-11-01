@@ -18,6 +18,7 @@ import { Loading, Placeholder } from "./placeholder.tsx";
 import { items, notify } from "./store.ts";
 import { Time } from "./time.tsx";
 import { toneOf } from "./tone.ts";
+import { t, tx } from "./words.ts";
 
 type Row = Record<string, unknown>;
 
@@ -96,19 +97,19 @@ export function detailActions(
   // its next turn; a question takes it as the answer, which the inbox's verbs already offer.
   const instruct: Action = {
     verb: "say",
-    label: "Instruct",
+    label: t("action.instruct"),
     text: {
       field: "text",
       required: true,
-      placeholder: "An instruction for this run and the ones after it",
+      placeholder: t("action.instructHint"),
     },
   };
   const pause: Action =
     hold === "paused"
-      ? { verb: "resume", label: "Resume" }
-      : { verb: "pause", label: "Pause", body: { now: true } };
+      ? { verb: "resume", label: t("action.resume") }
+      : { verb: "pause", label: t("action.pause"), body: { now: true } };
   if (kind === "run") return [instruct, pause];
-  if (hold === "question") return [...inboxActions(kind, hold, null), cancelAction];
+  if (hold === "question") return [...inboxActions(kind, hold, null), cancelAction()];
   if (hold === "attention") {
     const [settle, ...rest] = inboxActions(kind, hold, null);
     return settle ? [settle, instruct, ...rest] : [instruct, ...rest];
@@ -117,18 +118,18 @@ export function detailActions(
     return [
       {
         verb: "return",
-        label: "Give it back",
+        label: t("action.giveBack"),
         emphasis: "primary",
-        text: { field: "text", required: true, placeholder: "What you changed and checked" },
+        text: { field: "text", required: true, placeholder: t("action.giveBackHint") },
       },
-      cancelAction,
+      cancelAction(),
     ];
   }
   return [
     instruct,
     ...(hold === null || hold === "paused" ? [pause] : []),
-    ...(kind === "task" && hold === null ? [takeAction] : []),
-    cancelAction,
+    ...(kind === "task" && hold === null ? [takeAction()] : []),
+    cancelAction(),
   ];
 }
 
@@ -223,7 +224,11 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
     <article class="detail">
       <header class="detail-head">
         <Trail kind={kind} refName={refName} subject={subject} />
-        <h1>{text(subject.title ?? subject.goal ?? `${text(subject.agent)} run`)}</h1>
+        <h1>
+          {text(
+            subject.title ?? subject.goal ?? t("detail.runTitle", { agent: text(subject.agent) }),
+          )}
+        </h1>
         <div class="row">
           <Badge tone={toneOf(kind === "run" ? "run" : "stage", stage)}>{stage}</Badge>
           {hold ? <HoldBadge hold={hold} approval={approval} /> : null}
@@ -293,7 +298,7 @@ function More({ api, refName, actions }: { api: Api; refName: string; actions: A
       }}
     >
       <summary class="button-link ghost more-toggle">
-        More
+        {t("detail.more")}
         <Icon name="chevron-down" />
       </summary>
       <div class="row">
@@ -311,14 +316,14 @@ function Missing({ refName }: { refName: string }) {
     <div class="panel empty-state">
       <Icon name="question" />
       <div>
-        <h1>{refName} does not exist</h1>
-        <p>There is no item, task or run by that reference.</p>
+        <h1>{t("detail.missing", { ref: refName })}</h1>
+        <p>{t("detail.missingBody")}</p>
         <p class="row">
           <a class="button-link" href="#/">
-            Go to the inbox
+            {t("detail.toInbox")}
           </a>
           <a class="button-link" href="#/board">
-            Go to the board
+            {t("detail.toBoard")}
           </a>
         </p>
       </div>
@@ -342,7 +347,7 @@ function Trail({
     kind === "run" ? refName : "",
   ].filter((ref) => ref !== "");
   return (
-    <nav aria-label="Breadcrumb">
+    <nav aria-label={t("detail.breadcrumb")}>
       <ol class="trail">
         {trail.map((ref) => (
           <li key={ref}>
@@ -379,15 +384,15 @@ function Properties({
     const item = detail.item;
     const shape = item.plan ?? item.draft;
     const level = items.value.find((row) => row.ref === refName)?.level;
-    rows.push(["Repository", <code key="repository">{text(item.repository)}</code>]);
-    if (shape) rows.push(["Class", shape.class], ["Risk", shape.risk]);
-    if (level) rows.push(["Level", level]);
+    rows.push([t("field.repository"), <code key="repository">{text(item.repository)}</code>]);
+    if (shape) rows.push([t("prop.class"), shape.class], [t("prop.risk"), shape.risk]);
+    if (level) rows.push([t("prop.level"), level]);
   }
   if (kind === "task" && detail.task) {
     const task = detail.task;
-    rows.push(["Revisions", text(task.revisions)]);
+    rows.push([t("prop.revisions"), text(task.revisions)]);
     rows.push([
-      "Scope",
+      t("prop.scope"),
       <ul key="scope" class="plain">
         {task.scope.map((path) => (
           <li key={path}>
@@ -396,20 +401,23 @@ function Properties({
         ))}
       </ul>,
     ]);
-    if (task.depends_on.length > 0) rows.push(["After", task.depends_on.join(", ")]);
-    if (detail.diff) rows.push(["Branch", <code key="branch">{detail.diff.branch}</code>]);
+    if (task.depends_on.length > 0) rows.push([t("prop.after"), task.depends_on.join(", ")]);
+    if (detail.diff) rows.push([t("prop.branch"), <code key="branch">{detail.diff.branch}</code>]);
   }
   if (kind === "run" && detail.run) {
     const run = detail.run;
-    rows.push(["Agent", text(run.agent)], ["Model", <code key="model">{text(run.model)}</code>]);
-    rows.push(["Started", <Time key="started" iso={text(run.started_at)} />]);
-    if (run.ended_at) rows.push(["Ended", <Time key="ended" iso={text(run.ended_at)} />]);
-    rows.push(["Events", text(detail.events)]);
+    rows.push(
+      [t("prop.agent"), text(run.agent)],
+      [t("prop.model"), <code key="model">{text(run.model)}</code>],
+    );
+    rows.push([t("prop.started"), <Time key="started" iso={text(run.started_at)} />]);
+    if (run.ended_at) rows.push([t("prop.ended"), <Time key="ended" iso={text(run.ended_at)} />]);
+    rows.push([t("prop.events"), text(detail.events)]);
   }
   const cost = detail.cost_usd ?? records?.costUsd;
-  if (cost !== undefined) rows.push(["Cost", usd(cost)]);
+  if (cost !== undefined) rows.push([t("prop.cost"), usd(cost)]);
   return (
-    <aside class="properties" aria-label="Properties">
+    <aside class="properties" aria-label={t("detail.properties")}>
       <dl>
         {rows.map(([label, value]) => (
           <div key={label}>
@@ -439,13 +447,13 @@ function PlanView({
     <section class="card">
       <h2>{title}</h2>
       <p>{plan.approach}</p>
-      <h3>Done when</h3>
+      <h3>{t("detail.doneWhen")}</h3>
       <ul>
         {plan.done_when.map((condition) => (
           <li key={condition}>{condition}</li>
         ))}
       </ul>
-      <h3>Tasks</h3>
+      <h3>{t("detail.tasks")}</h3>
       <ol>
         {plan.tasks.map((task) => (
           <li key={task.id}>
@@ -457,9 +465,9 @@ function PlanView({
               <span class="ref">{task.id}</span>
             )}{" "}
             {task.goal}
-            {task.characterize ? <span class="meta"> characterizes first</span> : null}
+            {task.characterize ? <span class="meta">{t("detail.characterizes")}</span> : null}
             {task.depends_on.length > 0 ? (
-              <span class="meta"> after {task.depends_on.join(", ")}</span>
+              <span class="meta">{t("detail.after", { ids: task.depends_on.join(", ") })}</span>
             ) : null}
             {task.codemod ? (
               <p class="meta">
@@ -490,26 +498,23 @@ function ItemBody({
       {/* The request is what a start approval decides on, so it comes first. */}
       {request !== null ? (
         <section class="card">
-          <h2>Request</h2>
+          <h2>{t("field.request")}</h2>
           {request.trim() === "" ? (
-            <p class="empty">The request has a title only.</p>
+            <p class="empty">{t("detail.requestEmpty")}</p>
           ) : (
             <pre class="text">{request}</pre>
           )}
         </section>
       ) : null}
       {item.draft ? (
-        <PlanView
-          plan={item.draft}
-          title="Draft plan waiting for approval"
-          itemRef={refName}
-          made={made}
-        />
+        <PlanView plan={item.draft} title={t("detail.draftPlan")} itemRef={refName} made={made} />
       ) : null}
-      {item.plan ? <PlanView plan={item.plan} title="Plan" itemRef={refName} made={made} /> : null}
+      {item.plan ? (
+        <PlanView plan={item.plan} title={t("detail.plan")} itemRef={refName} made={made} />
+      ) : null}
       {tasks.length > 0 ? (
         <section class="card">
-          <h2>Tasks</h2>
+          <h2>{t("detail.tasks")}</h2>
           <ul class="plain">
             {tasks.map((task) => (
               <li key={text(task.ref)} class="list-row">
@@ -551,7 +556,7 @@ function TaskBody({
 }) {
   const doneWhen = (
     <section class="card">
-      <h2>Done when</h2>
+      <h2>{t("detail.doneWhen")}</h2>
       <ul>
         {task.done_when.map((condition) => (
           <li key={condition}>{condition}</li>
@@ -562,7 +567,7 @@ function TaskBody({
   const blueprint = records ? <Blueprint records={records} /> : null;
   const report = records?.report ? (
     <section class="card">
-      <RecordHead title="Run report" run={records.report.run} />
+      <RecordHead title={t("detail.runReport")} run={records.report.run} />
       <p>{text(records.report.report.summary)}</p>
       <ul>
         {records.report.report.changes.map((change) => (
@@ -571,7 +576,7 @@ function TaskBody({
       </ul>
       {records.report.report.out_of_scope.length > 0 ? (
         <>
-          <h3>Noticed out of scope</h3>
+          <h3>{t("detail.outOfScope")}</h3>
           <ul>
             {records.report.report.out_of_scope.map((note) => (
               <li key={text(note.note)}>
@@ -586,7 +591,7 @@ function TaskBody({
   const review = records?.review ? (
     <section class="card">
       <RecordHead
-        title="Review"
+        title={t("detail.review")}
         run={records.review.run}
         verdict={text(records.review.verdict.verdict)}
         tone={toneOf("review", text(records.review.verdict.verdict))}
@@ -611,7 +616,7 @@ function TaskBody({
   const verify = records?.verify ? (
     <section class="card">
       <RecordHead
-        title="Verify"
+        title={t("detail.verify")}
         run={records.verify.run}
         verdict={text(records.verify.verdict.result)}
         tone={toneOf("verify", text(records.verify.verdict.result))}
@@ -623,7 +628,7 @@ function TaskBody({
             <Icon name={condition.met ? "check" : "x"} />
             <div>
               <p>
-                <span class="sr-only">{condition.met ? "Met: " : "Not met: "}</span>
+                <span class="sr-only">{t(condition.met ? "detail.met" : "detail.notMet")}</span>
                 {text(condition.condition)}
               </p>
               <p class="meta">{text(condition.observation)}</p>
@@ -643,7 +648,7 @@ function TaskBody({
   const decisions =
     records && records.decisions.length > 0 ? (
       <section class="card">
-        <h2>Decision log</h2>
+        <h2>{t("detail.decisionLog")}</h2>
         {records.decisions.map((log) => (
           <div key={log.run}>
             <h3 class="ref">{log.run}</h3>
@@ -686,25 +691,29 @@ function TaskBody({
 function MergeCard({ branch, handoff }: { branch: Branch; handoff: Detail["handoff"] | null }) {
   const copy = () =>
     void navigator.clipboard.writeText(branch.branch).then(
-      () => notify(`Copied ${branch.branch}`, false),
+      () => notify(t("detail.copied", { branch: branch.branch }), false),
       (error: Error) => notify(error.message, true),
     );
   return (
     <section class="card">
-      <h2>Ready to merge</h2>
+      <h2>{t("hold.merge")}</h2>
       <p>
-        Read the diff, then merge <code>{branch.branch}</code> into <code>{branch.base}</code> in{" "}
-        <code>{branch.repository}</code> yourself; kozo never merges.
+        {tx("detail.mergeBody", {
+          branch: <code>{branch.branch}</code>,
+          base: <code>{branch.base}</code>,
+          repository: <code>{branch.repository}</code>,
+        })}
       </p>
       <div class="row">
         <button type="button" onClick={copy}>
-          Copy the branch name
+          {t("detail.copyBranch")}
         </button>
       </div>
       {handoff ? (
         <>
           <h3>
-            Handoff report <span class="meta">at {handoff.head.slice(0, 12)}</span>
+            {t("detail.handoff")}{" "}
+            <span class="meta">{t("detail.handoffAt", { head: handoff.head.slice(0, 12) })}</span>
           </h3>
           <pre class="text">{handoff.report}</pre>
         </>
@@ -740,7 +749,12 @@ function RecordHead({
 function Blueprint({ records }: { records: Verdicts }) {
   return (
     <section class="card">
-      <h2>Blueprint{records.latest ? <span class="meta"> in {records.latest}</span> : null}</h2>
+      <h2>
+        {t("detail.blueprint")}
+        {records.latest ? (
+          <span class="meta">{t("detail.blueprintIn", { run: records.latest })}</span>
+        ) : null}
+      </h2>
       <ol class="steps">
         {records.nodes.map((node) => {
           const tone = toneOf("node", node.state);
@@ -798,17 +812,15 @@ function Diff({ api, refName, open = false }: { api: Api; refName: string; open?
   }, []);
   return (
     <section class="card">
-      <h2>Diff</h2>
+      <h2>{t("detail.diff")}</h2>
       {diff ? (
         <div ref={shown} class="diff-shown" tabIndex={-1}>
           <DiffView text={diff.diff} />
-          {diff.cut ? (
-            <p class="meta">The diff is longer; kozo show --diff prints all of it.</p>
-          ) : null}
+          {diff.cut ? <p class="meta">{t("detail.diffCut")}</p> : null}
         </div>
       ) : (
         <button type="button" onClick={show} {...busyAttributes(loading)}>
-          {loading ? "Reading the diff…" : "Show the diff"}
+          {t(loading ? "detail.diffReading" : "detail.diffShow")}
         </button>
       )}
       {problem ? <p class="problem">{problem}</p> : null}
@@ -841,7 +853,7 @@ function DiffView({ text }: { text: string }) {
       }),
     [text],
   );
-  if (text.trim() === "") return <p class="empty">The branch changes nothing yet.</p>;
+  if (text.trim() === "") return <p class="empty">{t("detail.diffEmpty")}</p>;
   return <pre class="diff">{lines}</pre>;
 }
 
@@ -866,7 +878,7 @@ function Evidence({ api, run, path }: { api: Api; run: string; path: string }) {
   if (!url) return <span class="evidence-file">{path}</span>;
   return image ? (
     <a href={url} target="_blank" rel="noreferrer" class="evidence-image">
-      <img src={url} alt={`evidence ${path}`} />
+      <img src={url} alt={t("detail.evidence", { path })} />
     </a>
   ) : (
     <a href={url} download={path.split("/").at(-1)} class="evidence-file">
@@ -878,7 +890,7 @@ function Evidence({ api, run, path }: { api: Api; run: string; path: string }) {
 function Runs({ runs }: { runs: Row[] }) {
   return (
     <section>
-      <h2>Runs</h2>
+      <h2>{t("detail.runs")}</h2>
       <ul class="plain runs">
         {runs.map((run) => (
           <li key={text(run.ref)}>
@@ -924,8 +936,8 @@ function Timeline({ api, refName }: { api: Api; refName: string }) {
   }, [events]);
   return (
     <section class="card">
-      <h2>Events</h2>
-      {events.length === 0 ? <p class="empty">No events yet.</p> : null}
+      <h2>{t("detail.events")}</h2>
+      {events.length === 0 ? <p class="empty">{t("detail.eventsNone")}</p> : null}
       <div class="timeline">
         {groups.map((group) => (
           <div key={`${group.run} ${group.events[0]?.ts}`} class="timeline-group">
