@@ -77,9 +77,11 @@ export type Prune = z.infer<typeof pruneSchema>;
 export const evalCaseRequestSchema = z.strictObject({ run: z.string().regex(/^r-\d{4,}$/) });
 export type EvalCaseRequest = z.infer<typeof evalCaseRequestSchema>;
 
-/** The JSON body of every error response. */
+/** The JSON body of every error response: the sentence in kozod's locale, and its message. */
 export interface ApiError {
   error: string;
+  code: string;
+  values: Record<string, unknown>;
   issues?: string[];
 }
 

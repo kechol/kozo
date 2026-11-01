@@ -103,11 +103,11 @@ export class GitHubSync {
    */
   async install(path: string): Promise<VerbResult> {
     const repository = this.repositories().find((entry) => entry.path === resolve(path));
-    if (!repository) throw new CommandError(422, `${path} is not a registered GitHub repository`);
+    if (!repository) throw new CommandError(422, message("api.not-github", { path }));
     const { github } = repository;
     const branch = `kozo/${this.store.factoryId}/install`;
     const open = (await this.github.pullsFor(github, branch)).find((pull) => pull.state === "open");
-    if (open) return { message: `the install waits for your review and merge: ${open.url}` };
+    if (open) return { message: message("api.install-waits", { url: open.url }) };
     await this.github.fetch(repository.path);
     const base = await baseOf(repository.path, "github");
     const tip = (await git(repository.path, ["rev-parse", base.ref])).trim();
@@ -118,7 +118,8 @@ export class GitHubSync {
         mode: "github",
         defaultBranch: base.branch,
       });
-      if (written.length === 0) return { message: `${github} has every file kozo installs` };
+      if (written.length === 0)
+        return { message: message("api.install-complete", { repository: github }) };
       await git(worktree, ["add", "--all"]);
       // The commit is the factory's: kozo's identity, unsigned and past the owner's hooks.
       await git(worktree, [...commitIdentity(), "commit", "--quiet", "--message", "Install kozo"]);
@@ -130,7 +131,7 @@ export class GitHubSync {
         title: "Install kozo",
         body: installBody(github, written),
       });
-      return { message: `opened ${pull.url}; edit the files, set status: ready, then merge it` };
+      return { message: message("api.install-opened", { url: pull.url }) };
     } finally {
       await removeCheckout(repository.path, worktree);
     }
@@ -151,14 +152,14 @@ export class GitHubSync {
    */
   async moveToIssue(ref: string): Promise<VerbResult> {
     const item = this.store.state.items[ref];
-    if (!item) throw new CommandError(404, `${ref} does not exist`);
-    if (item.source !== "local") throw new CommandError(409, `${ref} is not a local item`);
-    if (isClosed(item.stage)) throw new CommandError(409, `${ref} is ${item.stage}`);
-    if (item.tasks.length > 0)
-      throw new CommandError(409, `${ref} has tasks already, whose work would not follow it`);
+    if (!item) throw new CommandError(404, message("api.missing", { ref }));
+    if (item.source !== "local") throw new CommandError(409, message("api.not-local", { ref }));
+    if (isClosed(item.stage))
+      throw new CommandError(409, message("api.closed", { ref, stage: item.stage }));
+    if (item.tasks.length > 0) throw new CommandError(409, message("api.has-tasks", { ref }));
     const repository = this.repositories().find((entry) => entry.path === item.repository);
     if (!repository)
-      throw new CommandError(409, `${item.repository} has no GitHub repository in factory.yml`);
+      throw new CommandError(409, message("api.no-github", { repository: item.repository }));
     const file = await readItemFile(this.home, ref);
     // The label goes with the Issue, so a failure leaves no Issue that a retry would open again.
     const number = await this.github.createIssue(repository.github, {
@@ -175,7 +176,7 @@ export class GitHubSync {
       message("stage.moved-to-issue", { issue }),
     );
     const name = repository.github.slice(repository.github.indexOf("/") + 1);
-    return { message: `moved ${ref} to ${issue}; kozod takes it up as ${name}#${number}` };
+    return { message: message("api.moved-issue", { ref, issue, item: `${name}#${number}` }) };
   }
 
   /** One pass over every GitHub repository; a repository that fails is reported and skipped. */

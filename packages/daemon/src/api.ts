@@ -1,6 +1,5 @@
 import {
   type AddItem,
-  type ApiError,
   type AutonomyLevel,
   addItemSchema,
   type EvalCaseRequest,
@@ -13,6 +12,8 @@ import {
   issueText,
   type Locale,
   listKindSchema,
+  type Message,
+  message,
   messageSchema,
   type Prune,
   parseReference,
@@ -50,14 +51,15 @@ const reportViews: readonly ReportView[] = ["summary", "review", "cost"];
 export class CommandError extends Error {
   constructor(
     readonly status: 400 | 404 | 409 | 422 | 501,
-    message: string,
+    /** Why the command was refused, as people read it; `message` is its English sentence. */
+    readonly reason: Message,
   ) {
-    super(message);
+    super(render(reason, "en"));
   }
 }
 
 export interface VerbResult {
-  message: string;
+  message: Message;
   /** True when the reference now waits for a human, which the CLI reports as exit code 3. */
   awaitingHuman?: boolean;
 }
@@ -110,8 +112,9 @@ export interface ApiOptions {
   report?(view: ReportView, days: number): Promise<unknown>;
 }
 
-const error = (c: Context, status: number, message: string, issues?: string[]) =>
-  c.json({ error: message, ...(issues ? { issues } : {}) } satisfies ApiError, status as 400);
+// The rendering middleware turns `error` into its sentence beside its code and values.
+const error = (c: Context, status: number, reason: Message, issues?: string[]) =>
+  c.json({ error: reason, ...(issues ? { issues } : {}) }, status as 400);
 
 function tokenMatches(header: string | undefined, token: string): boolean {
   if (token === "" || !header?.startsWith("Bearer ")) return false;
@@ -122,6 +125,27 @@ async function jsonBody(c: Context): Promise<unknown> {
   const text = await c.req.text();
   if (text.trim() === "") return {};
   return JSON.parse(text);
+}
+
+/**
+ * A response body as clients read it: its own `message` or `error` becomes the sentence in
+ * `locale` with its code and values beside it, and every other message in it becomes its sentence.
+ */
+function answered(body: unknown, locale: Locale): unknown {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) return shown(body, locale);
+  const fields = { ...(body as Record<string, unknown>) };
+  for (const key of ["message", "error"]) {
+    const recorded = messageSchema.safeParse(fields[key]);
+    if (!recorded.success) continue;
+    const { code, values } = recorded.data;
+    return {
+      ...(shown({ ...fields, [key]: undefined }, locale) as object),
+      [key]: render(recorded.data, locale),
+      code,
+      values: shown(values, locale),
+    };
+  }
+  return shown(fields, locale);
 }
 
 /** `value` with each of kozo's messages in it rendered in `locale`. */
@@ -162,46 +186,46 @@ export function createApi({
   const app = new Hono();
 
   app.use("*", async (c, next) => {
-    if (!hosts.has(c.req.header("host") ?? "")) return error(c, 421, "unknown host");
+    await next();
+    if (!c.res.headers.get("content-type")?.startsWith("application/json")) return;
+    const body = answered(await c.res.json(), locale());
+    c.res = new Response(JSON.stringify(body), { status: c.res.status, headers: c.res.headers });
+  });
+
+  app.use("*", async (c, next) => {
+    if (!hosts.has(c.req.header("host") ?? "")) return error(c, 421, message("api.unknown-host"));
     if (c.req.method === "GET" && c.req.path === "/api/hello") {
       const nonce = c.req.query("nonce") ?? "";
-      if (!/^[0-9a-f]{32,128}$/.test(nonce)) return error(c, 400, "hello needs a hex nonce");
+      if (!/^[0-9a-f]{32,128}$/.test(nonce)) return error(c, 400, message("api.hello-nonce"));
       return c.json({ proof: helloProof(token, nonce) });
     }
     const origin = c.req.header("origin");
     // The page trades the code it was opened with for a session; only its own origin may.
     if (c.req.method === "POST" && c.req.path === "/api/dashboard/session") {
       if (origin === undefined || !origins.has(origin))
-        return error(c, 403, "a session is given only to the dashboard's own origin");
+        return error(c, 403, message("api.session-origin"));
       const body = (await jsonBody(c).catch(() => ({}))) as { code?: unknown };
       const session = typeof body.code === "string" ? sessions.redeem(body.code) : null;
-      if (session === null) return error(c, 403, "the code is unknown, used or expired");
+      if (session === null) return error(c, 403, message("api.code-invalid"));
       return c.json({ token: session });
     }
     const header = c.req.header("authorization");
     const api = tokenMatches(header, token);
     const session = !api && header?.startsWith("Bearer ") && sessions.accepts(header.slice(7));
-    if (!api && !session) return error(c, 401, "missing or wrong API token");
+    if (!api && !session) return error(c, 401, message("api.token"));
     // A code opens a new session, so only the API token, never a session, may ask for one.
     if (c.req.path === "/api/dashboard/code" && !api)
-      return error(c, 403, "only the API token asks for a dashboard code");
+      return error(c, 403, message("api.code-token"));
     if (c.req.method !== "GET" && origin !== undefined && !origins.has(origin)) {
-      return error(c, 403, "writes are accepted only from this machine's own origin");
+      return error(c, 403, message("api.write-origin"));
     }
     await next();
   });
 
-  app.use("/api/*", async (c, next) => {
-    await next();
-    if (!c.res.headers.get("content-type")?.startsWith("application/json")) return;
-    const body = shown(await c.res.json(), locale());
-    c.res = new Response(JSON.stringify(body), { status: c.res.status, headers: c.res.headers });
-  });
-
   app.onError((thrown, c) => {
-    if (thrown instanceof CommandError) return error(c, thrown.status, thrown.message);
-    if (thrown instanceof SyntaxError) return error(c, 400, "the body is not JSON");
-    return error(c, 500, thrown.message);
+    if (thrown instanceof CommandError) return error(c, thrown.status, thrown.reason);
+    if (thrown instanceof SyntaxError) return error(c, 400, message("api.not-json"));
+    return error(c, 500, message("text", { text: thrown.message }));
   });
 
   app.get("/api/status", (c) => {
@@ -211,6 +235,7 @@ export function createApi({
       mode,
       paused: store.state.paused,
       pausedReason: store.state.pausedReason,
+      locale: locale(),
       activeRuns: activeRuns(store.db),
       waiting: inboxCount(store.db),
       costTodayUsd: costToday(store.db, now()),
@@ -222,16 +247,17 @@ export function createApi({
   app.get("/api/report", async (c) => {
     const view = c.req.query("view") ?? "summary";
     if (!reportViews.includes(view as ReportView) || !report)
-      return error(c, 400, `no report view ${view}`);
+      return error(c, 400, message("api.no-view", { view }));
     const days = Number(c.req.query("days") ?? reportDays.default);
     if (!Number.isInteger(days) || days < 1 || days > reportDays.max)
-      return error(c, 400, `days must be a whole number from 1 to ${reportDays.max}`);
+      return error(c, 400, message("api.days", { max: reportDays.max }));
     return c.json(await report(view as ReportView, days));
   });
 
   app.get("/api/ls/:kind", async (c) => {
     const kind = listKindSchema.safeParse(c.req.param("kind"));
-    if (!kind.success) return error(c, 400, `unknown list ${c.req.param("kind")}`);
+    if (!kind.success)
+      return error(c, 400, message("api.unknown-list", { list: c.req.param("kind") ?? "" }));
     const rows = list(store.db, kind.data);
     if (kind.data !== "items") return c.json(rows);
     // Items come in the order kozod starts their work, each open one with the class and level
@@ -256,7 +282,7 @@ export function createApi({
   const reference = (c: Context): [string, Reference] | Response => {
     const ref = c.req.param("ref") ?? "";
     const parsedReference = parseReference(ref);
-    if (!parsedReference) return error(c, 400, `${ref} is not a reference`);
+    if (!parsedReference) return error(c, 400, message("api.not-reference", { ref }));
     return [ref, parsedReference];
   };
 
@@ -265,7 +291,7 @@ export function createApi({
     if (found instanceof Response) return found;
     const [ref, parsedReference] = found;
     const result = detail(store.db, ref, parsedReference);
-    if (!result) return error(c, 404, `${ref} does not exist`);
+    if (!result) return error(c, 404, message("api.missing", { ref }));
     // A file that cannot be read leaves its field out rather than failing the detail.
     if (result.kind === "item") {
       const body = await request?.(ref).catch(() => null);
@@ -290,14 +316,14 @@ export function createApi({
     const found = reference(c);
     if (found instanceof Response) return found;
     const [ref, parsedReference] = found;
-    if (parsedReference.kind !== "task") return error(c, 400, "only a task has a diff");
+    if (parsedReference.kind !== "task") return error(c, 400, message("api.diff-task"));
     const location = await locateTask?.(ref).catch(() => null);
-    if (!location) return error(c, 404, `${ref} has no diff`);
+    if (!location) return error(c, 404, message("api.no-diff", { ref }));
     const text = await git(location.repository, [
       "diff",
       `${location.base}...${location.branch}`,
     ]).catch(() => null);
-    if (text === null) return error(c, 404, `${ref} has no branch yet`);
+    if (text === null) return error(c, 404, message("api.no-branch", { ref }));
     const cut = text.length > diffLimit;
     return c.json({
       base: location.base,
@@ -311,19 +337,19 @@ export function createApi({
     const found = reference(c);
     if (found instanceof Response) return found;
     const [ref, parsedReference] = found;
-    if (parsedReference.kind !== "task") return error(c, 400, "only a task has records");
+    if (parsedReference.kind !== "task") return error(c, 400, message("api.records-task"));
     const result = await records?.task(ref);
-    if (!result) return error(c, 404, `${ref} does not exist`);
+    if (!result) return error(c, 404, message("api.missing", { ref }));
     return c.json(result);
   });
 
   // The files are an agent's, so none is ever run or rendered by the browser as a page.
   app.get("/api/runs/:run/evidence/*", async (c) => {
     const run = c.req.param("run");
-    if (parseReference(run)?.kind !== "run") return error(c, 400, `${run} is not a run`);
+    if (parseReference(run)?.kind !== "run") return error(c, 400, message("api.not-run", { run }));
     const path = decodeURIComponent(c.req.path.slice(`/api/runs/${run}/evidence/`.length));
     const found = await records?.evidence(run, path);
-    if (!found) return error(c, 404, "no such evidence");
+    if (!found) return error(c, 404, message("api.no-evidence"));
     return new Response(found.file, {
       headers: {
         "content-type": found.type,
@@ -343,7 +369,7 @@ export function createApi({
     const found = reference(c);
     if (found instanceof Response) return found;
     const [ref, parsedReference] = found;
-    if (!exists(ref)) return error(c, 404, `${ref} does not exist`);
+    if (!exists(ref)) return error(c, 404, message("api.missing", { ref }));
     const after = Number(c.req.header("last-event-id") ?? c.req.query("after") ?? 0) || 0;
     const column = eventColumn[parsedReference.kind];
     const matches = (event: Event) => (column === "run_id" ? event.run_id : event[column]) === ref;
@@ -396,7 +422,7 @@ export function createApi({
       return error(
         c,
         400,
-        "invalid item",
+        message("api.invalid-item"),
         body.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
       );
     return c.json(await commands.addItem(body.data), 201);
@@ -407,20 +433,25 @@ export function createApi({
     if (found instanceof Response) return found;
     const [ref, parsedReference] = found;
     const verb = verbSchema.safeParse(c.req.param("verb"));
-    if (!verb.success) return error(c, 400, `unknown verb ${c.req.param("verb")}`);
+    if (!verb.success)
+      return error(c, 400, message("api.unknown-verb", { verb: c.req.param("verb") ?? "" }));
     if (!verbsByKind[parsedReference.kind].includes(verb.data)) {
-      return error(c, 400, `a ${parsedReference.kind} does not take ${verb.data}`);
+      return error(
+        c,
+        400,
+        message("api.verb-kind", { kind: parsedReference.kind, verb: verb.data }),
+      );
     }
     const body = verbBodySchemas[verb.data].safeParse(await jsonBody(c));
     if (!body.success) {
       return error(
         c,
         400,
-        `invalid ${verb.data}`,
+        message("api.invalid-verb", { verb: verb.data }),
         body.error.issues.map((i) => `${i.path.join(".") || "<body>"}: ${i.message}`),
       );
     }
-    if (!exists(ref)) return error(c, 404, `${ref} does not exist`);
+    if (!exists(ref)) return error(c, 404, message("api.missing", { ref }));
     return c.json(await commands.act(ref, parsedReference, verb.data, body.data));
   });
 
@@ -430,21 +461,24 @@ export function createApi({
   app.post("/api/admin/db-rebuild", async (c) => c.json(await commands.rebuildIndex()));
   app.post("/api/admin/install", async (c) => {
     const body = installSchema.safeParse(await jsonBody(c));
-    if (!body.success) return error(c, 400, "invalid install", body.error.issues.map(issueText));
+    if (!body.success)
+      return error(c, 400, message("api.invalid-install"), body.error.issues.map(issueText));
     return c.json(await commands.install(body.data));
   });
   app.post("/api/admin/eval-case", async (c) => {
     const body = evalCaseRequestSchema.safeParse(await jsonBody(c));
-    if (!body.success) return error(c, 400, "invalid eval case", body.error.issues.map(issueText));
+    if (!body.success)
+      return error(c, 400, message("api.invalid-eval"), body.error.issues.map(issueText));
     return c.json(await commands.evalCase(body.data));
   });
   app.post("/api/admin/prune", async (c) => {
     const body = pruneSchema.safeParse(await jsonBody(c));
-    if (!body.success) return error(c, 400, "invalid prune", body.error.issues.map(issueText));
+    if (!body.success)
+      return error(c, 400, message("api.invalid-prune"), body.error.issues.map(issueText));
     return c.json(await commands.prune(body.data));
   });
 
-  app.notFound((c) => error(c, 404, "no such endpoint"));
+  app.notFound((c) => error(c, 404, message("api.no-endpoint")));
   return app;
 }
 

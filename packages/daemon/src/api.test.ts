@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { chmod, cp, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { kozoHome } from "@kozo/core";
+import { kozoHome, message } from "@kozo/core";
 import { recordedLogs, type TempDirectory, tempDirectory } from "@kozo/testing";
 import { CommandError, type Commands, createApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
@@ -17,27 +17,31 @@ const calls: unknown[][] = [];
 const commands: Commands = {
   addItem: async (body) => {
     calls.push(["addItem", body]);
-    return { ref: "K-2", message: "added K-2" };
+    return { ref: "K-2", message: message("api.added", { ref: "K-2" }) };
   },
   act: async (ref, _reference, verb, body) => {
     calls.push(["act", ref, verb, body]);
-    if (verb === "approve") throw new CommandError(409, `${ref} is not waiting for an approval`);
-    return { message: `${verb} ${ref}` };
+    if (verb === "approve") throw new CommandError(409, message("api.no-approval", { ref }));
+    return { message: message("text", { text: `${verb} ${ref}` }) };
   },
-  pauseFactory: async () => ({ message: "paused" }),
-  resumeFactory: async () => ({ message: "resumed" }),
-  rebuildIndex: async () => ({ message: "rebuilt" }),
+  pauseFactory: async () => ({ message: message("text", { text: "paused" }) }),
+  resumeFactory: async () => ({ message: message("text", { text: "resumed" }) }),
+  rebuildIndex: async () => ({ message: message("text", { text: "rebuilt" }) }),
   evalCase: async (body) => {
     calls.push(["evalCase", body]);
-    return { message: "drafted", id: "shop-k-1", text: "version: 1\n" };
+    return { message: message("text", { text: "drafted" }), id: "shop-k-1", text: "version: 1\n" };
   },
   prune: async (body) => {
     calls.push(["prune", body]);
-    return { message: "pruned", before: "2026-07-01T00:00:00.000Z", runs: [] };
+    return {
+      message: message("text", { text: "pruned" }),
+      before: "2026-07-01T00:00:00.000Z",
+      runs: [],
+    };
   },
   install: async (body) => {
     calls.push(["install", body]);
-    return { message: "opened" };
+    return { message: message("text", { text: "opened" }) };
   },
 };
 
@@ -158,6 +162,26 @@ describe("the local API", () => {
     expect(reasons).toEqual(["開始の承認", "計画の承認"]);
   });
 
+  test("an answer or an error is a sentence in the factory's locale, with its code and values", async () => {
+    const japanese = createApi({ store, token, port, mode: "local", commands, locale: () => "ja" });
+    const request = (path: string, init: RequestInit = {}) =>
+      japanese.request(`http://127.0.0.1:${port}${path}`, {
+        ...init,
+        headers: { authorization: `Bearer ${token}`, host: `127.0.0.1:${port}` },
+      });
+    expect(await (await request("/api/status")).json()).toMatchObject({ locale: "ja" });
+    const conflict = await request("/api/refs/K-1/approve", { method: "POST", body: "{}" });
+    expect(await conflict.json()).toEqual({
+      error: "K-1 は承認を待っていません",
+      code: "api.no-approval",
+      values: { ref: "K-1" },
+    });
+    expect(await (await request("/api/nowhere")).json()).toMatchObject({
+      error: "そのエンドポイントはありません",
+      code: "api.no-endpoint",
+    });
+  });
+
   test("a detail carries an item's request and a task's branch and last handoff", async () => {
     const tasks = (await (await call("/api/ls/tasks")).json()) as Record<string, unknown>[];
     expect(tasks[0]).toMatchObject({ ref: "K-1/t1", awaiting_merge: 0 });
@@ -247,7 +271,12 @@ describe("the local API", () => {
       body: JSON.stringify({ title: "Show low stock" }),
     });
     expect(added.status).toBe(201);
-    expect(await added.json()).toEqual({ ref: "K-2", message: "added K-2" });
+    expect(await added.json()).toEqual({
+      ref: "K-2",
+      message: "added K-2; it goes to Triage",
+      code: "api.added",
+      values: { ref: "K-2" },
+    });
     expect((await call("/api/items", { method: "POST", body: "{}" })).status).toBe(400);
     expect((await call("/api/items", { method: "POST", body: "{" })).status).toBe(400);
 
@@ -260,7 +289,7 @@ describe("the local API", () => {
       method: "POST",
       body: JSON.stringify({ text: "Keep zero as Sold out." }),
     });
-    expect(await encoded.json()).toEqual({ message: "say K-1/t1" });
+    expect(await encoded.json()).toMatchObject({ message: "say K-1/t1" });
     expect((await call("/api/refs/r-0002/approve", { method: "POST", body: "{}" })).status).toBe(
       400,
     );
@@ -268,7 +297,11 @@ describe("the local API", () => {
     expect((await call("/api/refs/K-1/reject", { method: "POST", body: "{}" })).status).toBe(400);
     const conflict = await call("/api/refs/K-1/approve", { method: "POST", body: "{}" });
     expect(conflict.status).toBe(409);
-    expect(await conflict.json()).toEqual({ error: "K-1 is not waiting for an approval" });
+    expect(await conflict.json()).toEqual({
+      error: "K-1 is not waiting for an approval",
+      code: "api.no-approval",
+      values: { ref: "K-1" },
+    });
     expect((await call("/api/refs/K-9/say", { method: "POST", body: '{"text":"x"}' })).status).toBe(
       404,
     );

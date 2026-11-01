@@ -28,8 +28,9 @@ Every command exits with one of these codes, so scripts can tell the outcomes ap
 | 3    | The subject waits for a human, such as an item added at L1 |
 | 4    | Not found                                                  |
 
-Most commands take `--json` and then print one JSON document instead of text. `kozo --version`
-prints the version.
+Most commands take `--json` and then print one JSON document instead of text. Its `message` or
+`error` is the sentence in the factory's `locale`, with `code` and `values` beside it for scripts.
+`kozo --version` prints the version.
 
 ## Running kozod
 

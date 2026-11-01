@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { kozoHome, message, runFiles } from "@kozo/core";
-import { tempDirectory } from "@kozo/testing";
+import { said, tempDirectory } from "@kozo/testing";
 import { EventStore } from "./event-store.ts";
 import { pruneRecords } from "./prune.ts";
 
@@ -84,7 +84,7 @@ describe("pruneRecords", () => {
     const { home, store } = await factory(dir.path);
     const listed = await pruneRecords(home, store, 30, true, later(31));
     expect(listed.runs).toEqual(["r-0001"]);
-    expect(listed.message).toStartWith("would prune 1 runs");
+    expect(said(listed)).toStartWith("would prune 1 runs");
     expect((await readdir(runFiles(home, "r-0001").dir)).length).toBe(7);
 
     expect((await pruneRecords(home, store, 30, false, later(29))).runs).toEqual([]);

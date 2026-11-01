@@ -23,6 +23,7 @@ import {
   suitePlan as plan,
   reasonOf,
   suiteReport as report,
+  said,
   suiteBase,
   suiteTask,
   tempDirectory,
@@ -567,9 +568,9 @@ describe("the minimal path", () => {
     const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
     await env.settle();
     expect(
-      (await env.control.act(ref, item, "reject", { reason: "Also cover 0 units" })).message,
+      said(await env.control.act(ref, item, "reject", { reason: "Also cover 0 units" })),
     ).toContain("drafts it again");
-    expect((await env.control.act(ref, item, "reject", { reason: "again" })).message).toBe(
+    expect(said(await env.control.act(ref, item, "reject", { reason: "again" }))).toBe(
       `${ref} is not waiting for a plan approval`,
     );
     await env.settle();
@@ -583,19 +584,19 @@ describe("the minimal path", () => {
       hold: { kind: "approval", reason: { code: "hold.plan-approval" } },
     });
     await env.control.act(ref, item, "approve", {});
-    expect((await env.control.act(ref, item, "approve", {})).message).toBe(
+    expect(said(await env.control.act(ref, item, "approve", {}))).toBe(
       `${ref} is not waiting for an approval`,
     );
 
     env.scheduler.tick();
     const taskRef = `${ref}/t1`;
     await eventually(() => env.agent.requests.length >= 3, "session 3 to start");
-    expect((await env.control.act(taskRef, task, "pause", { now: true })).message).toContain(
+    expect(said(await env.control.act(taskRef, task, "pause", { now: true }))).toContain(
       "stopped r-",
     );
     await env.scheduler.idle();
     expect(env.store.state.tasks[taskRef]?.hold?.kind).toBe("paused");
-    expect((await env.control.act(taskRef, task, "pause", {})).message).toBe(
+    expect(said(await env.control.act(taskRef, task, "pause", {}))).toBe(
       `${taskRef} is already paused`,
     );
     expect(Object.values(env.store.state.runs).at(-1)?.state).toBe("stopped");
@@ -607,7 +608,7 @@ describe("the minimal path", () => {
     expect(env.store.state.items[ref]?.notes.length).toBe(notes);
 
     await env.control.pauseFactory();
-    expect((await env.control.pauseFactory()).message).toBe("the factory is already paused");
+    expect(said(await env.control.pauseFactory())).toBe("the factory is already paused");
     await env.control.act(taskRef, task, "resume", {});
     env.scheduler.tick();
     expect(env.agent.requests).toHaveLength(3);
@@ -620,7 +621,7 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[taskRef]?.hold).toBeNull();
     expect(env.store.state.items[ref]?.stage).toBe("cancelled");
     expect(await env.repo.git("branch", "--list", "kozo/*")).toBe("");
-    expect((await env.control.act(taskRef, task, "close", { done: true })).message).toBe(
+    expect(said(await env.control.act(taskRef, task, "close", { done: true }))).toBe(
       `${taskRef} is already cancelled`,
     );
     await expect(env.control.act(taskRef, task, "retry", {})).rejects.toThrow("is cancelled");
@@ -984,7 +985,7 @@ describe("the minimal path", () => {
     });
 
     const retried = await env.control.act(task, reference, "retry", {});
-    expect(retried.message).toContain("fix rounds given back");
+    expect(said(retried)).toContain("fix rounds given back");
     expect(env.store.state.tasks[task]).toMatchObject({
       stage: "building",
       handoffFixes: 0,
@@ -1925,9 +1926,9 @@ describe("the minimal path", () => {
     await env.settle();
     await env.control.act(ref, item, "reject", { reason: "Also cover 0 units" });
     await env.settle();
-    expect(
-      (await env.control.act(ref, item, "reject", { reason: "Still not 0" })).message,
-    ).toContain("a second time");
+    expect(said(await env.control.act(ref, item, "reject", { reason: "Still not 0" }))).toContain(
+      "a second time",
+    );
     await env.settle();
     expect(env.store.state.items[ref]).toMatchObject({
       stage: "planning",
@@ -2236,7 +2237,7 @@ test("one unit is still counted", () => {
 
     const taken = await env.control.act(task, reference, "take", {});
     const worktree = worktreePath(env.home, env.repo.path, task);
-    expect(taken.message).toStartWith(`${task} is yours: commit in ${worktree} on kozo/`);
+    expect(said(taken)).toStartWith(`${task} is yours: commit in ${worktree} on kozo/`);
     expect(env.store.state.tasks[task]?.hold).toMatchObject({ kind: "taken" });
     await expect(env.control.act(task, reference, "resume", {})).rejects.toThrow(
       "kozo return gives it back",
@@ -2439,7 +2440,7 @@ test("one unit is still counted", () => {
       text: "Why is it not merged yet?",
       ask: true,
     });
-    expect(asked.message).toBe("It waits for your merge.");
+    expect(said(asked)).toBe("It waits for your merge.");
     const [prompt] = prompts;
     expect(prompt).toStartWith("<question>\nWhy is it not merged yet?\n</question>");
     expect(prompt).toContain('<records trust="untrusted">');
@@ -2518,7 +2519,7 @@ test("one unit is still counted", () => {
       "reorder",
       { before: first.ref },
     );
-    expect(moved.message).toBe(`moved ${second.ref} before ${first.ref}`);
+    expect(said(moved)).toBe(`moved ${second.ref} before ${first.ref}`);
     expect(env.store.state.order).toEqual([second.ref, first.ref]);
     await env.control.resumeFactory();
     await env.settle();
@@ -2569,7 +2570,7 @@ test("one unit is still counted", () => {
     env.scheduler.tick();
     await eventually(() => env.agent.requests.length >= 2, "session 2 to start");
     const task = `${ref}/t1`;
-    const said = await env.control.act(
+    const answer = await env.control.act(
       task,
       { kind: "task", item: { repo: null, number: 1 }, task: 1 },
       "say",
@@ -2577,7 +2578,7 @@ test("one unit is still counted", () => {
         text: "Keep 0 as Sold out.",
       },
     );
-    expect(said.message).toMatch(/^sent to r-\d+, which reads it at its next turn$/);
+    expect(said(answer)).toMatch(/^sent to r-\d+, which reads it at its next turn$/);
     await env.settle();
     const delivered = env.store.db
       .query<{ n: number }, []>(

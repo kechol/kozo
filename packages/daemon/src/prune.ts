@@ -1,6 +1,6 @@
 import { readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { dayMs, type KozoHome, runFiles } from "@kozo/core";
+import { dayMs, type KozoHome, type Message, message, runFiles } from "@kozo/core";
 import type { EventStore } from "./event-store.ts";
 
 /** What a pruned run keeps: its event log, which kozo.db is rebuilt from, and its small records. */
@@ -22,7 +22,7 @@ export async function pruneRecords(
   days: number,
   dryRun: boolean,
   now = new Date(),
-): Promise<{ message: string; before: string; runs: string[] }> {
+): Promise<{ message: Message; before: string; runs: string[] }> {
   const before = new Date(now.getTime() - days * dayMs).toISOString();
   const state = store.state;
   const closed = (ref: string) => {
@@ -48,11 +48,11 @@ export async function pruneRecords(
       data: { before, runs: [first, ...runs.slice(1)] },
     });
   const date = before.slice(0, 10);
-  const message =
+  const said =
     runs.length === 0
-      ? `no run of an item closed before ${date} has records to prune`
+      ? message("api.prune-none", { date })
       : dryRun
-        ? `would prune ${runs.length} runs of items closed before ${date}: ${runs.join(", ")}`
-        : `pruned ${runs.length} runs of items closed before ${date} to their logs and verdicts`;
-  return { message, before, runs };
+        ? message("api.prune-would", { count: runs.length, date, runs: runs.join(", ") })
+        : message("api.pruned", { count: runs.length, date });
+  return { message: said, before, runs };
 }

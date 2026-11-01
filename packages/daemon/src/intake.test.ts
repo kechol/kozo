@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { emptyState, kozoHome } from "@kozo/core";
-import { exampleCharter, gitRepository, tempDirectory } from "@kozo/testing";
+import { exampleCharter, gitRepository, said, tempDirectory } from "@kozo/testing";
 import { defaultBranch, readDefinition } from "@kozo/verify";
 import { ControlPlane } from "./control-plane.ts";
 import { EventStore } from "./event-store.ts";
@@ -99,9 +99,9 @@ describe("ControlPlane.addItem", () => {
       title: "Reject a blank quantity",
       body: "Adding an empty quantity creates a broken line.",
     });
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ref: "K-1",
-      message: "added K-1; it waits for your start approval",
+      message: { code: "api.added-waiting" },
       awaitingHuman: true,
     });
     expect(await readItemFile(env.home, "K-1")).toMatchObject({
@@ -117,7 +117,7 @@ describe("ControlPlane.addItem", () => {
   test("an L2 item goes to Triage", async () => {
     await using env = await setup();
     const result = await env.control.addItem({ title: "Document the cart", class: "docs" });
-    expect(result.message).toBe("added K-1; it goes to Triage");
+    expect(said(result)).toBe("added K-1; it goes to Triage");
     expect(env.store.state.items["K-1"]).toMatchObject({ stage: "triage", hold: null });
   });
 

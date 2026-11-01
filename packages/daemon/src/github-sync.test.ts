@@ -6,6 +6,7 @@ import {
   fakeGitHub,
   gitRepository,
   reasonOf,
+  said,
   tempDirectory,
   testGitEnvironment,
 } from "@kozo/testing";
@@ -118,7 +119,7 @@ describe("GitHubSync", () => {
       "issue",
       {},
     );
-    expect(moved.message).toBe(`moved ${ref} to me/shop#1; kozod takes it up as shop#1`);
+    expect(said(moved)).toBe(`moved ${ref} to me/shop#1; kozod takes it up as shop#1`);
     expect(env.store.state.items[ref]?.stage).toBe("cancelled");
     expect(env.github.calls).toContain("createIssue me/shop Show low stock");
     expect(env.labels(1)).toContain("kozo");
@@ -403,7 +404,7 @@ describe("GitHubSync", () => {
   test("installs kozo's files as one pull request with the ruleset to apply", async () => {
     await using env = await setup();
     const first = await env.sync.install(env.repo);
-    expect(first.message).toStartWith("opened https://github.example/me/shop/pull/");
+    expect(said(first)).toStartWith("opened https://github.example/me/shop/pull/");
     const branch = `kozo/${env.store.factoryId}/install`;
     const pull = env.github.repositories.get("me/shop")?.pulls[0];
     expect(pull?.head).toBe(branch);
@@ -416,7 +417,7 @@ describe("GitHubSync", () => {
       "AGENTS.md",
     );
     expect((await env.git("show", "-s", "--format=%an", pushed ?? "")).trim()).toBe("kozo");
-    expect((await env.sync.install(env.repo)).message).toStartWith("the install waits");
+    expect(said(await env.sync.install(env.repo))).toStartWith("the install waits");
     expect(env.github.repositories.get("me/shop")?.pulls).toHaveLength(1);
   });
 

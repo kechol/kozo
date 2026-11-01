@@ -78,7 +78,10 @@ describe("Daemon", () => {
         method: "POST",
         headers: { authorization: `Bearer ${token}` },
       });
-      expect(await rebuilt.json()).toEqual({ message: "rebuilt kozo.db from the event logs" });
+      expect(await rebuilt.json()).toMatchObject({
+        message: "rebuilt kozo.db from the event logs",
+        code: "api.rebuilt",
+      });
     } finally {
       await daemon.stop();
     }

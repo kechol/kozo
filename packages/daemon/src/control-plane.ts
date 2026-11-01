@@ -55,17 +55,20 @@ export class ControlPlane {
       (repository) => repository.path,
     );
     if (registered.length === 0) {
-      throw new CommandError(422, "no repository is registered; add one to factory/factory.yml");
+      throw new CommandError(422, message("api.no-repository"));
     }
     if (requested === undefined) {
       if (registered.length > 1) {
-        throw new CommandError(400, `name the repository: ${registered.join(", ")}`);
+        throw new CommandError(
+          400,
+          message("api.name-repository", { repositories: registered.join(", ") }),
+        );
       }
       return registered[0] ?? "";
     }
     const path = resolve(requested);
     const match = registered.find((repository) => repository === path);
-    if (!match) throw new CommandError(422, `${requested} is not a registered repository`);
+    if (!match) throw new CommandError(422, message("api.unregistered", { repository: requested }));
     return match;
   }
 
@@ -80,9 +83,10 @@ export class ControlPlane {
       this.definition.current.factory.mode,
       this.store.state,
     );
-    if (!charter.ok) throw new CommandError(422, `not accepted: ${charter.reason}`);
+    if (!charter.ok)
+      throw new CommandError(422, message("api.not-accepted", { reason: charter.reason }));
     const duplicate = this.openDuplicate(repository, body.title);
-    if (duplicate) throw new CommandError(409, `${duplicate.ref} already asks for this`);
+    if (duplicate) throw new CommandError(409, message("api.duplicate", { ref: duplicate.ref }));
 
     const ref = this.store.nextLocalItem();
     const started = await this.admit(
@@ -93,8 +97,8 @@ export class ControlPlane {
       charter.charter,
     );
     return started
-      ? { ref, message: `added ${ref}; it goes to Triage` }
-      : { ref, message: `added ${ref}; it waits for your start approval`, awaitingHuman: true };
+      ? { ref, message: message("api.added", { ref }) }
+      : { ref, message: message("api.added-waiting", { ref }), awaitingHuman: true };
   }
 
   /** An open item of `repository` that asks for the same, by its title. */
@@ -200,15 +204,14 @@ export class ControlPlane {
       case "reorder":
         return await this.reorder(ref, body as Body<"reorder">);
       case "issue":
-        if (!this.moveToIssue)
-          throw new CommandError(409, "kozo issue moves items only in GitHub mode");
+        if (!this.moveToIssue) throw new CommandError(409, message("api.issue-local"));
         return await this.moveToIssue(ref);
     }
   }
 
   private subject(ref: string, kind: "item" | "task") {
     const subject = kind === "item" ? this.store.state.items[ref] : this.store.state.tasks[ref];
-    if (!subject) throw new CommandError(404, `${ref} does not exist`);
+    if (!subject) throw new CommandError(404, message("api.missing", { ref }));
     const item = kind === "item" ? ref : (this.store.state.tasks[ref]?.item ?? "");
     return { subject, item, task: kind === "task" ? ref : null };
   }
@@ -248,28 +251,28 @@ export class ControlPlane {
     const { subject } = this.subject(ref, "item");
     const item = this.store.state.items[ref];
     if (subject.hold?.kind !== "approval" || !item)
-      return { message: `${ref} is not waiting for an approval` };
+      return { message: message("api.no-approval", { ref }) };
     const start = subject.hold.approval === "start";
     await this.clearHold("item", ref, said(body.text));
     if (start) {
       if (body.text) await this.note(ref, ref, "approval", body.text);
       await this.move("item", ref, "triage", message("stage.approve"));
-      return { message: `approved the start of ${ref}; it goes to Triage` };
+      return { message: message("api.approved-start", { ref }) };
     }
     const plan = item.draft;
-    if (!plan) throw new CommandError(409, `${ref} has no plan to approve`);
+    if (!plan) throw new CommandError(409, message("api.no-plan", { ref }));
     await this.store.append({ type: "plan.accepted", item: ref, data: { plan, by: "human" } });
     // After the acceptance, so that the tasks' runs take it as said about their plan.
     if (body.text) await this.note(ref, ref, "approval", body.text);
     return {
-      message: `approved the plan of ${ref}; ${plan.tasks.length} task(s) go to Building`,
+      message: message("api.approved-plan", { ref, count: plan.tasks.length }),
     };
   }
 
   private async reject(ref: string, body: Body<"reject">): Promise<VerbResult> {
     const { subject } = this.subject(ref, "item");
     if (subject.hold?.approval !== "plan") {
-      return { message: `${ref} is not waiting for a plan approval` };
+      return { message: message("api.no-plan-approval", { ref }) };
     }
     await this.clearHold("item", ref, said(body.reason));
     await this.note(ref, ref, "rejection", body.reason);
@@ -280,40 +283,40 @@ export class ControlPlane {
         "attention",
         message("hold.rejected-twice"),
       );
-      return { message: `rejected the plan of ${ref} a second time; it waits for your attention` };
+      return { message: message("api.rejected-twice", { ref }) };
     }
     return {
-      message: `rejected the plan of ${ref}; the plan agent drafts it again with your reason`,
+      message: message("api.rejected", { ref }),
     };
   }
 
   private async say(ref: string, kind: "item" | "task", body: Body<"say">): Promise<VerbResult> {
     const { subject, item, task } = this.subject(ref, kind);
     if (body.ask) {
-      if (!this.runner) throw new CommandError(409, "kozod answers questions only while it runs");
+      if (!this.runner) throw new CommandError(409, message("api.explorer-stopped"));
       const budget = this.definition.current.factory.budget.daily_usd;
       if (costToday(this.store.db, new Date()) >= budget)
-        throw new CommandError(409, `the daily budget of ${budget} USD is spent; ask tomorrow`);
-      return { message: await this.runner.ask(item, task, body.text) };
+        throw new CommandError(409, message("api.budget-spent", { budget }));
+      return { message: message("text", { text: await this.runner.ask(item, task, body.text) }) };
     }
     if (subject.hold?.kind === "question") {
       await this.note(item, ref, "answer", body.text);
       await this.clearHold(kind, ref, said(body.text));
-      return { message: `answered ${ref}; work resumes` };
+      return { message: message("api.answered", { ref }) };
     }
     // An instruction also belongs to the runs after the current one, should it stop first.
     await this.note(item, ref, "instruction", body.text);
     const running = this.runner?.sessionFor(ref) ?? null;
     if (running) {
       await enqueue(runFiles(this.home, running).queue, body.text);
-      return { message: `sent to ${running}, which reads it at its next turn` };
+      return { message: message("api.sent", { run: running }) };
     }
-    return { message: `noted for the next run of ${ref}` };
+    return { message: message("api.noted", { ref }) };
   }
 
   private async actOnRun(ref: string, verb: Verb, body: unknown): Promise<VerbResult> {
     const run = this.store.state.runs[ref];
-    if (!run) throw new CommandError(404, `${ref} does not exist`);
+    if (!run) throw new CommandError(404, message("api.missing", { ref }));
     const owner = run.task ?? run.item;
     const kind = run.task ? "task" : "item";
     // Text for a run belongs to its task or item, and reaches the run while it is running.
@@ -328,30 +331,27 @@ export class ControlPlane {
     body: Body<"pause">,
   ): Promise<VerbResult> {
     const { subject } = this.subject(ref, kind);
-    if (subject.hold?.kind === "paused") return { message: `${ref} is already paused` };
-    if (isClosed(subject.stage)) return { message: `${ref} is ${subject.stage}` };
+    if (subject.hold?.kind === "paused") return { message: message("api.already-paused", { ref }) };
+    if (isClosed(subject.stage))
+      return { message: message("api.closed", { ref, stage: subject.stage }) };
     if (subject.hold)
-      throw new CommandError(
-        409,
-        `${ref} is held by ${subject.hold.kind}; it does not move until that clears`,
-      );
+      throw new CommandError(409, message("api.held-until", { ref, hold: subject.hold.kind }));
     await this.setHold(kind, ref, "paused", message("hold.pause"));
     const running = body.now ? await this.runner?.stopWork(ref) : null;
     return {
       message: running
-        ? `paused ${ref} and stopped ${running}`
-        : `paused ${ref}; it stops at the next node`,
+        ? message("api.paused-stopped", { ref, run: running })
+        : message("api.paused", { ref }),
     };
   }
 
   private async resume(ref: string, kind: "item" | "task"): Promise<VerbResult> {
     const { subject } = this.subject(ref, kind);
     // The human works in the worktree of a task they took, so only kozo return hands it back.
-    if (subject.hold?.kind === "taken")
-      throw new CommandError(409, `${ref} is yours; kozo return gives it back`);
-    if (subject.hold?.kind !== "paused") return { message: `${ref} is not paused` };
+    if (subject.hold?.kind === "taken") throw new CommandError(409, message("api.yours", { ref }));
+    if (subject.hold?.kind !== "paused") return { message: message("api.not-paused", { ref }) };
     await this.clearHold(kind, ref);
-    return { message: `resumed ${ref}` };
+    return { message: message("api.resumed", { ref }) };
   }
 
   private async retry(
@@ -360,9 +360,10 @@ export class ControlPlane {
     body: Body<"retry">,
   ): Promise<VerbResult> {
     const { subject, item } = this.subject(ref, kind);
-    if (isClosed(subject.stage)) throw new CommandError(409, `${ref} is ${subject.stage}`);
+    if (isClosed(subject.stage))
+      throw new CommandError(409, message("api.closed", { ref, stage: subject.stage }));
     if (subject.hold && subject.hold.kind !== "attention" && subject.hold.kind !== "question") {
-      throw new CommandError(409, `${ref} is held by ${subject.hold.kind}`);
+      throw new CommandError(409, message("api.held", { ref, hold: subject.hold.kind }));
     }
     // A task kozod held in Handoff once its fix rounds were spent goes back to Building with its
     // rounds given back, since the same check would hold it again. Its other holds there, for a
@@ -376,15 +377,15 @@ export class ControlPlane {
     await this.clearHold(kind, ref, said(body.text));
     if (sendBack) {
       await this.move("task", ref, "building", message("stage.retry"));
-      return { message: `retrying ${ref} from Building with its fix rounds given back` };
+      return { message: message("api.retry-building", { ref }) };
     }
     if (kind === "item" && subject.stage === "planning")
       await this.move("item", ref, "triage", message("stage.retry"));
     return {
       message:
         kind === "task"
-          ? `retrying ${ref} from its last checkpoint`
-          : `retrying ${ref} from its plan`,
+          ? message("api.retry-checkpoint", { ref })
+          : message("api.retry-plan", { ref }),
     };
   }
 
@@ -410,21 +411,22 @@ export class ControlPlane {
     const { subject } = this.subject(ref, "task");
     const task = this.store.state.tasks[ref];
     const item = task ? this.store.state.items[task.item] : undefined;
-    if (!task || !item) throw new CommandError(404, `${ref} does not exist`);
-    if (isClosed(subject.stage)) throw new CommandError(409, `${ref} is ${subject.stage}`);
-    if (subject.hold?.kind === "taken") return { message: `${ref} is already yours` };
+    if (!task || !item) throw new CommandError(404, message("api.missing", { ref }));
+    if (isClosed(subject.stage))
+      throw new CommandError(409, message("api.closed", { ref, stage: subject.stage }));
+    if (subject.hold?.kind === "taken") return { message: message("api.already-yours", { ref }) };
     if (subject.hold && subject.hold.kind !== "attention" && subject.hold.kind !== "question")
-      throw new CommandError(409, `${ref} is held by ${subject.hold.kind}`);
+      throw new CommandError(409, message("api.held", { ref, hold: subject.hold.kind }));
     const worktree = worktreePath(this.home, item.repository, ref);
     if (!(await hasWorktree(worktree)))
-      throw new CommandError(409, `${ref} has no worktree yet; its first run makes one`);
+      throw new CommandError(409, message("api.no-worktree", { ref }));
     await this.clearHold("task", ref, message("hold.take"));
     await this.setHold("task", ref, "taken", message("hold.take"));
     // Held first, so that the run stops at its node; the worktree is the human's once it has.
     await this.runner?.stopWork(ref);
     const branch = taskBranch(this.store.factoryId, ref);
     return {
-      message: `${ref} is yours: commit in ${worktree} on ${branch}, then run kozo return ${ref} <what you changed and checked>`,
+      message: message("api.taken", { ref, worktree, branch }),
     };
   }
 
@@ -435,35 +437,38 @@ export class ControlPlane {
   private async giveBack(ref: string, body: Body<"return">): Promise<VerbResult> {
     const { subject, item } = this.subject(ref, "task");
     if (subject.hold?.kind !== "taken")
-      throw new CommandError(409, `${ref} is not taken; kozo take hands it to you`);
+      throw new CommandError(409, message("api.not-taken", { ref }));
     const repository = this.store.state.items[item]?.repository ?? "";
     const worktree = worktreePath(this.home, repository, ref);
     const dirty = (await git(worktree, ["status", "--porcelain"])).trim();
-    if (dirty !== "")
-      throw new CommandError(409, `${worktree} has uncommitted changes; commit them first`);
+    if (dirty !== "") throw new CommandError(409, message("api.uncommitted", { worktree }));
     // The checks and the push take the task branch, so the human's commits must be on it.
     const branch = taskBranch(this.store.factoryId, ref);
     const head = (await git(worktree, ["symbolic-ref", "--quiet", "HEAD"]).catch(() => "")).trim();
     if (head !== `refs/heads/${branch}`)
-      throw new CommandError(409, `${worktree} is not on ${branch}; switch back to it first`);
+      throw new CommandError(409, message("api.wrong-branch", { worktree, branch }));
     await this.note(item, ref, "instruction", body.text);
     await this.store.append({ type: "task.returned", item, task: ref, data: {} });
     await this.clearHold("task", ref, said(body.text));
     await this.move("task", ref, "building", message("stage.return"));
-    return { message: `gave ${ref} back; its checks run on your commits` };
+    return { message: message("api.returned", { ref }) };
   }
 
   /** Moves an item before another in the order kozod starts work in, or to the end. */
   private async reorder(ref: string, body: Body<"reorder">): Promise<VerbResult> {
     const { before } = body;
-    if (before === ref) throw new CommandError(400, `${ref} cannot move before itself`);
+    if (before === ref) throw new CommandError(400, message("api.before-itself", { ref }));
     if (before !== null && !this.store.state.items[before])
-      throw new CommandError(404, `${before} does not exist`);
+      throw new CommandError(404, message("api.missing", { ref: before }));
     const order = this.store.state.order;
     const next = order[order.indexOf(ref) + 1] ?? null;
-    if (next === before) return { message: `${ref} is already there` };
+    if (next === before) return { message: message("api.already-there", { ref }) };
     await this.store.append({ type: "item.reordered", item: ref, data: { before } });
-    return { message: before ? `moved ${ref} before ${before}` : `moved ${ref} to the end` };
+    return {
+      message: before
+        ? message("api.moved-before", { ref, before })
+        : message("api.moved-end", { ref }),
+    };
   }
 
   private async close(
@@ -472,7 +477,8 @@ export class ControlPlane {
     body: Body<"close">,
   ): Promise<VerbResult> {
     const { subject } = this.subject(ref, kind);
-    if (isClosed(subject.stage)) return { message: `${ref} is already ${subject.stage}` };
+    if (isClosed(subject.stage))
+      return { message: message("api.already-closed", { ref, stage: subject.stage }) };
     const done = "done" in body;
     await this.closeWork(
       ref,
@@ -481,7 +487,10 @@ export class ControlPlane {
       done ? message("stage.done") : message("stage.cancel", { reason: body.cancel }),
     );
     return {
-      message: "done" in body ? `closed ${ref} as done` : `cancelled ${ref}: ${body.cancel}`,
+      message:
+        "done" in body
+          ? message("api.closed-done", { ref })
+          : message("api.cancelled", { ref, reason: body.cancel }),
     };
   }
 
@@ -524,20 +533,20 @@ export class ControlPlane {
   }
 
   async pauseFactory(): Promise<VerbResult> {
-    if (this.store.state.paused) return { message: "the factory is already paused" };
+    if (this.store.state.paused) return { message: message("api.factory-already-paused") };
     await this.store.append({
       type: "factory.changed",
       data: { paused: true, reason: message("factory.pause") },
     });
-    return { message: "paused the factory; nothing new starts" };
+    return { message: message("api.factory-paused") };
   }
 
   async resumeFactory(): Promise<VerbResult> {
-    if (!this.store.state.paused) return { message: "the factory is not paused" };
+    if (!this.store.state.paused) return { message: message("api.factory-not-paused") };
     await this.store.append({
       type: "factory.changed",
       data: { paused: false, reason: message("factory.resume") },
     });
-    return { message: "resumed the factory" };
+    return { message: message("api.factory-resumed") };
   }
 }

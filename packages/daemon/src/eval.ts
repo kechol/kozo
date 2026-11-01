@@ -9,6 +9,7 @@ import {
   type ItemState,
   type KozoHome,
   kozoHome,
+  message,
   parseEvalCase,
   parseReference,
   type Reference,
@@ -68,13 +69,12 @@ export async function evalCaseOf(
 ): Promise<{ id: string; evalCase: EvalCase }> {
   const state = store.state;
   const item = state.items[state.runs[run]?.item ?? ""];
-  if (!item) throw new CommandError(404, `${run} does not exist`);
+  if (!item) throw new CommandError(404, message("api.missing", { ref: run }));
   const tasks = item.tasks.flatMap((ref) => state.tasks[ref] ?? []);
   const outcome = reachedOutcome(state, item)?.outcome ?? null;
-  if (outcome === null)
-    throw new CommandError(409, `${item.ref} has reached no outcome an eval case can expect yet`);
+  if (outcome === null) throw new CommandError(409, message("api.no-outcome", { ref: item.ref }));
   const start = firstCharterCommit(store.db, item.ref);
-  if (!start) throw new CommandError(409, `${item.ref} has no run to start from`);
+  if (!start) throw new CommandError(409, message("api.no-start-run", { ref: item.ref }));
   const file = await readItemFile(home, item.ref);
   const merged = tasks.findLast((task) => task.merged?.commit)?.merged?.commit;
   const id = `${basename(item.repository)}-${item.ref}`.toLowerCase().replace(/[^a-z0-9.]+/g, "-");

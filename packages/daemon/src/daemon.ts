@@ -1,6 +1,6 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { apiPort, itemLevel, type KozoHome, kozoHome } from "@kozo/core";
+import { apiPort, itemLevel, type KozoHome, kozoHome, message } from "@kozo/core";
 import dashboard from "@kozo/dashboard/index.html";
 import { baseOf, type Confine, claudeJudge, claudeVerifier, platformConfine } from "@kozo/verify";
 import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
@@ -175,17 +175,17 @@ export class Daemon {
       resumeFactory: apiCall(() => control.resumeFactory()),
       rebuildIndex: async () => {
         await store.rebuildIndex();
-        return { message: "rebuilt kozo.db from the event logs" };
+        return { message: message("api.rebuilt") };
       },
       install: apiCall(async ({ repository }) => {
         if (definition.current.factory.mode !== "github")
-          throw new CommandError(409, "in local mode, kozo admin install writes the files itself");
+          throw new CommandError(409, message("api.install-local"));
         return await github.install(repository);
       }, false),
       evalCase: async ({ run }) => {
         const { id, evalCase } = await evalCaseOf(home, store, run);
         const text = `# Eval case, format version 1 (D-046), drafted from ${run}: add the hidden tests and\n# checks the outcome needs, then commit it to the factory definition.\n${Bun.YAML.stringify(evalCase, null, 2)}\n`;
-        return { message: `drafted evals/${id}.yml from ${run}`, id, text };
+        return { message: message("api.drafted", { id, run }), id, text };
       },
       prune: apiCall(
         ({ older_than_days, dry_run }) =>
