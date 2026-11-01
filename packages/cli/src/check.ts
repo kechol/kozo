@@ -1,7 +1,13 @@
 import { stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Factory, kozoHome, parseCharter, parseConstraints } from "@kozo/core";
+import {
+  type Factory,
+  kozoHome,
+  type MessageCode,
+  parseCharter,
+  parseConstraints,
+} from "@kozo/core";
 import {
   baseOf,
   charterPath,
@@ -17,6 +23,7 @@ import {
   verifyAppPath,
 } from "@kozo/verify";
 import { ExitCode, type Lines, UsageError } from "./factory-commands.ts";
+import { english, type Words } from "./words.ts";
 
 type Status = "ok" | "warn" | "fail";
 
@@ -47,24 +54,28 @@ const requiredFlags = [
 // --system-prompt-file, so it cannot be looked for there.
 const cliFlags = ["--print", "--verbose", "--settings", "--tools"];
 
-const hooksDetail: Record<Factory["runtime"], string> = {
-  sdk: "the worker registers the guard in code and loads no settings file",
-  cli: "claude loads only the settings file kozod writes, whose hooks hand every tool call to the worker's guard",
-};
+const hooksDetail = {
+  sdk: "cli.check-hooks-sdk",
+  cli: "cli.check-hooks-cli",
+} as const satisfies Record<Factory["runtime"], MessageCode>;
 
 /**
  * `kozo check [path]`: checks what the factory needs without kozod. With a path, only the files
  * in that working tree, for CI and pre-commit hooks.
  */
-export async function check(args: readonly string[], out: Lines): Promise<number> {
+export async function check(
+  args: readonly string[],
+  out: Lines,
+  t: Words = english,
+): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...args],
     options: { json: { type: "boolean" } },
     allowPositionals: true,
   });
-  if (positionals.length > 1) throw new UsageError("check takes at most one path");
+  if (positionals.length > 1) throw new UsageError(t("cli.check-takes-path"));
   const path = positionals[0];
-  const checks = path ? await checkPath(resolve(path)) : await checkFactory();
+  const checks = path ? await checkPath(resolve(path), t) : await checkFactory(t);
   const ok = !checks.some((entry) => entry.status === "fail");
   if (values.json) out.stdout(JSON.stringify({ ok, checks }));
   else
@@ -79,9 +90,9 @@ const exists = (path: string) =>
     () => false,
   );
 
-async function checkPath(directory: string): Promise<Check[]> {
+async function checkPath(directory: string, t: Words): Promise<Check[]> {
   if ((await exists(join(directory, "factory.yml"))) || (await exists(join(directory, "agents")))) {
-    return [definitionCheck(await readDefinition(directory, null), directory)];
+    return [definitionCheck(await readDefinition(directory, null), directory, t)];
   }
   if (await exists(join(directory, ".kozo"))) {
     const read = (path: string) =>
@@ -93,25 +104,30 @@ async function checkPath(directory: string): Promise<Check[]> {
       await read(charterPath),
       await read(constraintsPath),
       await exists(join(directory, verifyAppPath)),
+      t,
     );
   }
   return [
     {
       name: directory,
       status: "fail",
-      detail: "neither a factory definition (factory.yml, agents/) nor a repository with .kozo/",
+      detail: t("cli.check-neither"),
     },
   ];
 }
 
-function definitionCheck(result: Awaited<ReturnType<typeof readDefinition>>, where: string): Check {
+function definitionCheck(
+  result: Awaited<ReturnType<typeof readDefinition>>,
+  where: string,
+  t: Words,
+): Check {
   if (!result.ok)
     return { name: "factory definition", status: "fail", detail: result.issues.join("; ") };
   const commit = result.definition.commit;
   return {
     name: "factory definition",
     status: "ok",
-    detail: commit ? `${where} at ${commit.slice(0, 12)}` : where,
+    detail: commit ? t("cli.check-at-commit", { where, commit: commit.slice(0, 12) }) : where,
   };
 }
 
@@ -121,6 +137,7 @@ function documentChecks(
   charterText: string | null,
   constraintsText: string | null,
   verifyApp: boolean,
+  t: Words,
 ): Check[] {
   const checks: Check[] = [];
   const charter = charterText === null ? null : parseCharter(charterText);
@@ -128,7 +145,7 @@ function documentChecks(
     checks.push({
       name: `${repository} Charter`,
       status: "fail",
-      detail: `${charterPath} is missing`,
+      detail: t("cli.check-missing", { path: charterPath }),
     });
   else if (!charter.ok)
     checks.push({
@@ -140,15 +157,15 @@ function documentChecks(
     checks.push({
       name: `${repository} Charter`,
       status: "warn",
-      detail: `status is ${charter.value.status}; kozo does not work here until it is ready`,
+      detail: t("cli.check-charter-status", { status: charter.value.status }),
     });
-  else checks.push({ name: `${repository} Charter`, status: "ok", detail: "ready" });
+  else checks.push({ name: `${repository} Charter`, status: "ok", detail: t("cli.check-ready") });
   const constraints = constraintsText === null ? null : parseConstraints(constraintsText);
   if (!constraints)
     checks.push({
       name: `${repository} constraints`,
       status: "fail",
-      detail: `${constraintsPath} is missing`,
+      detail: t("cli.check-missing", { path: constraintsPath }),
     });
   else if (!constraints.ok)
     checks.push({
@@ -156,27 +173,28 @@ function documentChecks(
       status: "fail",
       detail: constraints.issues.join("; "),
     });
-  else checks.push({ name: `${repository} constraints`, status: "ok", detail: "valid" });
+  else
+    checks.push({ name: `${repository} constraints`, status: "ok", detail: t("cli.check-valid") });
   checks.push(
     verifyApp
       ? { name: `${repository} verify-app`, status: "ok", detail: verifyAppPath }
       : {
           name: `${repository} verify-app`,
           status: "warn",
-          detail: `${verifyAppPath} is missing, so verify does not run`,
+          detail: t("cli.check-verify-app-missing", { path: verifyAppPath }),
         },
   );
   return checks;
 }
 
-async function checkFactory(): Promise<Check[]> {
+async function checkFactory(t: Words): Promise<Check[]> {
   const home = kozoHome();
   const checks: Check[] = [];
   let definition: Definition | null = null;
   try {
     const tip = await definitionTip(home.factory);
     const result = await readDefinition(home.factory, tip);
-    checks.push(definitionCheck(result, home.factory));
+    checks.push(definitionCheck(result, home.factory, t));
     if (result.ok) definition = result.definition;
   } catch (error) {
     if (!(error instanceof GitError)) throw error;
@@ -184,18 +202,18 @@ async function checkFactory(): Promise<Check[]> {
   }
   const mode = definition?.factory.mode ?? "local";
   for (const repository of definition?.factory.repositories ?? []) {
-    checks.push(...(await repositoryChecks(repository.path, mode)));
+    checks.push(...(await repositoryChecks(repository.path, mode, t)));
   }
   const runtime = definition?.factory.runtime ?? "sdk";
-  checks.push(...(await claudeChecks(runtime)));
-  if (mode === "github") checks.push(await ghCheck());
-  checks.push({ name: "hooks", status: "ok", detail: hooksDetail[runtime] });
-  checks.push(sandboxCheck(), await kozoSandboxCheck(), processesCheck());
+  checks.push(...(await claudeChecks(runtime, t)));
+  if (mode === "github") checks.push(await ghCheck(t));
+  checks.push({ name: "hooks", status: "ok", detail: t(hooksDetail[runtime]) });
+  checks.push(sandboxCheck(t), await kozoSandboxCheck(t), processesCheck(t));
   return checks;
 }
 
 /** A repository's documents at the tip of its base as kozod reads it, origin's in GitHub mode. */
-async function repositoryChecks(path: string, mode: Factory["mode"]): Promise<Check[]> {
+async function repositoryChecks(path: string, mode: Factory["mode"], t: Words): Promise<Check[]> {
   try {
     const { ref } = await baseOf(path, mode);
     const tip = (await git(path, ["rev-parse", ref])).trim();
@@ -204,6 +222,7 @@ async function repositoryChecks(path: string, mode: Factory["mode"]): Promise<Ch
       await showFile(path, tip, charterPath),
       await showFile(path, tip, constraintsPath),
       (await showFile(path, tip, verifyAppPath)) !== null,
+      t,
     );
   } catch (error) {
     if (!(error instanceof GitError)) throw error;
@@ -223,13 +242,17 @@ async function runTool(tool: string, args: string[]) {
   return { stdout, code };
 }
 
-async function claudeChecks(runtime: Factory["runtime"]): Promise<Check[]> {
+async function claudeChecks(runtime: Factory["runtime"], t: Words): Promise<Check[]> {
   const claude = process.env.KOZO_CLAUDE ?? Bun.which("claude");
-  if (!claude) return [{ name: "claude", status: "fail", detail: "claude is not on PATH" }];
+  if (!claude) return [{ name: "claude", status: "fail", detail: t("cli.check-claude-missing") }];
   const version = await runTool(claude, ["--version"]);
   if (version.code !== 0) {
     return [
-      { name: "claude", status: "fail", detail: `${claude} --version exited with ${version.code}` },
+      {
+        name: "claude",
+        status: "fail",
+        detail: t("cli.exited-with", { command: `${claude} --version`, code: version.code }),
+      },
     ];
   }
   const checks: Check[] = [
@@ -240,11 +263,11 @@ async function claudeChecks(runtime: Factory["runtime"]): Promise<Check[]> {
   const missing = flags.filter((flag) => !help.stdout.includes(flag));
   checks.push(
     missing.length === 0
-      ? { name: "claude flags", status: "ok", detail: "every flag kozo uses is there" }
+      ? { name: t("cli.check-name-flags"), status: "ok", detail: t("cli.check-flags-ok") }
       : {
-          name: "claude flags",
+          name: t("cli.check-name-flags"),
           status: "fail",
-          detail: `missing ${missing.join(", ")}; update claude`,
+          detail: t("cli.check-flags-missing", { flags: missing.join(", ") }),
         },
   );
   // Only whether claude is signed in and how is read; kozo never touches the credentials.
@@ -256,11 +279,15 @@ async function claudeChecks(runtime: Factory["runtime"]): Promise<Check[]> {
   checks.push(
     signedIn.loggedIn === true
       ? {
-          name: "claude sign-in",
+          name: t("cli.check-name-sign-in"),
           status: "ok",
-          detail: `signed in with ${String(signedIn.authMethod)}`,
+          detail: t("cli.check-signed-in", { method: String(signedIn.authMethod) }),
         }
-      : { name: "claude sign-in", status: "fail", detail: "not signed in; run claude auth login" },
+      : {
+          name: t("cli.check-name-sign-in"),
+          status: "fail",
+          detail: t("cli.check-not-signed-in"),
+        },
   );
   return checks;
 }
@@ -269,13 +296,13 @@ async function claudeChecks(runtime: Factory["runtime"]): Promise<Check[]> {
  * In GitHub mode, whether gh is signed in to github.com, as kozod reads it: kozod reaches GitHub
  * only through gh's active sign-in.
  */
-async function ghCheck(): Promise<Check> {
+async function ghCheck(t: Words): Promise<Check> {
   const gh = Bun.which("gh");
   if (!gh)
     return {
-      name: "gh sign-in",
+      name: t("cli.check-name-gh"),
       status: "fail",
-      detail: "gh is not on PATH; GitHub mode reaches GitHub through it",
+      detail: t("cli.check-gh-missing"),
     };
   const status = await runTool(gh, [
     "auth",
@@ -292,20 +319,24 @@ async function ghCheck(): Promise<Check> {
     login = raw.hosts?.["github.com"]?.find((account) => account.active)?.login;
   } catch {}
   return login
-    ? { name: "gh sign-in", status: "ok", detail: `signed in to github.com as ${login}` }
+    ? {
+        name: t("cli.check-name-gh"),
+        status: "ok",
+        detail: t("cli.check-gh-signed-in", { login }),
+      }
     : {
-        name: "gh sign-in",
+        name: t("cli.check-name-gh"),
         status: "fail",
-        detail: "gh is not signed in to github.com; run gh auth login",
+        detail: t("cli.check-gh-not-signed-in"),
       };
 }
 
 /** Whether kozod can confine the diff's commands in prepare, the gates and prove. */
-async function kozoSandboxCheck(): Promise<Check> {
+async function kozoSandboxCheck(t: Words): Promise<Check> {
   try {
     await platformConfine();
     const tool = process.platform === "darwin" ? "sandbox-exec" : "bwrap";
-    return { name: "kozo sandbox", status: "ok", detail: `${tool} confines the gates` };
+    return { name: "kozo sandbox", status: "ok", detail: t("cli.check-confines", { tool }) };
   } catch (error) {
     if (!(error instanceof SandboxUnavailable)) throw error;
     return { name: "kozo sandbox", status: "fail", detail: error.message };
@@ -313,18 +344,18 @@ async function kozoSandboxCheck(): Promise<Check> {
 }
 
 /** Whether kozod can list a session's processes, which it does before every session. */
-function processesCheck(): Check {
+function processesCheck(t: Words): Check {
   return Bun.which("lsof")
-    ? { name: "lsof", status: "ok", detail: "lists the processes a session leaves" }
+    ? { name: "lsof", status: "ok", detail: t("cli.check-lsof-ok") }
     : {
         name: "lsof",
         status: "fail",
-        detail: "lsof is not on PATH; kozod needs it to stop what a session leaves running",
+        detail: t("cli.check-lsof-missing"),
       };
 }
 
 /** The tools Claude Code's sandbox needs on this platform. */
-function sandboxCheck(): Check {
+function sandboxCheck(t: Words): Check {
   const tools =
     process.platform === "darwin"
       ? ["sandbox-exec"]
@@ -332,9 +363,17 @@ function sandboxCheck(): Check {
         ? ["bwrap", "socat"]
         : null;
   if (!tools)
-    return { name: "sandbox", status: "fail", detail: `no sandbox for ${process.platform}` };
+    return {
+      name: "sandbox",
+      status: "fail",
+      detail: t("cli.check-no-sandbox", { platform: process.platform }),
+    };
   const missing = tools.filter((tool) => !Bun.which(tool));
   return missing.length === 0
     ? { name: "sandbox", status: "ok", detail: tools.join(", ") }
-    : { name: "sandbox", status: "fail", detail: `missing ${missing.join(", ")}` };
+    : {
+        name: "sandbox",
+        status: "fail",
+        detail: t("cli.check-missing-tools", { tools: missing.join(", ") }),
+      };
 }

@@ -1,8 +1,22 @@
 import { randomBytes } from "node:crypto";
-import { apiPort, helloProof, type KozoHome, kozoHome, secretMatches } from "@kozo/core";
+import {
+  apiPort,
+  helloProof,
+  type KozoHome,
+  kozoHome,
+  type Message,
+  message,
+  render,
+  secretMatches,
+} from "@kozo/core";
 
 /** kozod is not running, or has never run in this home. */
-export class KozodUnavailable extends Error {}
+export class KozodUnavailable extends Error {
+  /** What went wrong, to word in the locale of whoever reads it. */
+  constructor(readonly problem: Message) {
+    super(render(problem, "en"));
+  }
+}
 
 export interface Answer {
   status: number;
@@ -36,13 +50,11 @@ async function checkServer(base: string, token: string, timeoutMs: number) {
     proof = ((await response.json()) as { proof?: unknown }).proof;
   } catch (error) {
     if ((error as Error).name === "TimeoutError")
-      throw new KozodUnavailable(`kozod did not answer within ${timeoutMs / 1000} seconds`);
-    throw new KozodUnavailable("kozod is not running; start it with kozo up");
+      throw new KozodUnavailable(message("cli.kozod-timeout", { seconds: timeoutMs / 1000 }));
+    throw new KozodUnavailable(message("cli.kozod-unreachable"));
   }
   if (!secretMatches(typeof proof === "string" ? proof : "", helloProof(token, nonce))) {
-    throw new KozodUnavailable(
-      `the server at ${base} is not this home's kozod; the token was not sent`,
-    );
+    throw new KozodUnavailable(message("cli.kozod-foreign", { base }));
   }
 }
 
@@ -50,7 +62,7 @@ async function checkServer(base: string, token: string, timeoutMs: number) {
 export async function connect(home = kozoHome(), helloTimeoutMs = 5_000): Promise<Client> {
   const tokenFile = Bun.file(home.apiToken);
   if (!(await tokenFile.exists())) {
-    throw new KozodUnavailable("kozod has not run in this home yet; start it with kozo up");
+    throw new KozodUnavailable(message("cli.kozod-never-ran"));
   }
   const token = (await tokenFile.text()).trim();
   const base = `http://127.0.0.1:${apiPortFromEnvironment()}`;
@@ -62,7 +74,7 @@ export async function connect(home = kozoHome(), helloTimeoutMs = 5_000): Promis
         headers: { authorization: `Bearer ${token}`, ...init.headers },
       });
     } catch {
-      throw new KozodUnavailable("kozod is not running; start it with kozo up");
+      throw new KozodUnavailable(message("cli.kozod-unreachable"));
     }
   };
   const answer = async (response: Response): Promise<Answer> => {
@@ -70,9 +82,7 @@ export async function connect(home = kozoHome(), helloTimeoutMs = 5_000): Promis
     try {
       return { status: response.status, body: JSON.parse(text) as Answer["body"] };
     } catch {
-      throw new KozodUnavailable(
-        `kozod answered ${response.status} with something that is not JSON`,
-      );
+      throw new KozodUnavailable(message("cli.kozod-not-json", { status: response.status }));
     }
   };
   return {

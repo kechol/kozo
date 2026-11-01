@@ -318,4 +318,217 @@ export const ja: { readonly [Code in keyof typeof en]: string } = {
   "api.no-endpoint": "そのエンドポイントはありません",
   "api.invalid-item": "item の内容が正しくありません",
   "api.invalid-verb": "{verb} の内容が正しくありません",
+  "cli.usage": `使い方: kozo <command>
+
+コマンド:
+  up | down [--json]
+      kozod をバックグラウンドで起動、または停止します
+  status [--line] [--json]
+      kozod の状態、モード、run、inbox の件数、今日の費用を表示します。
+      --line はステータスバー向けに 1 行で表示します
+  add <text> [--repo <path>] [--class <class>] [-f <file>] [--json]
+      item を追加します。1 行目がタイトル、残りとファイルの内容が本文です
+  ls [inbox|items|tasks|runs] [--json]
+      人を待っているもの（既定）、またはすべての item、タスク、run を一覧します
+  show <ref> [-f] [--diff] [--json]
+      item、タスク、run を表示します。-f はイベントを追い続け、--diff は
+      タスクの差分をデフォルトブランチと比べて表示します
+  say <ref> <text>          質問に答える、または run やタスクに指示します
+  say --ask <ref> <question>
+      item、タスク、run について尋ねます。explorer が作業に触れず、
+      記録から答えます
+  approve <item> [text]     開始または計画を承認します
+  reject <item> <reason>    計画を差し戻します
+  pause [ref] [--now] | resume [ref]
+      ファクトリー全体、または 1 つの item、タスク、run を止める、または再開します
+  retry <ref> [text]        タスクをチェックポイントから、または item を再試行します
+  close <ref> --done | --cancel <reason>
+      変更が要らなかった item やタスクを完了にする、または取り消します
+  reorder <item> [--before <item>]
+      kozod が作業を始める順で、item を別の item の前、または最後に移します
+  issue <item>              GitHub モードで、タスクのない ローカルの item を
+      リポジトリの Issue に移します。以降は kozod が引き取ります
+  take <task>               タスクを引き取り、その worktree で作業します
+  return <task> <text>      引き取ったタスクを、作業をコミットしてから返します。
+      返すと、決定的なチェックから順に、あなたのコミットに対して実行されます
+  report [--days <n>] [--review | --cost] [--json]
+      直近 <n> 日（既定は 30）の指標と失敗、昇格の提案を表示します。
+      --review は class ごとのレベル、降格、費用を加え、--cost は日ごとの
+      費用を予算と並べて表示します
+  dashboard [--url] [--json]
+      ダッシュボードをブラウザで開きます。--url は URL だけを表示します。
+      URL でセッションを開けるのは、1 分以内の 1 回だけです
+  check [path] [--json]
+      factory definition、各リポジトリの Charter、claude、sandbox を確認します。
+      path を渡すと、そのディレクトリの definition か .kozo/ だけを確認します
+  admin init [--json]       kozo のテンプレートから factory definition を作ります
+  admin install <path> [--json]
+      kozo のファイルをリポジトリに追加します。GitHub モードでは、kozod が
+      pull request として開きます
+  admin db-rebuild          イベントログから kozo.db を作り直します
+  admin eval add <run> [--json]
+      run の item の eval ケースを、factory definition の evals/ に下書きします
+  admin eval run [<case>...] [--json]
+      eval ケース（指定があればそれだけ）を、それぞれ使い捨ての factory home で
+      実行し、期待した結果に届いた割合と費用を表示します
+  admin prune --older-than <days> [--dry-run] [--json]
+      item が <days> 日以上前に閉じた run から、イベントログ、report、verdict、
+      decision log 以外を削除します
+
+  gates [--level fast|full|deep] [--base <ref>] [--json]
+      1 つのレベル（既定は full）の gate を実行します。--base を付けると、
+      constraints を worktree ではなく <ref> の先頭から取ります
+  diff-guard --base <ref> [--head <ref>] [--scope <glob>]... [--json]
+      <ref> とのマージベースから <head>（既定は HEAD）までの差分を、
+      <ref> の先頭にある Charter と constraints に照らして確認します
+  prove --base <ref> [--preserve] [--json]
+      変更したテストが HEAD で通り、テスト以外の変更をその場で戻すと失敗する
+      ことを求めます。--preserve は、振る舞いを変えない変更向けに、戻しても
+      通ることを求めます。worktree はクリーンである必要があります
+  review --base <ref> --goal <text> --done-when <text>... [--model <id>]
+         [--max-cost <usd>] [--out <dir>] [--json]
+      <ref> とのマージベースから HEAD までの差分を、差分と GOAL、DONE_WHEN
+      だけを見る別の claude セッションで審査します。--out を付けると、
+      verdict を <dir>/verdict.json に記録します
+  verify --base <ref> --goal <text> --done-when <text>... [--model <id>]
+         [--max-cost <usd>] [--out <dir>] [--json]
+      <ref> の先頭で、.kozo/verify-app.md に従ってアプリを sandbox 内の claude
+      セッションで動かし、DONE_WHEN の各条件を試します。--out を付けると、
+      verdict を記録し、証拠を <dir> にコピーします
+
+オプション:
+  --version  バージョンを表示します
+
+item の <ref> は K-<n> か <repo>#<n>、タスクは <item>/t<n>、run は r-<nnnn> です。
+終了コードは、0 が成功、1 が失敗、2 が使い方の誤り、3 が人を待っている、
+4 が見つからない、です。
+
+--base と --head の <ref> には、完全なコミット ID、HEAD、refs/remotes/origin/main
+のような完全な ref、またはブランチ名（refs/heads/<name> として読みます）を
+指定できます。`,
+  "cli.unknown-command": "コマンド '{command}' はありません",
+  "cli.unknown-gate-level": "gate のレベル '{level}' はありません",
+  "cli.needs-base": "{command} には --base <ref> が必要です",
+  "cli.needs-session-options":
+    "{command} には --base <ref>、--goal <text> と、1 つ以上の --done-when <text> が必要です",
+  "cli.max-cost": "--max-cost には 0 より大きい USD の金額を指定してください",
+  "cli.needs-claude": "{command} には PATH 上の claude CLI が必要です",
+  "cli.condition-met": "達成",
+  "cli.condition-not-met": "未達",
+  "cli.kozod-not-installed":
+    "kozo の隣にも PATH 上にも kozod がありません。KOZOD に kozod のパスを設定してください",
+  "cli.kozod-unreachable": "kozod が動いていません。kozo up で起動してください",
+  "cli.kozod-timeout": "kozod が {seconds} 秒以内に応答しませんでした",
+  "cli.kozod-foreign":
+    "{base} のサーバーはこの home の kozod ではないため、トークンは送っていません",
+  "cli.kozod-never-ran":
+    "この home ではまだ kozod が動いたことがありません。kozo up で起動してください",
+  "cli.kozod-not-json": "kozod が {status} で JSON ではない応答を返しました",
+  "cli.kozod-answered": "kozod が {status} を返しました",
+  "cli.kozod-already-running": "kozod はすでに動いています",
+  "cli.kozod-up": "kozod を起動しました",
+  "cli.kozod-not-started": "kozod が起動しませんでした。{log} を確認してください",
+  "cli.kozod-not-running": "kozod は動いていません",
+  "cli.kozod-not-running-pid":
+    "kozod は動いていません。{file} の pid {pid} は kozod ではありません",
+  "cli.kozod-down": "kozod を停止しました",
+  "cli.kozod-not-stopped": "kozod（pid {pid}）が 15 秒以内に止まりませんでした",
+  "cli.opener-failed":
+    "{opener} でブラウザを開けませんでした。kozo dashboard --url を実行してください",
+  "cli.dashboard-opened": "{url} でダッシュボードを開きました",
+  "cli.status-down": "kozo: 停止中",
+  "cli.status-line": "kozo: {state} {mode} · {running} · {waiting} · {cost}",
+  "cli.state-up": "稼働中",
+  "cli.state-paused": "一時停止",
+  "cli.kozod-state-running": "稼働中",
+  "cli.kozod-state-paused": "一時停止中（{reason}）",
+  "cli.count-running": "{count} 件実行中",
+  "cli.count-waiting": "{count} 件待ち",
+  "cli.count-in-inbox": "inbox に {count} 件",
+  "cli.cost-today": "今日 {amount}",
+  "cli.cost-today-held": "今日 {amount}、確保分 {held}",
+  "cli.unknown-class": "work class '{class}' はありません",
+  "cli.add-needs-text": "add には依頼の文章が必要です",
+  "cli.unknown-list": "一覧 '{list}' はありません",
+  "cli.nothing-in": "{list} には何もありません",
+  "cli.awaiting-merge": "マージ待ち",
+  "cli.show-needs-ref": "show には item、タスク、run の reference が必要です",
+  "cli.diff-needs-task": "--diff にはタスクの reference が必要です",
+  "cli.characterizes": "（characterize）",
+  "cli.draft-summary": "{class}、risk tier {risk}: {approach}",
+  "cli.run-under": "{target}（{parent} の下）",
+  "cli.needs-reference": "{verb} には reference が必要です",
+  "cli.say-needs-text": "say には送る文章が必要です",
+  "cli.reject-needs-reason": "reject には理由が必要です",
+  "cli.close-needs-choice": "close には --done か --cancel <reason> が必要です",
+  "cli.return-needs-text": "return には、変更した内容と確かめた内容が必要です",
+  "cli.report-exclusive": "report で --review と --cost は同時に指定できません",
+  "cli.report-days": "report の --days <n> には 1 から 365 の整数を指定してください",
+  "cli.report-window": "直近 {days} 日で、マージした差分は {merged} 件",
+  "cli.metric-autonomy": "{rate}  （70% 以上）",
+  "cli.metric-defect": "{rate}  （5% 以下）",
+  "cli.metric-cost": "{cost}  （中央値）",
+  "cli.metric-time": "{time}  （中央値、24 h 以内）",
+  "cli.metric-revise": "{reviews} 件のレビューのうち {rate}  （10% から 30%）",
+  "cli.metric-held": "質問と対応待ちが {held} 件  （10 件以下）",
+  "cli.no-failures": "期間内の失敗はありません",
+  "cli.failures": "期間内の失敗（振り返り用）: {count} 件",
+  "cli.promotions": "昇格の提案: Charter で L3 に上げる",
+  "cli.class-in-repository": "{repository} の {class}",
+  "cli.levels": "kozod が適用しているレベル",
+  "cli.demotions": "降格（Charter が変わるまで）",
+  "cli.demotion": "{place}: {from} から {to} へ、{reason}",
+  "cli.cost-in-window": "期間内 {cost}",
+  "cli.cost-of-budget": "{budget} のうち {today}",
+  "cli.eval-add-takes-run": "admin eval add には run を 1 つ（r-<nnnn>）指定してください",
+  "cli.eval-exists": "{path} はすでにあります。下書きし直すには削除してください",
+  "cli.eval-wrote": "{path} を書きました。必要な隠しテストとチェックを足して、コミットしてください",
+  "cli.eval-takes": "admin eval には add か run を指定してください",
+  "cli.eval-no-results": "kozod --eval が結果を出力しませんでした",
+  "cli.eval-expected": "期待は {expected}",
+  "cli.eval-check-by-hand": "手で確認: {rule}",
+  "cli.eval-summary": "{total} 件中 {passed} 件が期待した結果に届きました。費用は合計 {cost}",
+  "cli.exited-with": "{command} が {code} で終了しました",
+  "cli.install-takes-path": "admin install にはリポジトリのパスが必要です",
+  "cli.prune-takes-days": "admin prune には --older-than <days>（日数の整数）が必要です",
+  "cli.admin-takes":
+    "admin には init、install、db-rebuild、prune、eval のいずれかを指定してください",
+  "cli.install-nothing": "{path} には kozo が入れるファイルがすべてあります",
+  "cli.installed":
+    "{files} を {path} に追加しました。編集し、.kozo/charter.yml の status を ready にしてコミットしてください",
+  "cli.init-not-empty": "{directory} が空ではありません。factory definition はすでにあります",
+  "cli.init-commit-failed": "{directory} に書きましたが、コミットできませんでした（{error}）",
+  "cli.init-created":
+    "{directory} に factory definition を作りました。factory.yml にリポジトリを追加してコミットしてください",
+  "cli.check-takes-path": "check に渡せるパスは 1 つまでです",
+  "cli.check-neither":
+    "factory definition（factory.yml、agents/）でも、.kozo/ のあるリポジトリでもありません",
+  "cli.check-at-commit": "{where}（{commit}）",
+  "cli.check-missing": "{path} がありません",
+  "cli.check-charter-status":
+    "status が {status} です。ready になるまで、kozo はここで作業しません",
+  "cli.check-ready": "ready",
+  "cli.check-valid": "正しい",
+  "cli.check-verify-app-missing": "{path} がないため、verify は動きません",
+  "cli.check-hooks-sdk": "worker が guard をコードで登録し、設定ファイルは読み込みません",
+  "cli.check-hooks-cli":
+    "claude は kozod が書く設定ファイルだけを読み込み、その hooks がすべてのツール呼び出しを worker の guard に渡します",
+  "cli.check-name-flags": "claude のフラグ",
+  "cli.check-name-sign-in": "claude のサインイン",
+  "cli.check-name-gh": "gh のサインイン",
+  "cli.check-claude-missing": "claude が PATH にありません",
+  "cli.check-flags-ok": "kozo が使うフラグはすべてあります",
+  "cli.check-flags-missing": "{flags} がありません。claude を更新してください",
+  "cli.check-signed-in": "{method} でサインインしています",
+  "cli.check-not-signed-in": "サインインしていません。claude auth login を実行してください",
+  "cli.check-gh-missing": "gh が PATH にありません。GitHub モードは gh 経由で GitHub に接続します",
+  "cli.check-gh-signed-in": "github.com に {login} としてサインインしています",
+  "cli.check-gh-not-signed-in":
+    "gh が github.com にサインインしていません。gh auth login を実行してください",
+  "cli.check-confines": "{tool} が gate を閉じ込めます",
+  "cli.check-lsof-ok": "セッションが残したプロセスを一覧できます",
+  "cli.check-lsof-missing":
+    "lsof が PATH にありません。kozod はセッションが残したものを止めるために必要とします",
+  "cli.check-no-sandbox": "{platform} 用の sandbox はありません",
+  "cli.check-missing-tools": "{tools} がありません",
 };

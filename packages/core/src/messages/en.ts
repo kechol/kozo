@@ -316,4 +316,209 @@ export const en = {
   "api.no-endpoint": "no such endpoint",
   "api.invalid-item": "invalid item",
   "api.invalid-verb": "invalid {verb}",
+  "cli.usage": `Usage: kozo <command>
+
+Commands:
+  up | down [--json]
+      Start kozod in the background, or stop it
+  status [--line] [--json]
+      kozod's state, mode, runs, the inbox count and today's cost; --line
+      prints one line for a status bar
+  add <text> [--repo <path>] [--class <class>] [-f <file>] [--json]
+      Add an item; the first line is its title and the rest, with the
+      file's text, its body
+  ls [inbox|items|tasks|runs] [--json]
+      List what waits for you (the default) or every item, task or run
+  show <ref> [-f] [--diff] [--json]
+      Show an item, task or run; -f follows its events, and --diff prints a
+      task's diff against the default branch
+  say <ref> <text>          Answer a question or instruct a run or task
+  say --ask <ref> <question>
+      Ask about an item, task or run; the explorer answers from the records
+      without touching the work
+  approve <item> [text]     Approve a start or a plan
+  reject <item> <reason>    Reject a plan
+  pause [ref] [--now] | resume [ref]
+      Stop or resume the whole factory, or one item, task or run
+  retry <ref> [text]        Retry a task from its checkpoint or an item
+  close <ref> --done | --cancel <reason>
+      Complete an item or task that needed no change, or cancel it
+  reorder <item> [--before <item>]
+      Move an item before another in the order kozod starts work, or to the end
+  issue <item>              In GitHub mode, move a local item without tasks to an
+      Issue of its repository, which kozod then takes up
+  take <task>               Take a task over and work in its worktree
+  return <task> <text>      Give a taken task back once your work is committed;
+      its checks run on your commits from the deterministic ones on
+  report [--days <n>] [--review | --cost] [--json]
+      The metrics and failures over the last <n> days (default 30) and the
+      promotion proposals; --review adds each class's level, the demotions
+      and the cost, --cost shows each day's cost against the budget
+  dashboard [--url] [--json]
+      Open the dashboard in the browser, or print its URL with --url; the URL
+      opens a session once, within a minute
+  check [path] [--json]
+      Check the factory definition, each repository's Charter, claude and the
+      sandbox; with a path, only the definition or .kozo/ in that directory
+  admin init [--json]       Create the factory definition from kozo's template
+  admin install <path> [--json]
+      Add kozo's files to a repository; in GitHub mode kozod opens them as a
+      pull request
+  admin db-rebuild          Rebuild kozo.db from the event logs
+  admin eval add <run> [--json]
+      Draft the eval case of a run's item into the factory definition's evals/
+  admin eval run [<case>...] [--json]
+      Run the eval cases, or the named ones, each in a throwaway factory home,
+      and print the share that reached the expected outcome and the cost
+  admin prune --older-than <days> [--dry-run] [--json]
+      Remove all but the event log, report, verdicts and decision log of
+      every run whose item closed at least <days> days ago
+
+  gates [--level fast|full|deep] [--base <ref>] [--json]
+      Run the gates of one level (default full); with --base, take the
+      constraints from the tip of <ref> instead of the worktree
+  diff-guard --base <ref> [--head <ref>] [--scope <glob>]... [--json]
+      Check the diff from the merge base of <ref> to <head> (default HEAD)
+      against the Charter and constraints at the tip of <ref>
+  prove --base <ref> [--preserve] [--json]
+      Require the changed tests to pass at HEAD and to fail with the
+      non-test changes reverted in place; with --preserve, to pass reverted
+      too, for a change that keeps behaviour; the worktree must be clean
+  review --base <ref> --goal <text> --done-when <text>... [--model <id>]
+         [--max-cost <usd>] [--out <dir>] [--json]
+      Judge the diff from the merge base of <ref> to HEAD in a separate
+      claude session that sees only the diff, GOAL and DONE_WHEN; with
+      --out, record the verdict in <dir>/verdict.json
+  verify --base <ref> --goal <text> --done-when <text>... [--model <id>]
+         [--max-cost <usd>] [--out <dir>] [--json]
+      Run the app by .kozo/verify-app.md at the tip of <ref> in a sandboxed
+      claude session, exercise each DONE_WHEN condition and, with --out,
+      record the verdict and copy the evidence into <dir>
+
+Options:
+  --version  Print the version
+
+A <ref> of an item is K-<n> or <repo>#<n>, of a task <item>/t<n> and of a
+run r-<nnnn>. Exit codes: 0 success, 1 failure, 2 usage error, 3 waiting
+for a human, 4 not found.
+
+A <ref> after --base or --head is a full commit ID, HEAD, a full ref such
+as refs/remotes/origin/main, or a branch name, read as refs/heads/<name>.`,
+  "cli.unknown-command": "unknown command '{command}'",
+  "cli.unknown-gate-level": "unknown gate level '{level}'",
+  "cli.needs-base": "{command} needs --base <ref>",
+  "cli.needs-session-options":
+    "{command} needs --base <ref>, --goal <text> and at least one --done-when <text>",
+  "cli.max-cost": "--max-cost must be a positive number of US dollars",
+  "cli.needs-claude": "{command} needs the claude CLI on PATH",
+  "cli.condition-met": "met",
+  "cli.condition-not-met": "not met",
+  "cli.kozod-not-installed": "kozod is not installed beside kozo or on PATH; set KOZOD to it",
+  "cli.kozod-unreachable": "kozod is not running; start it with kozo up",
+  "cli.kozod-timeout": "kozod did not answer within {seconds} seconds",
+  "cli.kozod-foreign": "the server at {base} is not this home's kozod; the token was not sent",
+  "cli.kozod-never-ran": "kozod has not run in this home yet; start it with kozo up",
+  "cli.kozod-not-json": "kozod answered {status} with something that is not JSON",
+  "cli.kozod-answered": "kozod answered {status}",
+  "cli.kozod-already-running": "kozod is already running",
+  "cli.kozod-up": "kozod is up",
+  "cli.kozod-not-started": "kozod did not start; see {log}",
+  "cli.kozod-not-running": "kozod is not running",
+  "cli.kozod-not-running-pid": "kozod is not running; {file} names pid {pid}, which is not kozod",
+  "cli.kozod-down": "kozod is down",
+  "cli.kozod-not-stopped": "kozod (pid {pid}) did not stop within 15 seconds",
+  "cli.opener-failed": "{opener} could not open the browser; run kozo dashboard --url",
+  "cli.dashboard-opened": "opened the dashboard at {url}",
+  "cli.status-down": "kozo: down",
+  "cli.status-line": "kozo: {state} {mode} · {running} · {waiting} · {cost}",
+  "cli.state-up": "up",
+  "cli.state-paused": "paused",
+  "cli.kozod-state-running": "running",
+  "cli.kozod-state-paused": "paused ({reason})",
+  "cli.count-running": "{count} running",
+  "cli.count-waiting": "{count} waiting",
+  "cli.count-in-inbox": "{count} in the inbox",
+  "cli.cost-today": "{amount} today",
+  "cli.cost-today-held": "{amount} today, {held} held back",
+  "cli.unknown-class": "unknown work class '{class}'",
+  "cli.add-needs-text": "add needs the request text",
+  "cli.unknown-list": "unknown list '{list}'",
+  "cli.nothing-in": "nothing in {list}",
+  "cli.awaiting-merge": "awaiting merge",
+  "cli.show-needs-ref": "show needs an item, task or run reference",
+  "cli.diff-needs-task": "--diff needs a task reference",
+  "cli.characterizes": "(characterizes)",
+  "cli.draft-summary": "{class}, {risk} risk: {approach}",
+  "cli.run-under": "{target} under {parent}",
+  "cli.needs-reference": "{verb} needs a reference",
+  "cli.say-needs-text": "say needs the text to send",
+  "cli.reject-needs-reason": "reject needs a reason",
+  "cli.close-needs-choice": "close needs --done or --cancel <reason>",
+  "cli.return-needs-text": "return needs what you changed and checked",
+  "cli.report-exclusive": "report takes --review or --cost, not both",
+  "cli.report-days": "report takes --days <n>, a whole number from 1 to 365",
+  "cli.report-window": "over the last {days} days, {merged} merged diffs",
+  "cli.metric-autonomy": "{rate}  (70% or more)",
+  "cli.metric-defect": "{rate}  (5% or less)",
+  "cli.metric-cost": "{cost}  (median)",
+  "cli.metric-time": "{time}  (median, within 24 h)",
+  "cli.metric-revise": "{rate} of {reviews} reviews  (10% to 30%)",
+  "cli.metric-held": "{held} questions and attention  (10 or fewer)",
+  "cli.no-failures": "no failures in the window",
+  "cli.failures": "failures in the window, for the retrospective: {count}",
+  "cli.promotions": "promotion proposals: raise to L3 in the Charter",
+  "cli.class-in-repository": "{class} in {repository}",
+  "cli.levels": "levels as kozod applies them",
+  "cli.demotions": "demotions, until the Charter changes",
+  "cli.demotion": "{place}: {from} to {to}, {reason}",
+  "cli.cost-in-window": "{cost} in the window",
+  "cli.cost-of-budget": "{today} of {budget}",
+  "cli.eval-add-takes-run": "admin eval add takes one run, r-<nnnn>",
+  "cli.eval-exists": "{path} exists already; remove it to draft it again",
+  "cli.eval-wrote": "wrote {path}; add the hidden tests and checks it needs, then commit it",
+  "cli.eval-takes": "admin eval takes add or run",
+  "cli.eval-no-results": "kozod --eval printed no results",
+  "cli.eval-expected": "expected {expected}",
+  "cli.eval-check-by-hand": "check by hand: {rule}",
+  "cli.eval-summary": "{passed} of {total} reached the expected outcome; {cost} in all",
+  "cli.exited-with": "{command} exited with {code}",
+  "cli.install-takes-path": "admin install takes the repository's path",
+  "cli.prune-takes-days": "admin prune takes --older-than <days>, a whole number of days",
+  "cli.admin-takes": "admin takes init, install, db-rebuild, prune or eval",
+  "cli.install-nothing": "{path} has every file kozo installs",
+  "cli.installed":
+    "added {files} to {path}; edit them, set status: ready in .kozo/charter.yml and commit them",
+  "cli.init-not-empty": "{directory} is not empty; the factory definition is already there",
+  "cli.init-commit-failed": "wrote {directory}, but could not commit it: {error}",
+  "cli.init-created":
+    "created the factory definition in {directory}; add a repository to factory.yml and commit it",
+  "cli.check-takes-path": "check takes at most one path",
+  "cli.check-neither":
+    "neither a factory definition (factory.yml, agents/) nor a repository with .kozo/",
+  "cli.check-at-commit": "{where} at {commit}",
+  "cli.check-missing": "{path} is missing",
+  "cli.check-charter-status": "status is {status}; kozo does not work here until it is ready",
+  "cli.check-ready": "ready",
+  "cli.check-valid": "valid",
+  "cli.check-verify-app-missing": "{path} is missing, so verify does not run",
+  "cli.check-hooks-sdk": "the worker registers the guard in code and loads no settings file",
+  "cli.check-hooks-cli":
+    "claude loads only the settings file kozod writes, whose hooks hand every tool call to the worker's guard",
+  "cli.check-name-flags": "claude flags",
+  "cli.check-name-sign-in": "claude sign-in",
+  "cli.check-name-gh": "gh sign-in",
+  "cli.check-claude-missing": "claude is not on PATH",
+  "cli.check-flags-ok": "every flag kozo uses is there",
+  "cli.check-flags-missing": "missing {flags}; update claude",
+  "cli.check-signed-in": "signed in with {method}",
+  "cli.check-not-signed-in": "not signed in; run claude auth login",
+  "cli.check-gh-missing": "gh is not on PATH; GitHub mode reaches GitHub through it",
+  "cli.check-gh-signed-in": "signed in to github.com as {login}",
+  "cli.check-gh-not-signed-in": "gh is not signed in to github.com; run gh auth login",
+  "cli.check-confines": "{tool} confines the gates",
+  "cli.check-lsof-ok": "lists the processes a session leaves",
+  "cli.check-lsof-missing":
+    "lsof is not on PATH; kozod needs it to stop what a session leaves running",
+  "cli.check-no-sandbox": "no sandbox for {platform}",
+  "cli.check-missing-tools": "missing {tools}",
 } as const;

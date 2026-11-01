@@ -1,7 +1,24 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { exampleCharter, gitRepository, tempDirectory } from "@kozo/testing";
 import pkg from "../package.json" with { type: "json" };
-import { ExitCode, run } from "./index.ts";
+import { detailLines } from "./factory-commands.ts";
+import { ExitCode, run, usageText } from "./index.ts";
+import { words } from "./words.ts";
+
+// Every run reads the factory's locale from KOZO_HOME, so the tests start from a home of their
+// own rather than the machine's.
+let machineHome: string | undefined;
+let ownHome: Awaited<ReturnType<typeof tempDirectory>>;
+beforeAll(async () => {
+  machineHome = process.env.KOZO_HOME;
+  ownHome = await tempDirectory();
+  process.env.KOZO_HOME = ownHome.path;
+});
+afterAll(async () => {
+  if (machineHome === undefined) delete process.env.KOZO_HOME;
+  else process.env.KOZO_HOME = machineHome;
+  await ownHome[Symbol.asyncDispose]();
+});
 
 async function capture(args: string[], cwd?: string) {
   const stdout: string[] = [];
@@ -37,6 +54,65 @@ describe("kozo", () => {
     const result = await capture([]);
     expect(result.code).toBe(ExitCode.usage);
     expect(result.stderr).toStartWith("Usage: kozo");
+  });
+});
+
+describe("the factory's locale", () => {
+  async function inJapanese<T>(work: () => Promise<T>): Promise<T> {
+    await using home = await tempDirectory({ "factory/factory.yml": "locale: ja\n" });
+    const saved = process.env.KOZO_HOME;
+    process.env.KOZO_HOME = home.path;
+    try {
+      return await work();
+    } finally {
+      if (saved === undefined) delete process.env.KOZO_HOME;
+      else process.env.KOZO_HOME = saved;
+    }
+  }
+
+  test("a factory definition with locale: ja words the usage and the errors in Japanese", async () => {
+    const unknown = await inJapanese(() => capture(["frobnicate"]));
+    expect(unknown.code).toBe(ExitCode.usage);
+    expect(unknown.stderr).toStartWith(
+      "kozo: コマンド 'frobnicate' はありません\n\n使い方: kozo <command>",
+    );
+    const missing = await inJapanese(() => capture(["diff-guard"]));
+    expect(missing.stderr).toStartWith("kozo: diff-guard には --base <ref> が必要です");
+  });
+
+  test("without a readable factory definition the CLI speaks English", async () => {
+    await using home = await tempDirectory();
+    const saved = process.env.KOZO_HOME;
+    process.env.KOZO_HOME = home.path;
+    try {
+      expect((await capture([])).stderr).toBe(usageText("en"));
+    } finally {
+      if (saved === undefined) delete process.env.KOZO_HOME;
+      else process.env.KOZO_HOME = saved;
+    }
+  });
+
+  test("kozo check words its check names and details in Japanese", async () => {
+    await using dir = await tempDirectory({ "README.md": "# Shop\n" });
+    const result = await inJapanese(() => capture(["check", dir.path]));
+    expect(result.code).toBe(ExitCode.failure);
+    expect(result.stdout).toBe(
+      `fail  ${dir.path}: factory definition（factory.yml、agents/）でも、.kozo/ のあるリポジトリでもありません`,
+    );
+  });
+
+  test("kozo show words its detail lines in the given locale", () => {
+    const run = {
+      ref: "r-0001",
+      agent: "builder",
+      model: "m",
+      state: "done",
+      task: "K-1/t1",
+      parent: "r-0000",
+    };
+    const body = { kind: "run", run, events: 3, cost_usd: 0.5 };
+    expect(detailLines(body)).toContain("for        K-1/t1 under r-0000");
+    expect(detailLines(body, words("ja"))).toContain("for        K-1/t1（r-0000 の下）");
   });
 });
 

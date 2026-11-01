@@ -2,26 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { charterSchema, constraintsSchema, factorySchema } from "@kozo/core";
-import { run } from "./index.ts";
+import { usageText } from "./index.ts";
 
 // The documentation site describes the CLI and the configuration files; these tests fail when
 // either changes without its pages, in English and in Japanese.
 const site = join(import.meta.dir, "..", "..", "..", "site");
 const docs = join(site, "src", "content", "docs");
 const page = (path: string) => Bun.file(join(docs, path)).text();
-
-async function usage(): Promise<string> {
-  let text = "";
-  await run([], {
-    stdout: () => {},
-    stderr: (line) => {
-      text += `${line}\n`;
-    },
-    rawStdout: () => {},
-    rawStderr: () => {},
-  });
-  return text;
-}
 
 /** The commands the usage lists, such as `up`, `say` and `admin eval run`. */
 function commandsOf(text: string): string[] {
@@ -72,7 +59,7 @@ function names(text: string, key: string): boolean {
 
 describe("the documentation site", () => {
   test("the CLI page names every command and flag that kozo's usage lists, and no other", async () => {
-    const text = await usage();
+    const text = usageText("en");
     const commands = commandsOf(text);
     expect(commands).toContain("admin eval run");
     for (const path of ["cli.md", "ja/cli.md"]) {
@@ -95,6 +82,12 @@ describe("the documentation site", () => {
         unknown: [],
       });
     }
+  });
+
+  test("the Japanese usage lists the same commands and flags as the English one", () => {
+    const flagsOf = (text: string) => [...new Set(text.match(/--[a-z][a-z-]*/g))].sort();
+    expect(commandsOf(usageText("ja"))).toEqual(commandsOf(usageText("en")));
+    expect(flagsOf(usageText("ja"))).toEqual(flagsOf(usageText("en")));
   });
 
   test("each configuration page names every key of its schema", async () => {

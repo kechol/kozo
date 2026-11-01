@@ -7,8 +7,10 @@ import {
   type KozoHome,
   kozoHome,
   listKindSchema,
+  message,
   type Plan,
   parseReference,
+  render,
   type Verb,
   verbsByKind,
   workClassSchema,
@@ -28,6 +30,7 @@ import {
   KozodUnavailable,
   refPath,
 } from "./client.ts";
+import { english, type Words } from "./words.ts";
 
 export const ExitCode = {
   success: 0,
@@ -62,13 +65,18 @@ function exitFor(answer: Answer): number {
   return answer.body.awaitingHuman === true ? ExitCode.awaitingHuman : ExitCode.success;
 }
 
-function printAnswer(out: Lines, json: boolean | undefined, answer: Answer, text: () => string[]) {
+function printAnswer(
+  out: Lines,
+  t: Words,
+  json: boolean | undefined,
+  answer: Answer,
+  text: () => string[],
+) {
   if (json) {
     out.stdout(JSON.stringify(answer.body));
   } else if (answer.status >= 300) {
-    out.stderr(
-      `kozo: ${printable(String(answer.body.error ?? `kozod answered ${answer.status}`))}`,
-    );
+    const error = answer.body.error ?? t("cli.kozod-answered", { status: answer.status });
+    out.stderr(`kozo: ${printable(String(error))}`);
     for (const issue of answer.body.issues ?? []) out.stderr(`  ${printable(String(issue))}`);
   } else {
     for (const line of text()) out.stdout(printable(line));
@@ -77,19 +85,30 @@ function printAnswer(out: Lines, json: boolean | undefined, answer: Answer, text
 }
 
 /** Posts to the local API and prints kozod's message, or the whole answer with --json. */
-function postAndPrint(out: Lines, json: boolean | undefined, path: string, body?: unknown) {
-  return withClient(out, async (client) => {
+function postAndPrint(
+  out: Lines,
+  t: Words,
+  json: boolean | undefined,
+  path: string,
+  body?: unknown,
+) {
+  return withClient(out, t, async (client) => {
     const answer = await client.post(path, body);
-    return printAnswer(out, json, answer, () => [String(answer.body.message)]);
+    return printAnswer(out, t, json, answer, () => [String(answer.body.message)]);
   });
 }
 
-async function withClient(out: Lines, work: (client: Client) => Promise<number>) {
+/** Writes why kozod cannot be reached, in the locale of `t`. */
+function unavailable(out: Lines, t: Words, error: KozodUnavailable) {
+  out.stderr(`kozo: ${render(error.problem, t.locale)}`);
+}
+
+async function withClient(out: Lines, t: Words, work: (client: Client) => Promise<number>) {
   try {
     return await work(await connect());
   } catch (error) {
     if (!(error instanceof KozodUnavailable)) throw error;
-    out.stderr(`kozo: ${error.message}`);
+    unavailable(out, t, error);
     return ExitCode.failure;
   }
 }
@@ -120,7 +139,7 @@ function kozodCommand(): string[] {
   if (!process.execPath.endsWith("/bun") && Bun.file(sibling).size > 0) return [sibling];
   const onPath = Bun.which("kozod");
   if (onPath) return [onPath];
-  throw new KozodUnavailable("kozod is not installed beside kozo or on PATH; set KOZOD to it");
+  throw new KozodUnavailable(message("cli.kozod-not-installed"));
 }
 
 async function running(home: KozoHome): Promise<boolean> {
@@ -132,22 +151,23 @@ async function running(home: KozoHome): Promise<boolean> {
   }
 }
 
-export async function up(args: readonly string[], out: Lines): Promise<number> {
+export async function up(args: readonly string[], out: Lines, t = english): Promise<number> {
   const { values } = parseArgs({ args: [...args], options: { json: { type: "boolean" } } });
   const home = kozoHome();
   const url = `http://127.0.0.1:${apiPortFromEnvironment()}`;
-  const report = (message: string) => {
-    out.stdout(values.json ? JSON.stringify({ url, message }) : `${message}: ${url}`);
+  const report = (text: string) => {
+    out.stdout(values.json ? JSON.stringify({ url, message: text }) : `${text}: ${url}`);
     return ExitCode.success;
   };
-  if (await running(home)) return report("kozod is already running");
+  if (await running(home)) return report(t("cli.kozod-already-running"));
   await mkdir(home.root, { recursive: true, mode: 0o700 });
   const log = await open(join(home.root, "kozod.log"), "a");
   let command: string[];
   try {
     command = kozodCommand();
   } catch (error) {
-    out.stderr(`kozo: ${(error as Error).message}`);
+    if (!(error instanceof KozodUnavailable)) throw error;
+    unavailable(out, t, error);
     return ExitCode.failure;
   }
   const child = spawn(command[0] ?? "kozod", command.slice(1), {
@@ -164,12 +184,12 @@ export async function up(args: readonly string[], out: Lines): Promise<number> {
     if (exited !== null) break;
     if (await running(home)) {
       await log.close();
-      return report("kozod is up");
+      return report(t("cli.kozod-up"));
     }
     await Bun.sleep(100);
   }
   await log.close();
-  out.stderr(`kozo: kozod did not start; see ${join(home.root, "kozod.log")}`);
+  out.stderr(`kozo: ${t("cli.kozod-not-started", { log: join(home.root, "kozod.log") })}`);
   return ExitCode.failure;
 }
 
@@ -189,34 +209,34 @@ async function isKozod(pid: number): Promise<boolean> {
   return basename(ps.stdout.toString().trim()) === "kozod";
 }
 
-export async function down(args: readonly string[], out: Lines): Promise<number> {
+export async function down(args: readonly string[], out: Lines, t = english): Promise<number> {
   const { values } = parseArgs({ args: [...args], options: { json: { type: "boolean" } } });
   const home = kozoHome();
-  const report = (message: string) => {
-    out.stdout(values.json ? JSON.stringify({ message }) : message);
+  const report = (text: string) => {
+    out.stdout(values.json ? JSON.stringify({ message: text }) : text);
     return ExitCode.success;
   };
   const file = Bun.file(home.pidFile);
-  if (!(await file.exists())) return report("kozod is not running");
+  if (!(await file.exists())) return report(t("cli.kozod-not-running"));
   const pid = Number((await file.text()).trim());
   // After a crash the pid may be another process's, which must not get the signal.
   if (!(await isKozod(pid))) {
-    return report(`kozod is not running; ${home.pidFile} names pid ${pid}, which is not kozod`);
+    return report(t("cli.kozod-not-running-pid", { file: home.pidFile, pid }));
   }
   try {
     process.kill(pid, "SIGTERM");
   } catch {
-    return report("kozod is not running");
+    return report(t("cli.kozod-not-running"));
   }
   for (let waited = 0; waited < 15_000; waited += 100) {
     try {
       process.kill(pid, 0);
     } catch {
-      return report("kozod is down");
+      return report(t("cli.kozod-down"));
     }
     await Bun.sleep(100);
   }
-  out.stderr(`kozo: kozod (pid ${pid}) did not stop within 15 seconds`);
+  out.stderr(`kozo: ${t("cli.kozod-not-stopped", { pid })}`);
   return ExitCode.failure;
 }
 
@@ -227,14 +247,14 @@ export async function down(args: readonly string[], out: Lines): Promise<number>
  * --url, prints that URL instead. The code is good once, for a minute, and lives in the URL's
  * fragment, which the browser never sends to a server.
  */
-export async function dashboard(args: readonly string[], out: Lines): Promise<number> {
+export async function dashboard(args: readonly string[], out: Lines, t = english): Promise<number> {
   const { values } = parseArgs({
     args: [...args],
     options: { url: { type: "boolean" }, json: { type: "boolean" } },
   });
-  return withClient(out, async (client) => {
+  return withClient(out, t, async (client) => {
     const answer = await client.post("/api/dashboard/code");
-    if (answer.status !== 200) return printAnswer(out, values.json, answer, () => []);
+    if (answer.status !== 200) return printAnswer(out, t, values.json, answer, () => []);
     const url = `${client.base}/#code=${String(answer.body.code)}`;
     if (values.url) {
       out.stdout(values.json ? JSON.stringify({ url }) : url);
@@ -247,18 +267,18 @@ export async function dashboard(args: readonly string[], out: Lines): Promise<nu
       .then((child) => child.exited)
       .catch(() => 1);
     if (opened !== 0) {
-      out.stderr(`kozo: ${opener} could not open the browser; run kozo dashboard --url`);
+      out.stderr(`kozo: ${t("cli.opener-failed", { opener })}`);
       return ExitCode.failure;
     }
-    const message = `opened the dashboard at ${client.base}/`;
-    out.stdout(values.json ? JSON.stringify({ message }) : message);
+    const text = t("cli.dashboard-opened", { url: `${client.base}/` });
+    out.stdout(values.json ? JSON.stringify({ message: text }) : text);
     return ExitCode.success;
   });
 }
 
 // --- kozo status ------------------------------------------------------------------------------
 
-export async function status(args: readonly string[], out: Lines): Promise<number> {
+export async function status(args: readonly string[], out: Lines, t = english): Promise<number> {
   const { values } = parseArgs({
     args: [...args],
     options: { line: { type: "boolean" }, json: { type: "boolean" } },
@@ -268,9 +288,9 @@ export async function status(args: readonly string[], out: Lines): Promise<numbe
     answer = await (await connect()).get("/api/status");
   } catch (error) {
     if (!(error instanceof KozodUnavailable)) throw error;
-    if (values.line) out.stdout("kozo: down");
+    if (values.line) out.stdout(t("cli.status-down"));
     else if (values.json) out.stdout(JSON.stringify({ running: false }));
-    else out.stderr(`kozo: ${error.message}`);
+    else unavailable(out, t, error);
     return ExitCode.failure;
   }
   const s = answer.body as {
@@ -282,24 +302,33 @@ export async function status(args: readonly string[], out: Lines): Promise<numbe
     costTodayUsd: number;
     reservedUsd: number;
   };
-  const held = s.reservedUsd > 0 ? `, $${s.reservedUsd.toFixed(2)} held back` : "";
-  const cost = `$${s.costTodayUsd.toFixed(2)} today${held}`;
+  const today = dollars(s.costTodayUsd);
+  const cost =
+    s.reservedUsd > 0
+      ? t("cli.cost-today-held", { amount: today, held: dollars(s.reservedUsd) })
+      : t("cli.cost-today", { amount: today });
   if (values.line) {
-    const state = s.paused ? "paused" : "up";
     out.stdout(
-      `kozo: ${state} ${s.mode} · ${s.activeRuns} running · ${s.waiting} waiting · ${cost}`,
+      t("cli.status-line", {
+        state: s.paused ? t("cli.state-paused") : t("cli.state-up"),
+        mode: s.mode,
+        running: t("cli.count-running", { count: s.activeRuns }),
+        waiting: t("cli.count-waiting", { count: s.waiting }),
+        cost,
+      }),
     );
     return exitFor(answer);
   }
   return printAnswer(
     out,
+    t,
     values.json,
     { ...answer, body: { running: true, ...answer.body } },
     () => [
-      `kozod     ${s.paused ? `paused (${s.pausedReason})` : "running"}`,
+      `kozod     ${s.paused ? t("cli.kozod-state-paused", { reason: String(s.pausedReason) }) : t("cli.kozod-state-running")}`,
       `mode      ${s.mode}`,
-      `runs      ${s.activeRuns} running`,
-      `waiting   ${s.waiting} in the inbox`,
+      `runs      ${t("cli.count-running", { count: s.activeRuns })}`,
+      `waiting   ${t("cli.count-in-inbox", { count: s.waiting })}`,
       `cost      ${cost}`,
     ],
   );
@@ -307,7 +336,7 @@ export async function status(args: readonly string[], out: Lines): Promise<numbe
 
 // --- kozo add ---------------------------------------------------------------------------------
 
-export async function add(args: readonly string[], out: Lines): Promise<number> {
+export async function add(args: readonly string[], out: Lines, t = english): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...args],
     options: {
@@ -320,12 +349,13 @@ export async function add(args: readonly string[], out: Lines): Promise<number> 
   });
   const workClass =
     values.class === undefined ? undefined : workClassSchema.safeParse(values.class);
-  if (workClass && !workClass.success) throw new UsageError(`unknown work class '${values.class}'`);
+  if (workClass && !workClass.success)
+    throw new UsageError(t("cli.unknown-class", { class: String(values.class) }));
   let text = positionals.join(" ");
   if (values.file) text = `${text}\n${await Bun.file(values.file).text()}`.trim();
   const [title = "", ...rest] = text.trim().split("\n");
-  if (title.trim() === "") throw new UsageError("add needs the request text");
-  return postAndPrint(out, values.json, "/api/items", {
+  if (title.trim() === "") throw new UsageError(t("cli.add-needs-text"));
+  return postAndPrint(out, t, values.json, "/api/items", {
     title: title.trim(),
     body: rest.join("\n").trim() || undefined,
     repository: values.repo,
@@ -335,26 +365,26 @@ export async function add(args: readonly string[], out: Lines): Promise<number> 
 
 // --- kozo ls ----------------------------------------------------------------------------------
 
-export async function ls(args: readonly string[], out: Lines): Promise<number> {
+export async function ls(args: readonly string[], out: Lines, t = english): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...args],
     options: { json: { type: "boolean" } },
     allowPositionals: true,
   });
   const kind = listKindSchema.safeParse(positionals[0] ?? "inbox");
-  if (!kind.success) throw new UsageError(`unknown list '${positionals[0]}'`);
-  return withClient(out, async (client) => {
+  if (!kind.success) throw new UsageError(t("cli.unknown-list", { list: String(positionals[0]) }));
+  return withClient(out, t, async (client) => {
     const answer = await client.get(`/api/ls/${kind.data}`);
     const rows = (Array.isArray(answer.body) ? answer.body : []) as Row[];
     const listed = { ...answer, body: { [kind.data]: rows } as Answer["body"] };
-    return printAnswer(out, values.json, listed, () => {
-      if (rows.length === 0) return [`nothing in ${kind.data}`];
+    return printAnswer(out, t, values.json, listed, () => {
+      if (rows.length === 0) return [t("cli.nothing-in", { list: kind.data })];
       switch (kind.data) {
         case "inbox":
           return table(
             rows.map((row) => [
               cell(row.ref),
-              row.waiting === "merge" ? "awaiting merge" : cell(row.waiting),
+              row.waiting === "merge" ? t("cli.awaiting-merge") : cell(row.waiting),
               row.reason ? `${row.title} (${row.reason})` : cell(row.title),
             ]),
           );
@@ -389,7 +419,7 @@ export async function ls(args: readonly string[], out: Lines): Promise<number> {
 // --- kozo show --------------------------------------------------------------------------------
 
 /** The lines `kozo show` prints for the detail of an item, a task or a run. */
-export function detailLines(body: Record<string, unknown>): string[] {
+export function detailLines(body: Record<string, unknown>, t = english): string[] {
   if (body.kind === "item") {
     const item = body.item as Row & { plan: { approach: string } | null; draft: Plan | null };
     const tasks = (body.tasks ?? []) as Row[];
@@ -402,9 +432,9 @@ export function detailLines(body: Record<string, unknown>): string[] {
       // A plan that waits for approval shows what approving it lets kozod run.
       ...(item.draft
         ? [
-            `draft      ${item.draft.class}, ${item.draft.risk} risk: ${item.draft.approach}`,
+            `draft      ${t("cli.draft-summary", { class: item.draft.class, risk: item.draft.risk, approach: item.draft.approach })}`,
             ...item.draft.tasks.flatMap((task) => [
-              `  ${task.id}  ${task.goal}${task.characterize ? " (characterizes)" : ""}`,
+              `  ${task.id}  ${task.goal}${task.characterize ? ` ${t("cli.characterizes")}` : ""}`,
               ...(task.codemod ? [`      codemod: ${task.codemod}`] : []),
             ]),
           ]
@@ -430,7 +460,7 @@ export function detailLines(body: Record<string, unknown>): string[] {
   return [
     `${run.ref}  ${run.agent} (${run.model})`,
     `state      ${run.state}`,
-    `for        ${run.task ?? run.item}${run.parent ? ` under ${run.parent}` : ""}`,
+    `for        ${run.parent ? t("cli.run-under", { target: String(run.task ?? run.item), parent: String(run.parent) }) : (run.task ?? run.item)}`,
     `events     ${body.events}`,
     `cost       $${Number(body.cost_usd).toFixed(2)}`,
   ];
@@ -460,7 +490,7 @@ function eventLine(event: { ts: string; type: string; data: Record<string, unkno
   return `${event.ts.slice(11, 19)}  ${event.type}${summary ? `  ${summary}` : ""}`;
 }
 
-export async function show(args: readonly string[], out: Lines): Promise<number> {
+export async function show(args: readonly string[], out: Lines, t = english): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...args],
     options: {
@@ -471,15 +501,14 @@ export async function show(args: readonly string[], out: Lines): Promise<number>
     allowPositionals: true,
   });
   const ref = positionals[0];
-  if (!ref || !parseReference(ref))
-    throw new UsageError("show needs an item, task or run reference");
-  return withClient(out, async (client) => {
+  if (!ref || !parseReference(ref)) throw new UsageError(t("cli.show-needs-ref"));
+  return withClient(out, t, async (client) => {
     const answer = await client.get(refPath(ref));
     if (values.diff && answer.status === 200) {
       const location = answer.body.diff as
         | { repository: string; branch: string; base: string }
         | undefined;
-      if (!location) throw new UsageError("--diff needs a task reference");
+      if (!location) throw new UsageError(t("cli.diff-needs-task"));
       let text: string;
       try {
         text = await git(location.repository, ["diff", `${location.base}...${location.branch}`]);
@@ -491,7 +520,7 @@ export async function show(args: readonly string[], out: Lines): Promise<number>
       for (const line of text.trimEnd().split("\n")) out.stdout(printable(line));
       return ExitCode.success;
     }
-    const code = printAnswer(out, values.json, answer, () => detailLines(answer.body));
+    const code = printAnswer(out, t, values.json, answer, () => detailLines(answer.body, t));
     if (!values.follow || code !== ExitCode.success) return code;
     const response = await client.stream(`${refPath(ref)}/events`);
     const reader = response.body?.getReader();
@@ -520,7 +549,12 @@ export async function show(args: readonly string[], out: Lines): Promise<number>
 // --- verbs ------------------------------------------------------------------------------------
 
 /** `kozo <verb> <ref> [text]`, and `kozo pause` or `kozo resume` with no reference. */
-export async function verb(name: Verb, args: readonly string[], out: Lines): Promise<number> {
+export async function verb(
+  name: Verb,
+  args: readonly string[],
+  out: Lines,
+  t = english,
+): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...args],
     options: {
@@ -536,35 +570,35 @@ export async function verb(name: Verb, args: readonly string[], out: Lines): Pro
   const [ref, ...words] = positionals;
   const text = words.join(" ").trim() || undefined;
   if (ref === undefined && (name === "pause" || name === "resume")) {
-    return postAndPrint(out, values.json, `/api/factory/${name}`);
+    return postAndPrint(out, t, values.json, `/api/factory/${name}`);
   }
   const reference = ref === undefined ? null : parseReference(ref);
-  if (!ref || !reference) throw new UsageError(`${name} needs a reference`);
+  if (!ref || !reference) throw new UsageError(t("cli.needs-reference", { verb: name }));
   if (!verbsByKind[reference.kind].includes(name)) {
-    throw new UsageError(`a ${reference.kind} does not take ${name}`);
+    throw new UsageError(t("api.verb-kind", { kind: reference.kind, verb: name }));
   }
   const bodies: Record<Verb, () => unknown> = {
     say: () => ({
-      text: text ?? missing("say needs the text to send"),
+      text: text ?? missing(t("cli.say-needs-text")),
       ...(values.ask ? { ask: true } : {}),
     }),
     approve: () => ({ text }),
-    reject: () => ({ reason: text ?? missing("reject needs a reason") }),
+    reject: () => ({ reason: text ?? missing(t("cli.reject-needs-reason")) }),
     pause: () => (values.now ? { now: true } : {}),
     resume: () => ({}),
     retry: () => ({ text }),
     close: () => {
       if (values.done && values.cancel === undefined) return { done: true };
       if (values.cancel && !values.done) return { cancel: values.cancel };
-      return missing("close needs --done or --cancel <reason>");
+      return missing(t("cli.close-needs-choice"));
     },
     take: () => ({}),
-    return: () => ({ text: text ?? missing("return needs what you changed and checked") }),
+    return: () => ({ text: text ?? missing(t("cli.return-needs-text")) }),
     reorder: () => ({ before: values.before ?? null }),
     issue: () => ({}),
   };
   const body = bodies[name]();
-  return postAndPrint(out, values.json, `${refPath(ref)}/${name}`, body);
+  return postAndPrint(out, t, values.json, `${refPath(ref)}/${name}`, body);
 }
 
 function missing(message: string): never {
@@ -598,22 +632,22 @@ interface CostReport {
 }
 
 /** The lines of a metrics report, the targets beside each. */
-function metricLines(r: Metrics): string[] {
+function metricLines(r: Metrics, t: Words): string[] {
   return [
-    `over the last ${r.days} days, ${r.merged} merged diffs`,
-    `autonomy rate     ${percent(r.autonomy_rate)}  (70% or more)`,
-    `defect rate       ${percent(r.defect_rate)}  (5% or less)`,
-    `cost per diff     ${dollars(r.cost_per_diff_usd)}  (median)`,
-    `time to merge     ${r.hours_to_merge === null ? "-" : `${r.hours_to_merge.toFixed(1)} h`}  (median, within 24 h)`,
-    `revise rate       ${percent(r.revise_rate)} of ${r.reviews} reviews  (10% to 30%)`,
-    `held              ${r.held} questions and attention  (10 or fewer)`,
+    t("cli.report-window", { days: r.days, merged: r.merged }),
+    `autonomy rate     ${t("cli.metric-autonomy", { rate: percent(r.autonomy_rate) })}`,
+    `defect rate       ${t("cli.metric-defect", { rate: percent(r.defect_rate) })}`,
+    `cost per diff     ${t("cli.metric-cost", { cost: dollars(r.cost_per_diff_usd) })}`,
+    `time to merge     ${t("cli.metric-time", { time: r.hours_to_merge === null ? "-" : `${r.hours_to_merge.toFixed(1)} h` })}`,
+    `revise rate       ${t("cli.metric-revise", { rate: percent(r.revise_rate), reviews: r.reviews })}`,
+    `held              ${t("cli.metric-held", { held: r.held })}`,
     ...(r.failures === undefined
       ? []
       : [
           "",
           r.failures.length === 0
-            ? "no failures in the window"
-            : `failures in the window, for the retrospective: ${r.failures.length}`,
+            ? t("cli.no-failures")
+            : t("cli.failures", { count: r.failures.length }),
           ...r.failures.map(
             (f) =>
               `  ${f.at.slice(0, 16).replace("T", " ")}  ${f.kind}  ${f.ref}  ${f.text.split("\n")[0]}`,
@@ -623,33 +657,44 @@ function metricLines(r: Metrics): string[] {
       ? []
       : [
           "",
-          "promotion proposals: raise to L3 in the Charter",
-          ...r.promotions.map((p) => `  ${p.class} in ${p.repository}`),
+          t("cli.promotions"),
+          ...r.promotions.map(
+            (p) =>
+              `  ${t("cli.class-in-repository", { class: p.class, repository: p.repository })}`,
+          ),
         ]),
     ...(r.levels
       ? [
           "",
-          "levels as kozod applies them",
-          ...r.levels.map((l) => `  ${l.level}  ${l.class} in ${l.repository}`),
+          t("cli.levels"),
+          ...r.levels.map(
+            (l) =>
+              `  ${l.level}  ${t("cli.class-in-repository", { class: l.class, repository: l.repository })}`,
+          ),
         ]
       : []),
     ...(r.demotions && r.demotions.length > 0
       ? [
           "",
-          "demotions, until the Charter changes",
+          t("cli.demotions"),
           ...r.demotions.map(
-            (d) => `  ${d.class} in ${d.repository}: ${d.from} to ${d.to}, ${d.reason}`,
+            (d) =>
+              `  ${t("cli.demotion", { place: t("cli.class-in-repository", { class: d.class, repository: d.repository }), from: d.from, to: d.to, reason: d.reason })}`,
           ),
         ]
       : []),
     ...(r.cost_usd === undefined
       ? []
-      : ["", `cost              ${dollars(r.cost_usd)} in the window`]),
+      : ["", `cost              ${t("cli.cost-in-window", { cost: dollars(r.cost_usd) })}`]),
   ];
 }
 
 /** `kozo report`: the metrics over a window of days, or with a flag the review or the cost. */
-export async function metricsReport(args: readonly string[], out: Lines): Promise<number> {
+export async function metricsReport(
+  args: readonly string[],
+  out: Lines,
+  t = english,
+): Promise<number> {
   const { values } = parseArgs({
     args: [...args],
     options: {
@@ -659,19 +704,18 @@ export async function metricsReport(args: readonly string[], out: Lines): Promis
       json: { type: "boolean" },
     },
   });
-  if (values.review && values.cost)
-    throw new UsageError("report takes --review or --cost, not both");
+  if (values.review && values.cost) throw new UsageError(t("cli.report-exclusive"));
   const view = values.review ? "review" : values.cost ? "cost" : "summary";
   const days = values.days ?? "30";
   if (!/^\d+$/.test(days) || Number(days) < 1 || Number(days) > 365)
-    throw new UsageError("report takes --days <n>, a whole number from 1 to 365");
-  return await withClient(out, async (client) => {
+    throw new UsageError(t("cli.report-days"));
+  return await withClient(out, t, async (client) => {
     const answer = await client.get(`/api/report?view=${view}&days=${days}`);
-    return printAnswer(out, values.json, answer, () => {
-      if (view !== "cost") return metricLines(answer.body as unknown as Metrics);
+    return printAnswer(out, t, values.json, answer, () => {
+      if (view !== "cost") return metricLines(answer.body as unknown as Metrics, t);
       const c = answer.body as unknown as CostReport;
       return [
-        `today             ${dollars(c.today_usd)} of ${dollars(c.budget_usd)}`,
+        `today             ${t("cli.cost-of-budget", { today: dollars(c.today_usd), budget: dollars(c.budget_usd) })}`,
         ...c.days.map((d) => `  ${d.day}  ${dollars(d.usd)}`),
       ];
     });
@@ -700,27 +744,27 @@ interface EvalSummary {
  * factory definition, the human's own files; `kozo admin eval run [<case>...]` runs the cases
  * with `kozod --eval`, which needs no running kozod.
  */
-async function evalCommand(args: string[], json: boolean | undefined, out: Lines) {
+async function evalCommand(args: string[], json: boolean | undefined, out: Lines, t: Words) {
   const [action, ...rest] = args;
   if (action === "add") {
     const [run] = rest;
-    if (!run || rest.length > 1) throw new UsageError("admin eval add takes one run, r-<nnnn>");
-    return await withClient(out, async (client) => {
+    if (!run || rest.length > 1) throw new UsageError(t("cli.eval-add-takes-run"));
+    return await withClient(out, t, async (client) => {
       const answer = await client.post("/api/admin/eval-case", { run });
-      if (answer.status >= 300) return printAnswer(out, json, answer, () => []);
+      if (answer.status >= 300) return printAnswer(out, t, json, answer, () => []);
       const { id, text } = answer.body as { id: string; text: string };
       const path = join(client.home.factory, "evals", `${id}.yml`);
       if (await Bun.file(path).exists()) {
-        out.stderr(`kozo: ${path} exists already; remove it to draft it again`);
+        out.stderr(`kozo: ${t("cli.eval-exists", { path })}`);
         return ExitCode.failure;
       }
       await Bun.write(path, text);
-      return printAnswer(out, json, { ...answer, body: { ...answer.body, path } }, () => [
-        `wrote ${path}; add the hidden tests and checks it needs, then commit it`,
+      return printAnswer(out, t, json, { ...answer, body: { ...answer.body, path } }, () => [
+        t("cli.eval-wrote", { path }),
       ]);
     });
   }
-  if (action !== "run") throw new UsageError("admin eval takes add or run");
+  if (action !== "run") throw new UsageError(t("cli.eval-takes"));
   const child = Bun.spawn([...kozodCommand(), "--eval", ...rest], {
     stdin: "ignore",
     stdout: "pipe",
@@ -735,26 +779,31 @@ async function evalCommand(args: string[], json: boolean | undefined, out: Lines
   try {
     summary = JSON.parse(text) as EvalSummary;
   } catch {
-    out.stderr("kozo: kozod --eval printed no results");
+    out.stderr(`kozo: ${t("cli.eval-no-results")}`);
     return ExitCode.failure;
   }
   for (const result of summary.cases) {
     const failed = result.checks.find((check) => check.code !== 0);
     out.stdout(
       printable(
-        `${result.passed ? "pass" : "FAIL"}  ${result.id}  ${result.outcome}${result.passed ? "" : `, expected ${result.expected}`}${failed ? `; ${failed.command} exited with ${failed.code}` : ""}${result.reason ? `: ${result.reason}` : ""}${result.error ? `; ${result.error}` : ""}  ${dollars(result.costUsd)}`,
+        `${result.passed ? "pass" : "FAIL"}  ${result.id}  ${result.outcome}${result.passed ? "" : `, ${t("cli.eval-expected", { expected: String(result.expected) })}`}${failed ? `; ${t("cli.exited-with", { command: failed.command, code: failed.code })}` : ""}${result.reason ? `: ${result.reason}` : ""}${result.error ? `; ${result.error}` : ""}  ${dollars(result.costUsd)}`,
       ),
     );
-    for (const rule of result.forbidden) out.stdout(printable(`      check by hand: ${rule}`));
+    for (const rule of result.forbidden)
+      out.stdout(printable(`      ${t("cli.eval-check-by-hand", { rule })}`));
   }
   out.stdout(
-    `${summary.passed} of ${summary.total} reached the expected outcome; ${dollars(summary.costUsd)} in all`,
+    t("cli.eval-summary", {
+      passed: summary.passed,
+      total: summary.total,
+      cost: dollars(summary.costUsd),
+    }),
   );
   return code;
 }
 
 /** `kozo admin`: creates the definition, installs a repository, rebuilds kozo.db or prunes runs. */
-export async function admin(args: readonly string[], out: Lines): Promise<number> {
+export async function admin(args: readonly string[], out: Lines, t = english): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...args],
     options: {
@@ -764,25 +813,24 @@ export async function admin(args: readonly string[], out: Lines): Promise<number
     },
     allowPositionals: true,
   });
-  if (positionals[0] === "init") return await initFactory(values.json, out);
+  if (positionals[0] === "init") return await initFactory(values.json, out, t);
   if (positionals[0] === "install") {
     const path = positionals[1];
-    if (!path) throw new UsageError("admin install takes the repository's path");
-    return await installRepository(resolve(path), values.json, out);
+    if (!path) throw new UsageError(t("cli.install-takes-path"));
+    return await installRepository(resolve(path), values.json, out, t);
   }
-  if (positionals[0] === "eval") return await evalCommand(positionals.slice(1), values.json, out);
+  if (positionals[0] === "eval")
+    return await evalCommand(positionals.slice(1), values.json, out, t);
   if (positionals[0] === "prune") {
     const days = Number(values["older-than"]);
-    if (!Number.isInteger(days) || days < 1)
-      throw new UsageError("admin prune takes --older-than <days>, a whole number of days");
-    return postAndPrint(out, values.json, "/api/admin/prune", {
+    if (!Number.isInteger(days) || days < 1) throw new UsageError(t("cli.prune-takes-days"));
+    return postAndPrint(out, t, values.json, "/api/admin/prune", {
       older_than_days: days,
       ...(values["dry-run"] ? { dry_run: true } : {}),
     });
   }
-  if (positionals[0] !== "db-rebuild")
-    throw new UsageError("admin takes init, install, db-rebuild, prune or eval");
-  return postAndPrint(out, values.json, "/api/admin/db-rebuild");
+  if (positionals[0] !== "db-rebuild") throw new UsageError(t("cli.admin-takes"));
+  return postAndPrint(out, t, values.json, "/api/admin/db-rebuild");
 }
 
 /**
@@ -790,18 +838,18 @@ export async function admin(args: readonly string[], out: Lines): Promise<number
  * CLI writes the files for the human to commit; in GitHub mode they reach the repository only as
  * a pull request, which only kozod opens.
  */
-async function installRepository(path: string, json: boolean | undefined, out: Lines) {
+async function installRepository(path: string, json: boolean | undefined, out: Lines, t: Words) {
   const home = kozoHome();
   const tip = await definitionTip(home.factory).catch(() => null);
   const definition = await readDefinition(home.factory, tip);
   if (definition.ok && definition.definition.factory.mode === "github")
-    return postAndPrint(out, json, "/api/admin/install", { repository: path });
+    return postAndPrint(out, t, json, "/api/admin/install", { repository: path });
   const written = await installRepositoryTemplate(path, { mode: "local" });
-  const message =
+  const text =
     written.length === 0
-      ? `${path} has every file kozo installs`
-      : `added ${written.join(", ")} to ${path}; edit them, set status: ready in .kozo/charter.yml and commit them`;
-  out.stdout(json ? JSON.stringify({ message, written }) : message);
+      ? t("cli.install-nothing", { path })
+      : t("cli.installed", { files: written.join(", "), path });
+  out.stdout(json ? JSON.stringify({ message: text, written }) : text);
   return ExitCode.success;
 }
 
@@ -809,11 +857,11 @@ async function installRepository(path: string, json: boolean | undefined, out: L
  * `kozo admin init`: creates the factory definition as a git repository from kozo's template.
  * The definition is the human's own configuration, not kozod's state, so the CLI writes it.
  */
-async function initFactory(json: boolean | undefined, out: Lines): Promise<number> {
+async function initFactory(json: boolean | undefined, out: Lines, t: Words): Promise<number> {
   const directory = kozoHome().factory;
   const present = await readdir(directory).catch(() => []);
   if (present.length > 0) {
-    out.stderr(`kozo: ${directory} is not empty; the factory definition is already there`);
+    out.stderr(`kozo: ${t("cli.init-not-empty", { directory })}`);
     return ExitCode.failure;
   }
   for (const [path, text] of Object.entries(factoryTemplate)) {
@@ -826,10 +874,10 @@ async function initFactory(json: boolean | undefined, out: Lines): Promise<numbe
     await git(directory, ["commit", "--quiet", "--message", "Start the factory definition"]);
   } catch (error) {
     if (!(error instanceof GitError)) throw error;
-    out.stderr(`kozo: wrote ${directory}, but could not commit it: ${error.message}`);
+    out.stderr(`kozo: ${t("cli.init-commit-failed", { directory, error: error.message })}`);
     return ExitCode.failure;
   }
-  const message = `created the factory definition in ${directory}; add a repository to factory.yml and commit it`;
-  out.stdout(json ? JSON.stringify({ message, path: directory }) : message);
+  const text = t("cli.init-created", { directory });
+  out.stdout(json ? JSON.stringify({ message: text, path: directory }) : text);
   return ExitCode.success;
 }

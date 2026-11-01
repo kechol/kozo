@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { gateLevelSchema, kozoHome, verbSchema } from "@kozo/core";
+import { gateLevelSchema, kozoHome, type Locale, verbSchema } from "@kozo/core";
 import {
   claudeJudge,
   claudeVerifier,
@@ -32,6 +32,7 @@ import {
   up,
   verb,
 } from "./factory-commands.ts";
+import { factoryLocale, type Words, words } from "./words.ts";
 
 export { ExitCode };
 
@@ -46,94 +47,8 @@ export interface Output {
   rawStderr(text: string): void;
 }
 
-const USAGE = `Usage: kozo <command>
-
-Commands:
-  up | down [--json]
-      Start kozod in the background, or stop it
-  status [--line] [--json]
-      kozod's state, mode, runs, the inbox count and today's cost; --line
-      prints one line for a status bar
-  add <text> [--repo <path>] [--class <class>] [-f <file>] [--json]
-      Add an item; the first line is its title and the rest, with the
-      file's text, its body
-  ls [inbox|items|tasks|runs] [--json]
-      List what waits for you (the default) or every item, task or run
-  show <ref> [-f] [--diff] [--json]
-      Show an item, task or run; -f follows its events, and --diff prints a
-      task's diff against the default branch
-  say <ref> <text>          Answer a question or instruct a run or task
-  say --ask <ref> <question>
-      Ask about an item, task or run; the explorer answers from the records
-      without touching the work
-  approve <item> [text]     Approve a start or a plan
-  reject <item> <reason>    Reject a plan
-  pause [ref] [--now] | resume [ref]
-      Stop or resume the whole factory, or one item, task or run
-  retry <ref> [text]        Retry a task from its checkpoint or an item
-  close <ref> --done | --cancel <reason>
-      Complete an item or task that needed no change, or cancel it
-  reorder <item> [--before <item>]
-      Move an item before another in the order kozod starts work, or to the end
-  issue <item>              In GitHub mode, move a local item without tasks to an
-      Issue of its repository, which kozod then takes up
-  take <task>               Take a task over and work in its worktree
-  return <task> <text>      Give a taken task back once your work is committed;
-      its checks run on your commits from the deterministic ones on
-  report [--days <n>] [--review | --cost] [--json]
-      The metrics and failures over the last <n> days (default 30) and the
-      promotion proposals; --review adds each class's level, the demotions
-      and the cost, --cost shows each day's cost against the budget
-  dashboard [--url] [--json]
-      Open the dashboard in the browser, or print its URL with --url; the URL
-      opens a session once, within a minute
-  check [path] [--json]
-      Check the factory definition, each repository's Charter, claude and the
-      sandbox; with a path, only the definition or .kozo/ in that directory
-  admin init [--json]       Create the factory definition from kozo's template
-  admin install <path> [--json]
-      Add kozo's files to a repository; in GitHub mode kozod opens them as a
-      pull request
-  admin db-rebuild          Rebuild kozo.db from the event logs
-  admin eval add <run> [--json]
-      Draft the eval case of a run's item into the factory definition's evals/
-  admin eval run [<case>...] [--json]
-      Run the eval cases, or the named ones, each in a throwaway factory home,
-      and print the share that reached the expected outcome and the cost
-  admin prune --older-than <days> [--dry-run] [--json]
-      Remove all but the event log, report, verdicts and decision log of
-      every run whose item closed at least <days> days ago
-
-  gates [--level fast|full|deep] [--base <ref>] [--json]
-      Run the gates of one level (default full); with --base, take the
-      constraints from the tip of <ref> instead of the worktree
-  diff-guard --base <ref> [--head <ref>] [--scope <glob>]... [--json]
-      Check the diff from the merge base of <ref> to <head> (default HEAD)
-      against the Charter and constraints at the tip of <ref>
-  prove --base <ref> [--preserve] [--json]
-      Require the changed tests to pass at HEAD and to fail with the
-      non-test changes reverted in place; with --preserve, to pass reverted
-      too, for a change that keeps behaviour; the worktree must be clean
-  review --base <ref> --goal <text> --done-when <text>... [--model <id>]
-         [--max-cost <usd>] [--out <dir>] [--json]
-      Judge the diff from the merge base of <ref> to HEAD in a separate
-      claude session that sees only the diff, GOAL and DONE_WHEN; with
-      --out, record the verdict in <dir>/verdict.json
-  verify --base <ref> --goal <text> --done-when <text>... [--model <id>]
-         [--max-cost <usd>] [--out <dir>] [--json]
-      Run the app by .kozo/verify-app.md at the tip of <ref> in a sandboxed
-      claude session, exercise each DONE_WHEN condition and, with --out,
-      record the verdict and copy the evidence into <dir>
-
-Options:
-  --version  Print the version
-
-A <ref> of an item is K-<n> or <repo>#<n>, of a task <item>/t<n> and of a
-run r-<nnnn>. Exit codes: 0 success, 1 failure, 2 usage error, 3 waiting
-for a human, 4 not found.
-
-A <ref> after --base or --head is a full commit ID, HEAD, a full ref such
-as refs/remotes/origin/main, or a branch name, read as refs/heads/<name>.`;
+/** The usage text in `locale`. */
+export const usageText = (locale: Locale) => words(locale)("cli.usage");
 
 export async function run(
   args: readonly string[],
@@ -145,30 +60,33 @@ export async function run(
     out.stdout(`kozo ${pkg.version}`);
     return ExitCode.success;
   }
+  const t = words(await factoryLocale());
   try {
-    if (command === "gates") return await gates(rest, out, cwd);
-    if (command === "diff-guard") return await diffGuard(rest, out, cwd);
-    if (command === "prove") return await prove(rest, out, cwd);
-    if (command === "review") return await review(rest, out, cwd);
-    if (command === "verify") return await verify(rest, out, cwd);
-    if (command === "up") return await up(rest, out);
-    if (command === "down") return await down(rest, out);
-    if (command === "status") return await status(rest, out);
-    if (command === "add") return await add(rest, out);
-    if (command === "ls") return await ls(rest, out);
-    if (command === "show") return await show(rest, out);
-    if (command === "admin") return await admin(rest, out);
-    if (command === "check") return await check(rest, out);
-    if (command === "dashboard") return await dashboard(rest, out);
-    if (command === "report") return await metricsReport(rest, out);
+    if (command === "gates") return await gates(rest, out, cwd, t);
+    if (command === "diff-guard") return await diffGuard(rest, out, cwd, t);
+    if (command === "prove") return await prove(rest, out, cwd, t);
+    if (command === "review") return await review(rest, out, cwd, t);
+    if (command === "verify") return await verify(rest, out, cwd, t);
+    if (command === "up") return await up(rest, out, t);
+    if (command === "down") return await down(rest, out, t);
+    if (command === "status") return await status(rest, out, t);
+    if (command === "add") return await add(rest, out, t);
+    if (command === "ls") return await ls(rest, out, t);
+    if (command === "show") return await show(rest, out, t);
+    if (command === "admin") return await admin(rest, out, t);
+    if (command === "check") return await check(rest, out, t);
+    if (command === "dashboard") return await dashboard(rest, out, t);
+    if (command === "report") return await metricsReport(rest, out, t);
     const named = verbSchema.options.find((name) => name === command);
-    if (named) return await verb(named, rest, out);
+    if (named) return await verb(named, rest, out, t);
   } catch (error) {
     const fromParseArgs = String((error as { code?: unknown }).code).startsWith("ERR_PARSE_ARGS");
-    if (error instanceof UsageError || fromParseArgs) return usage(out, (error as Error).message);
+    if (error instanceof UsageError || fromParseArgs) {
+      return usage(out, (error as Error).message, t);
+    }
     throw error;
   }
-  return usage(out, command === undefined ? undefined : `unknown command '${command}'`);
+  return usage(out, command === undefined ? undefined : t("cli.unknown-command", { command }), t);
 }
 
 // With --json, stdout carries only the JSON document, so progress output goes to stderr.
@@ -192,7 +110,7 @@ function report(
   out.stdout(line);
 }
 
-async function gates(args: readonly string[], out: Output, cwd: string): Promise<number> {
+async function gates(args: readonly string[], out: Output, cwd: string, t: Words): Promise<number> {
   const { values } = parseArgs({
     args: [...args],
     options: {
@@ -203,7 +121,8 @@ async function gates(args: readonly string[], out: Output, cwd: string): Promise
     strict: true,
   });
   const level = gateLevelSchema.safeParse(values.level);
-  if (!level.success) throw new UsageError(`unknown gate level '${values.level}'`);
+  if (!level.success)
+    throw new UsageError(t("cli.unknown-gate-level", { level: String(values.level) }));
 
   const result = await runGates({
     cwd,
@@ -215,7 +134,12 @@ async function gates(args: readonly string[], out: Output, cwd: string): Promise
   return result.status === "pass" ? ExitCode.success : ExitCode.failure;
 }
 
-async function diffGuard(args: readonly string[], out: Output, cwd: string): Promise<number> {
+async function diffGuard(
+  args: readonly string[],
+  out: Output,
+  cwd: string,
+  t: Words,
+): Promise<number> {
   const { values } = parseArgs({
     args: [...args],
     options: {
@@ -226,7 +150,8 @@ async function diffGuard(args: readonly string[], out: Output, cwd: string): Pro
     },
     strict: true,
   });
-  if (values.base === undefined) throw new UsageError("diff-guard needs --base <ref>");
+  if (values.base === undefined)
+    throw new UsageError(t("cli.needs-base", { command: "diff-guard" }));
 
   const result = await runDiffGuard({
     cwd,
@@ -239,7 +164,7 @@ async function diffGuard(args: readonly string[], out: Output, cwd: string): Pro
   return result.status === "pass" ? ExitCode.success : ExitCode.failure;
 }
 
-async function prove(args: readonly string[], out: Output, cwd: string): Promise<number> {
+async function prove(args: readonly string[], out: Output, cwd: string, t: Words): Promise<number> {
   const { values } = parseArgs({
     args: [...args],
     options: {
@@ -249,7 +174,7 @@ async function prove(args: readonly string[], out: Output, cwd: string): Promise
     },
     strict: true,
   });
-  if (values.base === undefined) throw new UsageError("prove needs --base <ref>");
+  if (values.base === undefined) throw new UsageError(t("cli.needs-base", { command: "prove" }));
 
   const result = await runProve({
     cwd,
@@ -262,7 +187,7 @@ async function prove(args: readonly string[], out: Output, cwd: string): Promise
 }
 
 /** Parses the arguments that review and verify share; null means claude is not on PATH. */
-function sessionArgs(command: string, args: readonly string[], defaultCost: string) {
+function sessionArgs(command: string, args: readonly string[], defaultCost: string, t: Words) {
   const { values } = parseArgs({
     args: [...args],
     options: {
@@ -278,12 +203,10 @@ function sessionArgs(command: string, args: readonly string[], defaultCost: stri
   });
   const doneWhen = values["done-when"] ?? [];
   if (values.base === undefined || values.goal === undefined || doneWhen.length === 0) {
-    throw new UsageError(
-      `${command} needs --base <ref>, --goal <text> and at least one --done-when <text>`,
-    );
+    throw new UsageError(t("cli.needs-session-options", { command }));
   }
   const maxCostUsd = Number(values["max-cost"]);
-  if (!(maxCostUsd > 0)) throw new UsageError("--max-cost must be a positive number of US dollars");
+  if (!(maxCostUsd > 0)) throw new UsageError(t("cli.max-cost"));
   const executable = Bun.which("claude");
   if (executable === null) return null;
   return {
@@ -298,9 +221,14 @@ function sessionArgs(command: string, args: readonly string[], defaultCost: stri
   };
 }
 
-async function review(args: readonly string[], out: Output, cwd: string): Promise<number> {
-  const values = sessionArgs("review", args, "1");
-  if (values === null) return missingClaude(out, "review");
+async function review(
+  args: readonly string[],
+  out: Output,
+  cwd: string,
+  t: Words,
+): Promise<number> {
+  const values = sessionArgs("review", args, "1", t);
+  if (values === null) return missingClaude(out, "review", t);
   const result = await runReview({
     ...values,
     cwd,
@@ -335,9 +263,14 @@ async function review(args: readonly string[], out: Output, cwd: string): Promis
   return codes[result.record.verdict];
 }
 
-async function verify(args: readonly string[], out: Output, cwd: string): Promise<number> {
-  const values = sessionArgs("verify", args, "3");
-  if (values === null) return missingClaude(out, "verify");
+async function verify(
+  args: readonly string[],
+  out: Output,
+  cwd: string,
+  t: Words,
+): Promise<number> {
+  const values = sessionArgs("verify", args, "3", t);
+  if (values === null) return missingClaude(out, "verify", t);
   const result = await runVerify({
     ...values,
     cwd,
@@ -357,7 +290,7 @@ async function verify(args: readonly string[], out: Output, cwd: string): Promis
       ? [
           result.record.summary,
           ...result.record.conditions.map((condition) => {
-            const mark = condition.met ? "met" : "not met";
+            const mark = condition.met ? t("cli.condition-met") : t("cli.condition-not-met");
             return `- [${mark}] ${condition.condition}: ${condition.observation}`;
           }),
         ]
@@ -368,12 +301,13 @@ async function verify(args: readonly string[], out: Output, cwd: string): Promis
   return codes[result.record.result];
 }
 
-function missingClaude(out: Output, command: string): number {
-  out.stderr(`kozo: ${command} needs the claude CLI on PATH`);
+function missingClaude(out: Output, command: string, t: Words): number {
+  out.stderr(`kozo: ${t("cli.needs-claude", { command })}`);
   return ExitCode.failure;
 }
 
-function usage(out: Output, problem: string | undefined): number {
-  out.stderr(problem === undefined ? USAGE : `kozo: ${problem}\n\n${USAGE}`);
+function usage(out: Output, problem: string | undefined, t: Words): number {
+  const text = t("cli.usage");
+  out.stderr(problem === undefined ? text : `kozo: ${problem}\n\n${text}`);
   return ExitCode.usage;
 }

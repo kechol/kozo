@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { chmod, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -10,6 +10,21 @@ import {
 } from "@kozo/testing";
 import { platformConfine } from "@kozo/verify";
 import { run } from "./index.ts";
+
+// Every run reads the factory's locale from KOZO_HOME, so the tests start from a home of their
+// own rather than the machine's.
+let machineHome: string | undefined;
+let ownHome: Awaited<ReturnType<typeof tempDirectory>>;
+beforeAll(async () => {
+  machineHome = process.env.KOZO_HOME;
+  ownHome = await tempDirectory();
+  process.env.KOZO_HOME = ownHome.path;
+});
+afterAll(async () => {
+  if (machineHome === undefined) delete process.env.KOZO_HOME;
+  else process.env.KOZO_HOME = machineHome;
+  await ownHome[Symbol.asyncDispose]();
+});
 
 async function kozo(...args: string[]) {
   const stdout: string[] = [];
