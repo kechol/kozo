@@ -164,12 +164,16 @@ export class EventStore {
     return this.index.db;
   }
 
-  /** Drops the index and builds it again from the logs. */
+  /**
+   * Drops the index and builds it again from the logs. The logs are read first, so that logs
+   * that do not read leave the index as it was rather than empty.
+   */
   async rebuildIndex(): Promise<void> {
     await this.serial(async () => {
+      const events = mergeLogs((await readLogs(this.home)).map((log) => log.events));
       this.index.close();
       this.index = IndexDb.create(this.home.db);
-      fill(this.index, mergeLogs((await readLogs(this.home)).map((log) => log.events)));
+      fill(this.index, events);
     });
   }
 

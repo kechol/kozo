@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { cp, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { kozoHome, StateError, sha256 } from "@kozo/core";
+import { kozoHome, runFiles, StateError, sha256 } from "@kozo/core";
 import { recordedLogs, tempDirectory } from "@kozo/testing";
 import { EventLogError, EventStore } from "./event-store.ts";
 import { lastFailure, lastHandoff, pullsOf } from "./queries.ts";
@@ -142,9 +142,14 @@ describe("EventStore", () => {
       shown_stage: "complete",
     });
     await reopened.rebuildIndex();
-    expect(reopened.db.query<{ n: number }, []>("select count(*) as n from events").get()?.n).toBe(
-      34,
-    );
+    const indexed = () =>
+      reopened.db.query<{ n: number }, []>("select count(*) as n from events").get()?.n;
+    expect(indexed()).toBe(34);
+    // A log edited by hand fails the rebuild, which leaves the index as it was.
+    const sealed = runFiles(home, "r-0001").events;
+    await Bun.write(sealed, (await Bun.file(sealed).text()).replace("triage", "Triage"));
+    await expect(reopened.rebuildIndex()).rejects.toThrow(EventLogError);
+    expect(indexed()).toBe(34);
     reopened.close();
   });
 
