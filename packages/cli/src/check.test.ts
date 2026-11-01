@@ -154,7 +154,7 @@ esac
     );
   });
 
-  test("reads a repository at origin's default branch in GitHub mode, as kozod does", async () => {
+  test("reads a repository at origin's default branch and checks gh's sign-in in GitHub mode, as kozod does", async () => {
     await using home = await tempDirectory();
     await using repo = await gitRepository();
     await repo.commit({ ".kozo/charter.yml": exampleCharter }, "ready on GitHub");
@@ -172,12 +172,40 @@ esac
     const claude = join(home.path, "claude");
     await Bun.write(claude, "#!/bin/sh\nexit 1\n");
     await chmod(claude, 0o755);
-    const child = Bun.spawnSync(["bun", join(import.meta.dir, "main.ts"), "check", "--json"], {
-      env: { ...testGitEnvironment, KOZO_HOME: home.path, KOZO_CLAUDE: claude },
-    });
-    const report = JSON.parse(child.stdout.toString()) as {
-      checks: { name: string; status: string }[];
+    // A gh that answers as gh does for an account, signed in or not.
+    const bin = join(home.path, "bin");
+    await mkdir(bin);
+    const gh = (hosts: string) =>
+      Bun.write(join(bin, "gh"), `#!/bin/sh\necho '{"hosts":${hosts}}'\n`).then(() =>
+        chmod(join(bin, "gh"), 0o755),
+      );
+    const check = () => {
+      const child = Bun.spawnSync(["bun", join(import.meta.dir, "main.ts"), "check", "--json"], {
+        env: {
+          ...testGitEnvironment,
+          PATH: `${bin}:${process.env.PATH}`,
+          KOZO_HOME: home.path,
+          KOZO_CLAUDE: claude,
+        },
+      });
+      return (
+        JSON.parse(child.stdout.toString()) as {
+          checks: { name: string; status: string; detail: string }[];
+        }
+      ).checks;
     };
-    expect(report.checks.find((entry) => entry.name === `${repo.path} Charter`)?.status).toBe("ok");
+    await gh(`{"github.com":[{"active":true,"login":"octo-example"}]}`);
+    const signedIn = check();
+    expect(signedIn.find((entry) => entry.name === `${repo.path} Charter`)?.status).toBe("ok");
+    expect(signedIn.find((entry) => entry.name === "gh sign-in")).toEqual({
+      name: "gh sign-in",
+      status: "ok",
+      detail: "signed in to github.com as octo-example",
+    });
+    await gh("{}");
+    expect(check().find((entry) => entry.name === "gh sign-in")).toMatchObject({
+      status: "fail",
+      detail: "gh is not signed in to github.com; run gh auth login",
+    });
   });
 });

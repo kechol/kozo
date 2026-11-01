@@ -223,7 +223,7 @@ kozo check [path] [--json]
 ```
 
 Checks the factory definition, each repository's Charter, constraints and verify-app, `claude`
-with its flags and sign-in, and the sandbox. With a path, checks only the factory definition or
+with its flags and sign-in, gh's sign-in in GitHub mode, and the sandbox. With a path, checks only the factory definition or
 the `.kozo/` directory there, which suits a repository's CI.
 
 ### `kozo admin`

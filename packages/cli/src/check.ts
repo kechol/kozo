@@ -188,6 +188,7 @@ async function checkFactory(): Promise<Check[]> {
   }
   const runtime = definition?.factory.runtime ?? "sdk";
   checks.push(...(await claudeChecks(runtime)));
+  if (mode === "github") checks.push(await ghCheck());
   checks.push({ name: "hooks", status: "ok", detail: hooksDetail[runtime] });
   checks.push(sandboxCheck(), await kozoSandboxCheck(), processesCheck());
   return checks;
@@ -210,9 +211,9 @@ async function repositoryChecks(path: string, mode: Factory["mode"]): Promise<Ch
   }
 }
 
-/** Runs claude with `args`, giving up after 20 seconds. */
-async function runClaude(claude: string, args: string[]) {
-  const child = Bun.spawn([claude, ...args], {
+/** Runs a tool such as claude or gh with `args`, giving up after 20 seconds. */
+async function runTool(tool: string, args: string[]) {
+  const child = Bun.spawn([tool, ...args], {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -225,7 +226,7 @@ async function runClaude(claude: string, args: string[]) {
 async function claudeChecks(runtime: Factory["runtime"]): Promise<Check[]> {
   const claude = process.env.KOZO_CLAUDE ?? Bun.which("claude");
   if (!claude) return [{ name: "claude", status: "fail", detail: "claude is not on PATH" }];
-  const version = await runClaude(claude, ["--version"]);
+  const version = await runTool(claude, ["--version"]);
   if (version.code !== 0) {
     return [
       { name: "claude", status: "fail", detail: `${claude} --version exited with ${version.code}` },
@@ -234,7 +235,7 @@ async function claudeChecks(runtime: Factory["runtime"]): Promise<Check[]> {
   const checks: Check[] = [
     { name: "claude", status: "ok", detail: version.stdout.trim().split("\n")[0] ?? "" },
   ];
-  const help = await runClaude(claude, ["--help"]);
+  const help = await runTool(claude, ["--help"]);
   const flags = runtime === "cli" ? [...requiredFlags, ...cliFlags] : requiredFlags;
   const missing = flags.filter((flag) => !help.stdout.includes(flag));
   checks.push(
@@ -247,7 +248,7 @@ async function claudeChecks(runtime: Factory["runtime"]): Promise<Check[]> {
         },
   );
   // Only whether claude is signed in and how is read; kozo never touches the credentials.
-  const auth = await runClaude(claude, ["auth", "status", "--json"]);
+  const auth = await runTool(claude, ["auth", "status", "--json"]);
   let signedIn: { loggedIn?: unknown; authMethod?: unknown } = {};
   try {
     signedIn = JSON.parse(auth.stdout);
@@ -262,6 +263,41 @@ async function claudeChecks(runtime: Factory["runtime"]): Promise<Check[]> {
       : { name: "claude sign-in", status: "fail", detail: "not signed in; run claude auth login" },
   );
   return checks;
+}
+
+/**
+ * In GitHub mode, whether gh is signed in to github.com, as kozod reads it: kozod reaches GitHub
+ * only through gh's active sign-in.
+ */
+async function ghCheck(): Promise<Check> {
+  const gh = Bun.which("gh");
+  if (!gh)
+    return {
+      name: "gh sign-in",
+      status: "fail",
+      detail: "gh is not on PATH; GitHub mode reaches GitHub through it",
+    };
+  const status = await runTool(gh, [
+    "auth",
+    "status",
+    "--active",
+    "--hostname=github.com",
+    "--json=hosts",
+  ]);
+  let login: string | undefined;
+  try {
+    const raw = JSON.parse(status.stdout) as {
+      hosts?: Record<string, { active?: boolean; login?: string }[]>;
+    };
+    login = raw.hosts?.["github.com"]?.find((account) => account.active)?.login;
+  } catch {}
+  return login
+    ? { name: "gh sign-in", status: "ok", detail: `signed in to github.com as ${login}` }
+    : {
+        name: "gh sign-in",
+        status: "fail",
+        detail: "gh is not signed in to github.com; run gh auth login",
+      };
 }
 
 /** Whether kozod can confine the diff's commands in prepare, the gates and prove. */

@@ -194,7 +194,7 @@ kozo return <task> <text>
 kozo check [path] [--json]
 ```
 
-factory definition、各リポジトリの Charter・constraints・verify-app、`claude` とそのフラグとサインイン、sandbox を確かめます。パスを指定すると、そこにある factory definition か `.kozo/` ディレクトリだけを確かめます。リポジトリの CI ではこの形を使います。
+factory definition、各リポジトリの Charter・constraints・verify-app、`claude` とそのフラグとサインイン、GitHub モードなら gh のサインイン、sandbox を確かめます。パスを指定すると、そこにある factory definition か `.kozo/` ディレクトリだけを確かめます。リポジトリの CI ではこの形を使います。
 
 ### `kozo admin`
 

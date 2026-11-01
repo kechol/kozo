@@ -71,7 +71,7 @@ pull request の本文には、**kozo: default branch** という ruleset を追
 kozo check
 ```
 
-GitHub モードの `kozo check` は、各リポジトリの `.kozo/` のファイルを `origin` のデフォルトブランチから読みます。gh のサインインは確かめないので、`gh auth status` で確かめてください。
+GitHub モードの `kozo check` は、各リポジトリの `.kozo/` のファイルを `origin` のデフォルトブランチから読みます。あわせて、gh が github.com にサインインしているかを確かめ、kozod が使うアカウントを表示します。
 
 ## item になる Issue
 

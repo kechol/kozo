@@ -87,7 +87,7 @@ kozo check
 ```
 
 In GitHub mode, `kozo check` reads each repository's `.kozo/` files from `origin`'s default
-branch. It does not check gh's sign-in; `gh auth status` does.
+branch, and checks that gh is signed in to github.com, naming the account kozod will act as.
 
 ## Which Issues become items
 
