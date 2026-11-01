@@ -1338,8 +1338,6 @@ describe("the minimal path", () => {
   }, 180_000);
 
   test("closing a merged task stops its check before its worktree goes", async () => {
-    await using marks = await tempDirectory();
-    const mark = join(marks.path, "merged");
     const slow = "sleep 41";
     await using env = await factoryOf(
       (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
@@ -1347,13 +1345,18 @@ describe("the minimal path", () => {
       {
         constraints: (text) =>
           text
-            .replace("gates:\n", `gates:\n  slow:\n    run: test ! -f '${mark}' || ${slow}\n`)
+            .replace(
+              "gates:\n",
+              `gates:\n  slow:\n    run: test ! -f "$(git rev-parse --git-common-dir)/kozo-merged" || ${slow}\n`,
+            )
             .replaceAll("[lint, test]", "[slow, lint, test]"),
       },
     );
     const { task } = await toHandoff(env);
     const worktree = worktreePath(env.home, env.repo.path, task);
-    await Bun.write(mark, "");
+    // The mark sits in the repository's git directory, which the check's sandbox reads; Linux's
+    // sandbox hides /tmp, where a temporary directory would put it.
+    await Bun.write(join(env.repo.path, ".git", "kozo-merged"), "");
     await env.repo.git(
       "merge",
       "--no-ff",
