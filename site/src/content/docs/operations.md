@@ -30,6 +30,22 @@ Never edit or delete them by hand; prune old runs instead (below).
 Agent sessions keep no transcripts of their own; the run's event log records each message and
 tool call. Nothing in `~/.kozo` is rotated or capped, so the run directories grow with use.
 
+## Environment variables
+
+kozo and kozod read these from their environment. Set them the same way for both, since `kozo up`
+passes its environment to kozod.
+
+| Variable      | Meaning                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------ |
+| `KOZO_HOME`   | The factory home, `~/.kozo` by default.                                                          |
+| `KOZO_PORT`   | The local API's port, 7420 by default.                                                           |
+| `KOZO_CLAUDE` | The `claude` executable to run, when it is not the one on `PATH`.                                |
+| `KOZOD`       | The `kozod` executable that `kozo up` starts, when it is not the one beside `kozo` or on `PATH`. |
+| `KOZO_NOTIFY` | `off` turns notifications off.                                                                   |
+
+The repository's commands receive variables of their own, such as their ports; see
+[Constraints](../constraints/#the-commands-environment).
+
 ## Notifications
 
 kozod notifies you through the operating system when you must act:
