@@ -1,6 +1,6 @@
 import { mkdir, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { type KozoHome, parseReference, sha256 } from "@kozo/core";
+import { type KozoHome, type Message, message, parseReference, sha256 } from "@kozo/core";
 import { branchTip, GitError, git } from "@kozo/verify";
 import { releasePorts } from "./worktree-ports.ts";
 
@@ -39,7 +39,7 @@ export function triageCheckoutPath(home: KozoHome, repository: string, item: str
 
 export type Claim =
   | { claimed: true; branch: string; worktree: string; base: string; created: boolean }
-  | { claimed: false; reason: string };
+  | { claimed: false; reason: Message };
 
 async function exists(path: string) {
   return stat(path).then(
@@ -72,13 +72,14 @@ export async function claimTask(
   const tip = base;
   const existing = await branchTip(repository, branch);
   if (existing !== null && !resume) {
-    return { claimed: false, reason: `${branch} already exists in ${repository}` };
+    return { claimed: false, reason: message("hold.branch-exists", { branch, repository }) };
   }
   if (existing === null) {
     try {
       await git(repository, ["branch", "--no-track", branch, tip]);
     } catch (error) {
-      if (error instanceof GitError) return { claimed: false, reason: error.message };
+      if (error instanceof GitError)
+        return { claimed: false, reason: message("text", { text: error.message }) };
       throw error;
     }
   }

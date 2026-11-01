@@ -31,9 +31,11 @@ describe("replayDirectory", () => {
     await cp(recordedLogs("replay-k1"), copy.path, { recursive: true });
     const log = join(copy.path, "runs", "r-0002", "events.jsonl");
     const lines = (await Bun.file(log).text()).split("\n");
-    lines[2] = lines[2]?.replace('"v":1', '"v":2') ?? "";
+    lines[2] = lines[2]?.replace('"v":2', '"v":3') ?? "";
     await Bun.write(log, lines.join("\n"));
-    await expect(replayDirectory(copy.path)).rejects.toThrow("runs/r-0002/events.jsonl:3: v:");
+    await expect(replayDirectory(copy.path)).rejects.toThrow(
+      "runs/r-0002/events.jsonl:3: the line has event version 3",
+    );
   });
 
   test("a missing line breaks the seq count", async () => {

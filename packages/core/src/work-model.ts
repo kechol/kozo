@@ -35,10 +35,6 @@ export type Approvals = z.infer<typeof approvalsSchema>;
 export const approvalKindSchema = z.enum(["start", "plan"]);
 export type ApprovalKind = z.infer<typeof approvalKindSchema>;
 
-/** The reasons of the two approval holds, as people read them. */
-export const startApprovalReason = "start approval";
-export const planApprovalReason = "plan approval";
-
 export const runStateSchema = z.enum(["running", "succeeded", "failed", "stopped", "lost"]);
 export type RunState = z.infer<typeof runStateSchema>;
 

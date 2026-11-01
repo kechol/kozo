@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type Factory, kozoHome } from "@kozo/core";
+import { type Factory, kozoHome, message } from "@kozo/core";
 import { tempDirectory } from "@kozo/testing";
 import { EventStore } from "./event-store.ts";
 import { Notifier, osNotify } from "./notifier.ts";
@@ -52,7 +52,7 @@ describe("Notifier", () => {
         target: "item",
         hold: "approval",
         by: "kozod",
-        reason: "start approval",
+        reason: message("text", { text: "start approval" }),
         approval: "start",
       },
     });
@@ -64,7 +64,7 @@ describe("Notifier", () => {
     await env.store.append({
       type: "hold.set",
       item: "K-1",
-      data: { target: "item", hold: "paused", by: "human", reason: "kozo pause" },
+      data: { target: "item", hold: "paused", by: "human", reason: message("hold.pause") },
     });
     await env.store.during(Bun.randomUUIDv7(), () =>
       env.store.append({ type: "factory.changed", data: { paused: true, reason: "kozo pause" } }),
@@ -94,7 +94,7 @@ describe("Notifier", () => {
         target: "item",
         hold: "approval",
         by: "kozod",
-        reason: "start approval",
+        reason: message("text", { text: "start approval" }),
         approval: "start",
       },
     });
@@ -155,7 +155,7 @@ describe("Notifier", () => {
         target: "item",
         hold: "approval",
         by: "kozod",
-        reason: "plan approval",
+        reason: message("text", { text: "plan approval" }),
         approval: "plan",
       },
     });

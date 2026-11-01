@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { ListKind, Reference } from "@kozo/core";
+import type { ListKind, Message, Reference } from "@kozo/core";
 
 const parsed = (row: Record<string, unknown> | null, columns: readonly string[]) => {
   if (!row) return row;
@@ -9,6 +9,9 @@ const parsed = (row: Record<string, unknown> | null, columns: readonly string[])
   }
   return row;
 };
+
+const rows = (all: unknown[], columns: readonly string[]) =>
+  all.map((row) => parsed(row as Record<string, unknown>, columns));
 
 /**
  * What waits for a human, oldest first: approvals, which say whether a start or a plan,
@@ -29,19 +32,25 @@ const inboxQuery = `
 export function list(db: Database, kind: ListKind) {
   switch (kind) {
     case "inbox":
-      return db.query(inboxQuery).all();
+      return rows(db.query(inboxQuery).all(), ["reason"]);
     case "items":
-      return db
-        .query(
-          "select ref, repository, title, stage, shown_stage, hold, hold_reason, updated_at from items order by created_at",
-        )
-        .all();
+      return rows(
+        db
+          .query(
+            "select ref, repository, title, stage, shown_stage, hold, hold_reason, updated_at from items order by created_at",
+          )
+          .all(),
+        ["hold_reason"],
+      );
     case "tasks":
-      return db
-        .query(
-          "select ref, item, goal, stage, hold, hold_reason, revisions, awaiting_merge, updated_at from tasks order by ref",
-        )
-        .all();
+      return rows(
+        db
+          .query(
+            "select ref, item, goal, stage, hold, hold_reason, revisions, awaiting_merge, updated_at from tasks order by ref",
+          )
+          .all(),
+        ["hold_reason"],
+      );
     case "runs":
       return db
         .query(
@@ -61,20 +70,22 @@ export function detail(db: Database, ref: string, reference: Reference) {
     case "item": {
       const item = parsed(
         db.query<Record<string, unknown>, [string]>("select * from items where ref = ?").get(ref),
-        ["plan", "draft"],
+        ["plan", "draft", "hold_reason"],
       );
       if (!item) return null;
       const tasks = db
         .query<Record<string, unknown>, [string]>("select * from tasks where item = ? order by ref")
         .all(ref)
-        .map((row) => parsed(row, ["done_when", "scope", "depends_on", "checkpoint"]));
+        .map((row) =>
+          parsed(row, ["done_when", "scope", "depends_on", "checkpoint", "hold_reason"]),
+        );
       const runs = db.query("select * from runs where item = ? order by started_at").all(ref);
       return { kind: "item", item, tasks, runs, cost_usd: costOf(db, "item", ref) };
     }
     case "task": {
       const task = parsed(
         db.query<Record<string, unknown>, [string]>("select * from tasks where ref = ?").get(ref),
-        ["done_when", "scope", "depends_on", "checkpoint"],
+        ["done_when", "scope", "depends_on", "checkpoint", "hold_reason"],
       );
       if (!task) return null;
       const runs = db.query("select * from runs where task = ? order by started_at").all(ref);
@@ -155,13 +166,13 @@ export function pullsOf(db: Database, item: string): Map<string, string> {
 }
 
 /** Whether kozod has held `task` for `reason` before. */
-export function heldBefore(db: Database, task: string, reason: string): boolean {
+export function heldBefore(db: Database, task: string, reason: Message): boolean {
   return (
     db
       .query<{ found: number }, [string, string]>(
         "select 1 as found from holds where task = ? and reason = ? limit 1",
       )
-      .get(task, reason) !== null
+      .get(task, JSON.stringify(reason)) !== null
   );
 }
 
@@ -237,6 +248,7 @@ export function failureEvents(db: Database, since: string) {
         from: string | null;
         to: string | null;
         blocked: string | null;
+        question: string | null;
       },
       [string]
     >(
@@ -245,7 +257,8 @@ export function failureEvents(db: Database, since: string) {
             coalesce(json_extract(line, '$.data.summary'), json_extract(line, '$.data.text'),
                      json_extract(line, '$.data.reason')) as text,
             json_extract(line, '$.data.from') as "from", json_extract(line, '$.data.to') as "to",
-            json_extract(line, '$.data.blocked') as blocked
+            json_extract(line, '$.data.blocked') as blocked,
+            json_extract(line, '$.data.reason.values.question') as question
        from events
       where ts >= ? and type in ('review.verdict', 'task.returned', 'stage.changed', 'hold.set')
       order by ts, id`,

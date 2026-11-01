@@ -137,7 +137,13 @@ export class IndexDb {
       case "hold.set":
         this.db
           .query("insert into holds (item, task, kind, reason, by) values (?, ?, ?, ?, ?)")
-          .run(event.item, event.task, event.data.hold, event.data.reason, event.data.by);
+          .run(
+            event.item,
+            event.task,
+            event.data.hold,
+            JSON.stringify(event.data.reason),
+            event.data.by,
+          );
         break;
       case "node.exit":
         if (event.task === null) break;
@@ -161,7 +167,7 @@ export class IndexDb {
           item.stage,
           itemStage(state, item),
           item.hold?.kind ?? null,
-          item.hold?.reason ?? null,
+          item.hold ? JSON.stringify(item.hold.reason) : null,
           item.hold?.since ?? null,
           json(item.plan),
           json(item.draft),
@@ -193,7 +199,7 @@ export class IndexDb {
             json(task.depends_on),
             task.stage,
             task.hold?.kind ?? null,
-            task.hold?.reason ?? null,
+            task.hold ? JSON.stringify(task.hold.reason) : null,
             task.hold?.since ?? null,
             task.revisions,
             task.handoffFixes,

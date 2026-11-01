@@ -4,6 +4,7 @@ import type {
   FactoryState,
   HoldKind,
   ItemState,
+  Message,
   NoteKind,
   Stage,
   TaskState,
@@ -20,6 +21,16 @@ type Actor = "human" | "kozod";
 
 // The longest reason an event keeps, the length the event schema allows.
 const cut = (reason: string) => reason.slice(0, 2000);
+
+const cutValues = ({ code, values }: Message): Message => ({
+  code,
+  values: Object.fromEntries(
+    Object.entries(values).map(([name, value]) => [
+      name,
+      typeof value === "string" ? cut(value) : value,
+    ]),
+  ),
+});
 
 const stateOf = (state: Readonly<FactoryState>, { item, task }: Subject) =>
   (task === null ? state.items[item] : state.tasks[task]) as ItemState | TaskState | undefined;
@@ -44,7 +55,7 @@ export async function hold(
   store: EventStore,
   subject: Subject,
   hold: HoldKind,
-  reason: string,
+  reason: Message,
   {
     by = "kozod",
     run,
@@ -64,7 +75,7 @@ export async function hold(
         target: targetOf(subject),
         hold,
         by,
-        reason: cut(reason),
+        reason: cutValues(reason),
         ...(blocked ? { blocked } : {}),
         ...(approval ? { approval } : {}),
       },
@@ -77,7 +88,7 @@ export async function hold(
 export async function clearHold(
   store: EventStore,
   subject: Subject,
-  { by = "kozod", kind, reason }: { by?: Actor; kind?: HoldKind; reason?: string } = {},
+  { by = "kozod", kind, reason }: { by?: Actor; kind?: HoldKind; reason?: Message } = {},
 ): Promise<boolean> {
   const event = await store.appendIf((state) => {
     const current = stateOf(state, subject);
@@ -90,7 +101,7 @@ export async function clearHold(
         target: targetOf(subject),
         hold: current.hold.kind,
         by,
-        ...(reason ? { reason: cut(reason) } : {}),
+        ...(reason ? { reason: cutValues(reason) } : {}),
       },
     };
   });

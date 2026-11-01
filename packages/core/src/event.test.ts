@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { type EventType, parseEvent } from "./event.ts";
+import { type EventType, eventVersion, parseEvent } from "./event.ts";
+
+const said = { code: "text", values: { text: "x" } };
 
 const envelope = {
-  v: 1,
+  v: eventVersion,
   ts: "2026-10-19T09:14:02.311Z",
   prev: null,
   api_call: null,
@@ -78,7 +80,7 @@ const examples: Record<EventType, unknown> = {
     target: "item",
     hold: "approval",
     by: "kozod",
-    reason: "plan approval",
+    reason: { code: "hold.plan-approval", values: {} },
     approval: "plan",
   },
   "hold.cleared": { target: "item", hold: "approval", by: "human" },
@@ -157,7 +159,9 @@ describe("parseEvent", () => {
 
   test("an unknown type or version is an issue", () => {
     expect(issuesOf(line("run.exploded", {}))[0]).toStartWith("type:");
-    expect(issuesOf(line("checkpoint", { head: null }, { v: 2 }))[0]).toStartWith("v:");
+    expect(issuesOf(line("checkpoint", { head: null }, { v: 1 }))).toEqual([
+      "the line has event version 1 and this kozo reads only version 2; start the factory again from a new home",
+    ]);
   });
 
   test("an unknown or missing data field is an issue", () => {
@@ -168,16 +172,21 @@ describe("parseEvent", () => {
       issuesOf(line("hold.set", { target: "item", hold: "approval", by: "kozod" }))[0],
     ).toStartWith("data.reason:");
     expect(
-      issuesOf(line("hold.set", { target: "item", hold: "blocked", by: "kozod", reason: "x" }))[0],
+      issuesOf(line("hold.set", { target: "item", hold: "blocked", by: "kozod", reason: said }))[0],
     ).toStartWith("data.hold:");
   });
 
   test("an approval hold, and only one, says which approval it waits for", () => {
-    const approval = { target: "item", hold: "approval", by: "kozod", reason: "plan approval" };
+    const approval = {
+      target: "item",
+      hold: "approval",
+      by: "kozod",
+      reason: { code: "hold.plan-approval", values: {} },
+    };
     expect(issuesOf(line("hold.set", approval))).toEqual([
       "data.approval: An approval hold, and only one, says which approval it waits for",
     ]);
-    const attention = { target: "item", hold: "attention", by: "kozod", reason: "x" };
+    const attention = { target: "item", hold: "attention", by: "kozod", reason: said };
     expect(issuesOf(line("hold.set", { ...attention, approval: "plan" }))).toHaveLength(1);
     expect(parseEvent(line("hold.set", { ...approval, approval: "start" })).ok).toBe(true);
   });
@@ -241,6 +250,6 @@ describe("parseEvent", () => {
   });
 
   test("a line that is not JSON is an issue on the document", () => {
-    expect(issuesOf('{"v":1,')[0]).toStartWith("<document>: ");
+    expect(issuesOf('{"v":2,')[0]).toStartWith("<document>: ");
   });
 });

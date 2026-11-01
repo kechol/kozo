@@ -8,6 +8,7 @@ import {
   type EventType,
   emptyState,
   eventSchema,
+  eventVersion,
   type FactoryState,
   formatReference,
   isRunOver,
@@ -222,7 +223,7 @@ export class EventStore {
     const log = event.run_id ?? "";
     const now = Math.max(Date.now(), this.lastMs + 1);
     const line = eventSchema.parse({
-      v: 1,
+      v: eventVersion,
       ts: new Date(now).toISOString(),
       prev: this.logs.get(log)?.last ?? null,
       api_call: this.apiCalls.getStore() ?? null,

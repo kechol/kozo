@@ -34,6 +34,15 @@ describe("parseEventLog", () => {
     expect(parseEventLog(swapped, "events.jsonl").ok).toBe(false);
   });
 
+  test("a log of another event version is one issue, on its first line", () => {
+    const old = JSON.stringify({ v: 1, ts: "2026-10-19T09:14:02.311Z" });
+    const result = parseEventLog(`${old}\n${old}\n`, "events.jsonl");
+    if (result.ok) throw new Error("expected the log to be rejected");
+    expect(result.issues).toEqual([
+      "events.jsonl:1: the line has event version 1 and this kozo reads only version 2; start the factory again from a new home",
+    ]);
+  });
+
   test("an issue names the log and the line", () => {
     const result = parseEventLog("{}\n", "runs/r-0001/events.jsonl");
     if (result.ok) throw new Error("expected the log to be rejected");

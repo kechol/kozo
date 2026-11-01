@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { isClosed } from "@kozo/core";
+import { isClosed, message } from "@kozo/core";
 import { CommandStopped, git } from "@kozo/verify";
 import { itemDirectory } from "./item-file.ts";
 import { layersFor } from "./risk.ts";
@@ -70,7 +70,7 @@ export async function completeTask(
   // with it every task that depends on it, until a human retries the check or closes it.
   if (result.status !== "pass" && !last) {
     await recordDefect();
-    await runner.hold(item.ref, taskRef, "attention", `${defect}; kozo retry checks again`);
+    await runner.hold(item.ref, taskRef, "attention", message("hold.defect", { defect }));
     return;
   }
   await runner.moveTask(

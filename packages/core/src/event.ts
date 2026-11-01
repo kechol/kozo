@@ -2,6 +2,7 @@ import { z } from "zod";
 import { autonomyLevelSchema, workClassSchema } from "./charter.ts";
 import { gateLevelSchema } from "./constraints.ts";
 import { type ParseResult, parseJsonDocument } from "./document.ts";
+import { messageSchema } from "./message.ts";
 import { planSchema } from "./plan.ts";
 import {
   formatItemReference,
@@ -39,8 +40,11 @@ export const factoryIdSchema = z.string().regex(/^[a-z0-9]{6}$/);
 export const noteKindSchema = z.enum(["answer", "instruction", "approval", "rejection", "check"]);
 export type NoteKind = z.infer<typeof noteKindSchema>;
 
+/** The version of every event line; a log of another version is refused, never converted. */
+export const eventVersion = 2;
+
 const envelope = {
-  v: z.literal(1),
+  v: z.literal(eventVersion),
   ts: z.iso.datetime(),
   /** The SHA-256 of the previous line of the same log, null on its first line. */
   prev: sha256.nullable(),
@@ -178,7 +182,7 @@ export const eventSchema = z
         target,
         hold: holdKindSchema,
         by: actor,
-        reason: text,
+        reason: messageSchema,
         /** The `kozo_blocked` reason of the session whose block set the hold. */
         blocked: blockedReasonSchema.optional(),
         /** Which approval an approval hold waits for; only an approval hold has one. */
@@ -187,7 +191,12 @@ export const eventSchema = z
     ),
     event(
       "hold.cleared",
-      z.strictObject({ target, hold: holdKindSchema, by: actor, reason: text.optional() }),
+      z.strictObject({
+        target,
+        hold: holdKindSchema,
+        by: actor,
+        reason: messageSchema.optional(),
+      }),
     ),
     /** A note about the event's task, or about its item when the task is null. */
     event("note.added", z.strictObject({ kind: noteKindSchema, text })),
@@ -300,5 +309,15 @@ export type EventType = Event["type"];
 
 /** Parses one line of `events.jsonl`; an unknown version or type is an issue, never skipped. */
 export function parseEvent(line: string): ParseResult<Event> {
-  return parseJsonDocument(eventSchema, line);
+  const result = parseJsonDocument(eventSchema, line);
+  if (result.ok) return result;
+  const version = (/^\{"v":(\d+),/.exec(line) ?? [])[1];
+  if (version !== undefined && Number(version) !== eventVersion)
+    return {
+      ok: false,
+      issues: [
+        `the line has event version ${version} and this kozo reads only version ${eventVersion}; start the factory again from a new home`,
+      ],
+    };
+  return result;
 }

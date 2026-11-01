@@ -24,14 +24,16 @@ export function parseEventLog(text: string, name: string): ParseResult<EventLog>
   const lines = text.split("\n");
   if (lines.at(-1) === "") lines.pop();
   let last: string | null = null;
-  lines.forEach((line, index) => {
+  for (const [index, line] of lines.entries()) {
     const where = `${name}:${index + 1}`;
     const expected = last;
     last = sha256(line);
     const result = parseEvent(line);
     if (!result.ok) {
       issues.push(...result.issues.map((issue) => `${where}: ${issue}`));
-      return;
+      // A log of another version fails on every line for the same reason; the first says it.
+      if (result.issues[0]?.startsWith("the line has event version")) break;
+      continue;
     }
     if (result.value.seq !== index) {
       issues.push(`${where}: seq is ${result.value.seq}, expected ${index}`);
@@ -40,7 +42,7 @@ export function parseEventLog(text: string, name: string): ParseResult<EventLog>
       issues.push(`${where}: prev does not match the line before`);
     }
     events.push(result.value);
-  });
+  }
   return issues.length > 0 ? { ok: false, issues } : { ok: true, value: { events, last } };
 }
 

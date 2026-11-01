@@ -135,13 +135,14 @@ kozo は完了したタスクのブランチを残すので、動かしている
 
 `kozo up` が起動しなかったことを伝え、`~/.kozo/kozod.log` を示します。理由はそこに書かれています。
 
-| メッセージ                                                                       | すること                                                                                                     |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `sandbox-exec does not run`、`bwrap does not run`、`bubblewrap is not installed` | sandbox を動くようにします。足りないものは `kozo check` が示します。Linux ではユーザー名前空間を許可します。 |
-| `kozod is already running as pid <n>`                                            | 別の kozod がこのホームを使っています。それを使うか、`kozo down` で止めます。                                |
-| `... does not match its seal`、`... is missing; it was sealed at ...`            | event log が書き換えられたか消されました。バックアップから戻します。                                         |
-| `the factory definition is invalid`                                              | `kozo check` を実行して definition を直します。                                                              |
-| `api.token is readable by others`                                                | `chmod 600 ~/.kozo/api.token` を実行します。                                                                 |
+| メッセージ                                                                       | すること                                                                                                                                            |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sandbox-exec does not run`、`bwrap does not run`、`bubblewrap is not installed` | sandbox を動くようにします。足りないものは `kozo check` が示します。Linux ではユーザー名前空間を許可します。                                        |
+| `kozod is already running as pid <n>`                                            | 別の kozod がこのホームを使っています。それを使うか、`kozo down` で止めます。                                                                       |
+| `... does not match its seal`、`... is missing; it was sealed at ...`            | event log が書き換えられたか消されました。バックアップから戻します。                                                                                |
+| `the line has event version 1 and this kozo reads only version 2`                | リリース前の古い kozo が書いたホームです。`~/.kozo` を別の場所に移し、その `factory/` を新しい `~/.kozo` にコピーしてから、kozod を起動し直します。 |
+| `the factory definition is invalid`                                              | `kozo check` を実行して definition を直します。                                                                                                     |
+| `api.token is readable by others`                                                | `chmod 600 ~/.kozo/api.token` を実行します。                                                                                                        |
 
 ### 何かが進まない
 

@@ -7,6 +7,7 @@ import {
   fakeAgent,
   gitRepository,
   goodChange,
+  reasonOf,
   suiteBase,
   suiteTask,
   tempDirectory,
@@ -156,7 +157,7 @@ describe("Daemon", () => {
       });
     await post("/api/items", { title: "Low stock", class: "docs" });
     await eventually(
-      () => first.store.state.items["K-1"]?.hold?.reason === "plan approval",
+      () => reasonOf(first.store.state.items["K-1"]?.hold) === "plan approval",
       "the plan approval",
     );
     await post("/api/refs/K-1/approve", {});

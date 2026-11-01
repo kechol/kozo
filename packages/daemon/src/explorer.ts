@@ -1,8 +1,10 @@
 import {
   explorerAnswerJsonSchema,
   explorerAnswerSchema,
+  type Hold,
   itemStage,
   type KozoHome,
+  render,
 } from "@kozo/core";
 import { baseOf, defuseSections, git, modelFor, SessionError } from "@kozo/verify";
 import type { EventStore } from "./event-store.ts";
@@ -35,8 +37,8 @@ export async function explorerRecords(
   const state = store.state;
   const item = state.items[itemRef];
   if (!item) return "";
-  const holdOf = (hold: { kind: string; reason: string } | null) =>
-    hold ? `${hold.kind}: ${hold.reason}` : "none";
+  const holdOf = (hold: Hold | null) =>
+    hold ? `${hold.kind}: ${render(hold.reason, "en")}` : "none";
   const parts = [
     `ITEM ${item.ref} "${item.title}" in ${item.repository}`,
     `stage ${itemStage(state, item)}, hold ${holdOf(item.hold)}`,

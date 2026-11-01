@@ -8,11 +8,12 @@ import {
   type Charter,
   isClosed,
   type KozoHome,
+  type Message,
+  message,
   type NoteKind,
   type Reference,
   runFiles,
   type Stage,
-  startApprovalReason,
   startNeeded,
   type Verb,
   type verbBodySchemas,
@@ -29,6 +30,9 @@ import { readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
 import { clearHold, hold, move, note } from "./transitions.ts";
 import { hasWorktree, taskBranch, worktreePath } from "./worktrees.ts";
+
+/** What a human wrote, as the message that carries it, or nothing when they wrote nothing. */
+const said = (text?: string) => (text ? message("text", { text }) : undefined);
 
 type Body<V extends Verb> = z.infer<(typeof verbBodySchemas)[V]>;
 
@@ -155,7 +159,9 @@ export class ControlPlane {
     }
     const subject = { item: ref, task: null };
     if (startNeeded(approvals, autonomyLevel(charter, file.class))) {
-      await hold(this.store, subject, "approval", startApprovalReason, { approval: "start" });
+      await hold(this.store, subject, "approval", message("hold.start-approval"), {
+        approval: "start",
+      });
       return false;
     }
     await move(this.store, subject, "triage", "its autonomy level needs no start approval", {
@@ -207,7 +213,7 @@ export class ControlPlane {
     return { subject, item, task: kind === "task" ? ref : null };
   }
 
-  private async clearHold(kind: "item" | "task", ref: string, reason?: string) {
+  private async clearHold(kind: "item" | "task", ref: string, reason?: Message) {
     const { item, task } = this.subject(ref, kind);
     await clearHold(this.store, { item, task }, { by: "human", reason });
   }
@@ -216,7 +222,7 @@ export class ControlPlane {
     kind: "item" | "task",
     ref: string,
     held: "paused" | "taken",
-    reason: string,
+    reason: Message,
   ) {
     const { item, task } = this.subject(ref, kind);
     await hold(this.store, { item, task }, held, reason, { by: "human" });
@@ -239,7 +245,7 @@ export class ControlPlane {
     if (subject.hold?.kind !== "approval" || !item)
       return { message: `${ref} is not waiting for an approval` };
     const start = subject.hold.approval === "start";
-    await this.clearHold("item", ref, body.text);
+    await this.clearHold("item", ref, said(body.text));
     if (start) {
       if (body.text) await this.note(ref, ref, "approval", body.text);
       await this.move("item", ref, "triage", "kozo approve");
@@ -260,14 +266,14 @@ export class ControlPlane {
     if (subject.hold?.approval !== "plan") {
       return { message: `${ref} is not waiting for a plan approval` };
     }
-    await this.clearHold("item", ref, body.reason);
+    await this.clearHold("item", ref, said(body.reason));
     await this.note(ref, ref, "rejection", body.reason);
     if ((this.store.state.items[ref]?.rejections ?? 0) >= 2) {
       await hold(
         this.store,
         { item: ref, task: null },
         "attention",
-        "the plan was rejected twice; kozo retry drafts it again from Triage",
+        message("hold.rejected-twice"),
       );
       return { message: `rejected the plan of ${ref} a second time; it waits for your attention` };
     }
@@ -287,7 +293,7 @@ export class ControlPlane {
     }
     if (subject.hold?.kind === "question") {
       await this.note(item, ref, "answer", body.text);
-      await this.clearHold(kind, ref, body.text);
+      await this.clearHold(kind, ref, said(body.text));
       return { message: `answered ${ref}; work resumes` };
     }
     // An instruction also belongs to the runs after the current one, should it stop first.
@@ -324,7 +330,7 @@ export class ControlPlane {
         409,
         `${ref} is held by ${subject.hold.kind}; it does not move until that clears`,
       );
-    await this.setHold(kind, ref, "paused", "kozo pause");
+    await this.setHold(kind, ref, "paused", message("hold.pause"));
     const running = body.now ? await this.runner?.stopWork(ref) : null;
     return {
       message: running
@@ -362,7 +368,7 @@ export class ControlPlane {
       subject.hold?.kind === "attention" &&
       (await this.fixRoundsSpent(ref));
     if (body.text) await this.note(item, ref, "instruction", body.text);
-    await this.clearHold(kind, ref, body.text);
+    await this.clearHold(kind, ref, said(body.text));
     if (sendBack) {
       await this.move("task", ref, "building", "kozo retry");
       return { message: `retrying ${ref} from Building with its fix rounds given back` };
@@ -407,8 +413,8 @@ export class ControlPlane {
     const worktree = worktreePath(this.home, item.repository, ref);
     if (!(await hasWorktree(worktree)))
       throw new CommandError(409, `${ref} has no worktree yet; its first run makes one`);
-    await this.clearHold("task", ref, "kozo take");
-    await this.setHold("task", ref, "taken", "kozo take");
+    await this.clearHold("task", ref, message("hold.take"));
+    await this.setHold("task", ref, "taken", message("hold.take"));
     // Held first, so that the run stops at its node; the worktree is the human's once it has.
     await this.runner?.stopWork(ref);
     const branch = taskBranch(this.store.factoryId, ref);
@@ -437,7 +443,7 @@ export class ControlPlane {
       throw new CommandError(409, `${worktree} is not on ${branch}; switch back to it first`);
     await this.note(item, ref, "instruction", body.text);
     await this.store.append({ type: "task.returned", item, task: ref, data: {} });
-    await this.clearHold("task", ref, body.text);
+    await this.clearHold("task", ref, said(body.text));
     await this.move("task", ref, "building", "kozo return");
     return { message: `gave ${ref} back; its checks run on your commits` };
   }

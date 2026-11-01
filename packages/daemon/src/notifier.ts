@@ -120,7 +120,7 @@ export class Notifier {
           await send(
             message(`notice.held.${hold}`, {
               subject: event.task ?? event.item ?? "",
-              reason: event.data.reason,
+              reason: render(event.data.reason, this.factory().locale),
             }),
           );
         break;
@@ -189,7 +189,7 @@ export class Notifier {
         message("notice.reminder", {
           subject: subject.ref,
           days: due * 2,
-          reason: subject.hold?.reason ?? "",
+          reason: subject.hold ? render(subject.hold.reason, this.factory().locale) : "",
         }),
       );
     }

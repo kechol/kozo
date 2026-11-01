@@ -1,4 +1,10 @@
-import { defaultBranchRuleset, type FactoryState, type ItemState, itemStage } from "@kozo/core";
+import {
+  defaultBranchRuleset,
+  type FactoryState,
+  type ItemState,
+  itemStage,
+  render,
+} from "@kozo/core";
 
 // Words that close an Issue when a pull request with them in its body merges.
 const closingKeywords = /\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b/gi;
@@ -21,7 +27,9 @@ export function statusBody(
   pulls: ReadonlyMap<string, string>,
   costUsd: number,
 ): string {
-  const waiting = item.hold ? ` and waits for ${item.hold.kind}: ${quiet(item.hold.reason)}` : "";
+  const waiting = item.hold
+    ? ` and waits for ${item.hold.kind}: ${quiet(render(item.hold.reason, "en"))}`
+    : "";
   const lines = [`**kozo**: ${item.ref} is in ${itemStage(state, item)}${waiting}.`];
   if (item.tasks.length > 0) {
     lines.push("", "| Task | Stage | Pull request |", "| --- | --- | --- |");

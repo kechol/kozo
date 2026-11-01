@@ -80,7 +80,7 @@ function failures(db: Database, state: FactoryState, since: string): Failure[] {
     if (row.type === "stage.changed" && row.from === "handoff" && row.to === "reviewing")
       return failure("human-commit");
     if (row.type === "hold.set" && row.blocked === "missing-tool")
-      return failure("missing-tool", (row.text ?? "").replace(/^missing-tool: /, ""));
+      return failure("missing-tool", row.question ?? "");
     return [];
   });
   return [...found, ...defects].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));

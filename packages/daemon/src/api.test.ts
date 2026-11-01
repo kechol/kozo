@@ -131,6 +131,33 @@ describe("the local API", () => {
     expect((await call("/api/refs/nope")).status).toBe(400);
   });
 
+  test("kozo's messages reach the client as sentences in the factory's locale", async () => {
+    const japanese = createApi({ store, token, port, mode: "local", commands, locale: () => "ja" });
+    const response = await japanese.request(`http://127.0.0.1:${port}/api/refs/K-1/events`, {
+      headers: {
+        authorization: `Bearer ${token}`,
+        host: `127.0.0.1:${port}`,
+        "last-event-id": "0",
+      },
+    });
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("expected a stream");
+    const count =
+      store.db.query<{ n: number }, []>("select count(*) as n from events where item = 'K-1'").get()
+        ?.n ?? 0;
+    let text = "";
+    const decoder = new TextDecoder();
+    while ((text.match(/^id: /gm) ?? []).length < count) {
+      text += decoder.decode((await reader.read()).value);
+    }
+    await reader.cancel();
+    const reasons = [...text.matchAll(/^data: (.*)$/gm)]
+      .map(([, data]) => JSON.parse(data ?? "{}"))
+      .filter((event) => event.type === "hold.set")
+      .map((event) => event.data.reason);
+    expect(reasons).toEqual(["開始の承認", "計画の承認"]);
+  });
+
   test("a detail carries an item's request and a task's branch and last handoff", async () => {
     const tasks = (await (await call("/api/ls/tasks")).json()) as Record<string, unknown>[];
     expect(tasks[0]).toMatchObject({ ref: "K-1/t1", awaiting_merge: 0 });

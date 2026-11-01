@@ -20,6 +20,7 @@ import {
   judgeWith,
   noVerifier,
   suitePlan as plan,
+  reasonOf,
   suiteReport as report,
   suiteBase,
   suiteTask,
@@ -156,7 +157,7 @@ describe("feature items", () => {
     expect(env.agent.requests.map((request) => request.agent)).toEqual(["triage", "plan"]);
     expect(env.store.state.items[ref]).toMatchObject({
       stage: "planning",
-      hold: { kind: "question", reason: "Does 0 say Sold out?" },
+      hold: { kind: "question", reason: { values: { text: "Does 0 say Sold out?" } } },
     });
     const moved = env.store.db
       .query<{ reason: string }, []>(
@@ -174,7 +175,7 @@ describe("feature items", () => {
     );
     expect(env.store.state.items[ref]).toMatchObject({
       stage: "planning",
-      hold: { kind: "approval", reason: "plan approval" },
+      hold: { kind: "approval", reason: { code: "hold.plan-approval" } },
     });
     await env.control.act(ref, item, "approve", {});
     await env.settle();
@@ -321,7 +322,7 @@ describe("splitting again", () => {
     // Even at L3 the new split waits for the owner.
     expect(env.store.state.items[ref]).toMatchObject({
       stage: "planning",
-      hold: { kind: "approval", reason: "plan approval" },
+      hold: { kind: "approval", reason: { code: "hold.plan-approval" } },
     });
     const prompt = env.agent.requests.findLast((request) => request.agent === "plan")?.prompt ?? "";
     expect(prompt).toContain('TASKS       <request trust="untrusted">');
@@ -358,7 +359,7 @@ describe("the minimal path", () => {
       request.agent === "triage" ? [{ answer: plan }] : implement(),
     );
     const { ref } = await env.control.addItem({ title: "Show when only a few units are left" });
-    expect(env.store.state.items[ref]?.hold?.reason).toBe("start approval");
+    expect(reasonOf(env.store.state.items[ref]?.hold)).toBe("start approval");
     await env.settle();
     expect(env.agent.requests).toHaveLength(0);
 
@@ -366,7 +367,7 @@ describe("the minimal path", () => {
     await env.settle();
     expect(env.store.state.items[ref]).toMatchObject({
       stage: "planning",
-      hold: { kind: "approval", reason: "plan approval" },
+      hold: { kind: "approval", reason: { code: "hold.plan-approval" } },
     });
     expect(env.agent.requests[0]?.agent).toBe("triage");
     expect(env.agent.requests[0]?.prompt).toContain('<request trust="untrusted">');
@@ -500,7 +501,10 @@ describe("the minimal path", () => {
     const taskRef = `${ref}/t1`;
     expect(env.store.state.tasks[taskRef]?.hold).toMatchObject({
       kind: "question",
-      reason: "ambiguous: Does 0 say Sold out?",
+      reason: {
+        code: "hold.blocked",
+        values: { blocked: "ambiguous", question: "Does 0 say Sold out?" },
+      },
     });
     await env.control.act(
       taskRef,
@@ -535,7 +539,9 @@ describe("the minimal path", () => {
     await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
     await env.settle();
     const taskRef = `${ref}/t1`;
-    expect(env.store.state.tasks[taskRef]?.hold?.reason).toStartWith("diff-guard refused the diff");
+    expect(reasonOf(env.store.state.tasks[taskRef]?.hold)).toStartWith(
+      "diff-guard refused the diff",
+    );
     await env.control.act(
       taskRef,
       { kind: "task", item: { repo: null, number: 1 }, task: 1 },
@@ -573,7 +579,7 @@ describe("the minimal path", () => {
     expect(env.agent.requests.at(-1)?.prompt).toContain('DRAFT       <request trust="untrusted">');
     expect(env.store.state.items[ref]).toMatchObject({
       stage: "planning",
-      hold: { kind: "approval", reason: "plan approval" },
+      hold: { kind: "approval", reason: { code: "hold.plan-approval" } },
     });
     await env.control.act(ref, item, "approve", {});
     expect((await env.control.act(ref, item, "approve", {})).message).toBe(
@@ -633,7 +639,7 @@ describe("the minimal path", () => {
     const taskRef = `${ref}/t1`;
     expect(env.store.state.tasks[taskRef]?.hold).toMatchObject({
       kind: "capacity",
-      reason: "the daily budget of 0.4 USD is spent",
+      reason: { code: "hold.capacity.budget-spent", values: { budget: 0.4 } },
     });
     now = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     await env.settle();
@@ -771,7 +777,7 @@ describe("the minimal path", () => {
     await env.scheduler.idle();
     expect(env.store.state.tasks[task]?.hold).toMatchObject({
       kind: "attention",
-      reason: "the run changed refs outside its branch: refs/heads/sneaky",
+      reason: { code: "hold.refs-moved", values: { refs: "refs/heads/sneaky" } },
     });
     // A retry after the hold resumes where the run stopped.
     expect(env.store.state.tasks[task]?.checkpoint?.node).toBe("implement");
@@ -849,7 +855,10 @@ describe("the minimal path", () => {
     const task = `${ref}/t1`;
     expect(env.store.state.tasks[task]?.hold).toMatchObject({
       kind: "attention",
-      reason: "the fast gates are MISCONFIGURED: level-missing",
+      reason: {
+        code: "hold.gates-misconfigured",
+        values: { level: "fast", reason: "level-missing" },
+      },
     });
     // A retry after the hold resumes where the run stopped.
     expect(env.store.state.tasks[task]?.checkpoint?.node).toBe("verify-deterministic");
@@ -875,7 +884,7 @@ describe("the minimal path", () => {
     const task = `${ref}/t1`;
     expect(env.store.state.tasks[task]?.hold).toMatchObject({
       kind: "attention",
-      reason: "the codemod exit 3 exited with 3",
+      reason: { code: "hold.codemod-failed", values: { codemod: "exit 3", code: 3 } },
     });
     expect(env.store.state.tasks[task]?.checkpoint?.node).toBe("implement");
     expect(env.agent.requests.filter((request) => request.agent === "implement")).toHaveLength(0);
@@ -900,7 +909,7 @@ describe("the minimal path", () => {
     const task = env.store.state.tasks[`${ref}/t1`];
     expect(task?.hold).toMatchObject({
       kind: "attention",
-      reason: "prove is MISCONFIGURED: no-prove-entries",
+      reason: { code: "hold.prove-misconfigured", values: { reason: "no-prove-entries" } },
     });
     expect(env.agent.requests.filter((request) => request.agent === "implement")).toHaveLength(1);
   }, 120_000);
@@ -970,7 +979,7 @@ describe("the minimal path", () => {
     expect(structuredClone(env.store.state.tasks[task])).toMatchObject({
       stage: "handoff",
       handoffFixes: 2,
-      hold: { kind: "attention", reason: expect.stringContaining("after 2 fixes") },
+      hold: { kind: "attention", reason: { values: { fixes: 2 } } },
     });
 
     const retried = await env.control.act(task, reference, "retry", {});
@@ -1030,7 +1039,10 @@ describe("the minimal path", () => {
     await env.settle();
     expect(env.store.state.tasks[`${ref}/t1`]?.hold).toMatchObject({
       kind: "capacity",
-      reason: expect.stringContaining("incomplete, not ready"),
+      reason: {
+        code: "hold.capacity.charter",
+        values: { reason: expect.stringContaining("incomplete, not ready") },
+      },
     });
     expect(env.agent.requests.map((request) => request.agent)).toEqual(["triage"]);
   }, 120_000);
@@ -1122,7 +1134,7 @@ describe("the minimal path", () => {
       );
       expect((await approveAll(env))?.hold).toMatchObject({
         kind: "attention",
-        reason: "prepare failed: exit 3 exited with 3",
+        reason: { code: "hold.prepare-failed", values: { command: "exit 3", code: 3 } },
       });
     }
   }, 120_000);
@@ -1141,7 +1153,7 @@ describe("the minimal path", () => {
     await env.settle();
     expect(env.store.state.items[ref]).toMatchObject({
       stage: "planning",
-      hold: { kind: "approval", reason: "plan approval" },
+      hold: { kind: "approval", reason: { code: "hold.plan-approval" } },
     });
   }, 120_000);
 
@@ -1555,7 +1567,7 @@ describe("the minimal path", () => {
       "dependency",
       [],
     ]);
-    expect(first?.hold?.reason).toContain("after the merge");
+    expect(reasonOf(first?.hold)).toContain("after the merge");
     expect(env.store.state.items[ref]?.stage).not.toBe("triage");
 
     await env.repo.git("rm", "--quiet", "src/debug.ts");
@@ -1610,7 +1622,10 @@ describe("the minimal path", () => {
     await env.scheduler.idle();
     expect(env.store.state.tasks[task]?.hold).toMatchObject({
       kind: "attention",
-      reason: `kozo/${env.store.factoryId}/K-1-t1 was deleted without a merge`,
+      reason: {
+        code: "hold.branch-deleted",
+        values: { branch: `kozo/${env.store.factoryId}/K-1-t1` },
+      },
     });
   }, 240_000);
 
@@ -1647,7 +1662,7 @@ describe("the minimal path", () => {
     const task = `${ref}/t1`;
     expect(env.store.state.tasks[task]?.hold).toMatchObject({
       kind: "attention",
-      reason: "the run lost its worker",
+      reason: { code: "hold.run-failed", values: { outcome: "lost its worker" } },
     });
     expect(
       Object.values(env.store.state.runs).find((run) => run.agent === "implement")?.state,
@@ -1693,7 +1708,7 @@ describe("the minimal path", () => {
     const task = `${ref}/t1`;
     expect(env.store.state.tasks[task]?.hold).toMatchObject({
       kind: "attention",
-      reason: "kozod could not run it: no worker",
+      reason: { code: "hold.could-not-run", values: { error: "no worker" } },
     });
     expect(
       Object.values(env.store.state.runs).find((run) => run.agent === "implement")?.state,
@@ -1758,8 +1773,12 @@ describe("the minimal path", () => {
     await env.settle();
     expect(env.store.state.items[ref]?.hold).toMatchObject({
       kind: "attention",
-      reason:
-        "kozod refused the plan draft twice: t1 is estimated at 500 lines in 2 files, over the Charter's 60 lines in 4 files",
+      reason: {
+        code: "hold.draft-refused",
+        values: {
+          issues: "t1 is estimated at 500 lines in 2 files, over the Charter's 60 lines in 4 files",
+        },
+      },
     });
     expect(env.agent.requests.at(-1)?.prompt).toContain(
       "REFUSED     kozod refused your previous draft; draft again without these issues:",
@@ -1823,7 +1842,7 @@ describe("the minimal path", () => {
     await env.settle();
     expect(env.store.state.items[ref]).toMatchObject({
       stage: "planning",
-      hold: { kind: "approval", reason: "plan approval" },
+      hold: { kind: "approval", reason: { code: "hold.plan-approval" } },
     });
     await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
     await env.settle();
@@ -1831,7 +1850,7 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[`${ref}/t2`]).toMatchObject({
       stage: "building",
       runs: [],
-      hold: { kind: "dependency", reason: `waits for ${ref}/t1 to complete` },
+      hold: { kind: "dependency", reason: { values: { open: `${ref}/t1` } } },
     });
     await env.repo.git(
       "merge",
@@ -1887,7 +1906,10 @@ describe("the minimal path", () => {
     await env.settle();
     expect(env.store.state.tasks[`${ref}/t2`]?.hold).toMatchObject({
       kind: "attention",
-      reason: `${ref}/t1 was cancelled, so ${ref}/t2 cannot start; close it or plan it again`,
+      reason: {
+        code: "hold.dependency-cancelled",
+        values: { cancelled: `${ref}/t1`, task: `${ref}/t2` },
+      },
     });
   }, 120_000);
 
@@ -1917,7 +1939,7 @@ describe("the minimal path", () => {
     expect(env.agent.requests.at(-1)?.agent).toBe("triage");
     expect(env.store.state.items[ref]).toMatchObject({
       rejections: 0,
-      hold: { kind: "approval", reason: "plan approval" },
+      hold: { kind: "approval", reason: { code: "hold.plan-approval" } },
     });
   }, 120_000);
 
@@ -2083,7 +2105,7 @@ test("one unit is still counted", () => {
         expect(handoff).toContain("- prove: the changed tests pass without the change");
       } else {
         expect(task?.hold?.kind).toBe("attention");
-        expect(task?.hold?.reason).toContain(expected);
+        expect(reasonOf(task?.hold)).toContain(expected);
       }
     }
   }, 240_000);
@@ -2177,7 +2199,7 @@ test("one unit is still counted", () => {
         expect(task).toMatchObject({ stage: "handoff", hold: null });
         expect(env.agent.requests.at(-1)?.prompt).toContain("This task characterizes");
       } else {
-        expect(task?.hold?.reason).toContain(expected);
+        expect(reasonOf(task?.hold)).toContain(expected);
       }
     }
   }, 240_000);
@@ -2460,7 +2482,7 @@ test("one unit is still counted", () => {
     expect(env.store.state.items["K-1"]).toMatchObject({
       source: "automation",
       approvals: "always",
-      hold: { kind: "approval", reason: "start approval" },
+      hold: { kind: "approval", reason: { code: "hold.start-approval" } },
     });
     await automations.run(new Date("2026-10-24T03:00:00"));
     expect(reported).toEqual([
@@ -2472,7 +2494,7 @@ test("one unit is still counted", () => {
     await env.settle();
     expect(env.store.state.items["K-1"]).toMatchObject({
       stage: "planning",
-      hold: { kind: "approval", reason: "plan approval" },
+      hold: { kind: "approval", reason: { code: "hold.plan-approval" } },
     });
   }, 120_000);
 

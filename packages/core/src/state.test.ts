@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { eventWriter, exampleCharter } from "@kozo/testing";
 import { parseCharter } from "./charter.ts";
 import type { Event } from "./event.ts";
+import { message } from "./message.ts";
 import type { Plan } from "./plan.ts";
 import {
   afterReview,
@@ -353,7 +354,12 @@ describe("replay", () => {
       ...planned(write),
       write(
         "hold.set",
-        { target: "task", hold: "question", by: "kozod", reason: "which label?" },
+        {
+          target: "task",
+          hold: "question",
+          by: "kozod",
+          reason: message("text", { text: "which label?" }),
+        },
         task,
       ),
     ];
@@ -372,7 +378,12 @@ describe("replay", () => {
       ...planned(write2),
       write2(
         "hold.set",
-        { target: "task", hold: "question", by: "kozod", reason: "which label?" },
+        {
+          target: "task",
+          hold: "question",
+          by: "kozod",
+          reason: message("text", { text: "which label?" }),
+        },
         task,
       ),
       write2(
@@ -494,7 +505,11 @@ describe("holds", () => {
     expect(() =>
       replay([
         ...created,
-        write("hold.set", { target: "item", hold: "capacity", by: "kozod", reason: "x" }, item),
+        write(
+          "hold.set",
+          { target: "item", hold: "capacity", by: "kozod", reason: message("text", { text: "x" }) },
+          item,
+        ),
       ]),
     ).toThrow("a item cannot be held by capacity");
     const write2 = eventWriter();
@@ -502,7 +517,11 @@ describe("holds", () => {
     expect(() =>
       replay([
         ...planned(write2),
-        write2("hold.set", { target: "task", hold: "approval", by: "kozod", reason: "x" }, task),
+        write2(
+          "hold.set",
+          { target: "task", hold: "approval", by: "kozod", reason: message("text", { text: "x" }) },
+          task,
+        ),
       ]),
     ).toThrow("a task cannot be held by approval");
   });
@@ -514,14 +533,23 @@ describe("holds", () => {
       ...planned(write),
       write(
         "hold.set",
-        { target: "task", hold: "question", by: "kozod", reason: "which label?" },
+        {
+          target: "task",
+          hold: "question",
+          by: "kozod",
+          reason: message("text", { text: "which label?" }),
+        },
         task,
       ),
     ];
     expect(() =>
       replay([
         ...held,
-        write("hold.set", { target: "task", hold: "paused", by: "kozod", reason: "x" }, task),
+        write(
+          "hold.set",
+          { target: "task", hold: "paused", by: "kozod", reason: message("text", { text: "x" }) },
+          task,
+        ),
       ]),
     ).toThrow("already held by question");
     const write2 = eventWriter();
@@ -530,7 +558,12 @@ describe("holds", () => {
         ...planned(write2),
         write2(
           "hold.set",
-          { target: "task", hold: "question", by: "kozod", reason: "which?" },
+          {
+            target: "task",
+            hold: "question",
+            by: "kozod",
+            reason: message("text", { text: "which?" }),
+          },
           task,
         ),
         write2("hold.cleared", { target: "task", hold: "attention", by: "human" }, task),
@@ -550,7 +583,12 @@ describe("holds", () => {
       ),
       write(
         "hold.set",
-        { target: "task", hold: "question", by: "kozod", reason: "which label?" },
+        {
+          target: "task",
+          hold: "question",
+          by: "kozod",
+          reason: message("text", { text: "which label?" }),
+        },
         task,
       ),
       write("hold.cleared", { target: "task", hold: "question", by: "human" }, task),
@@ -575,7 +613,16 @@ describe("holds", () => {
     expect(startBlocker(state, second)).toBe("K-1/t2 waits for K-1/t1");
     const held = replay([
       ...base,
-      write("hold.set", { target: "task", hold: "capacity", by: "kozod", reason: "budget" }, t1),
+      write(
+        "hold.set",
+        {
+          target: "task",
+          hold: "capacity",
+          by: "kozod",
+          reason: message("text", { text: "budget" }),
+        },
+        t1,
+      ),
     ]);
     const heldFirst = held.tasks["K-1/t1"];
     if (heldFirst) expect(startBlocker(held, heldFirst)).toBe("K-1/t1 is held by capacity");
@@ -650,7 +697,13 @@ describe("applyEvent in place", () => {
       write("hold.cleared", { target: "task", hold: "attention", by: "human" }, task),
       write(
         "hold.set",
-        { target: "task", hold: "approval", by: "kozod", reason: "x", approval: "plan" },
+        {
+          target: "task",
+          hold: "approval",
+          by: "kozod",
+          reason: message("text", { text: "x" }),
+          approval: "plan",
+        },
         task,
       ),
       write("note.added", { kind: "instruction", text: "x" }, { item: "K-1", task: "K-1/t9" }),

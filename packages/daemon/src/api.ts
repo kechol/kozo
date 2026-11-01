@@ -11,11 +11,14 @@ import {
   installSchema,
   isClosed,
   issueText,
+  type Locale,
   listKindSchema,
+  messageSchema,
   type Prune,
   parseReference,
   pruneSchema,
   type Reference,
+  render,
   type Stage,
   secretMatches,
   type Verb,
@@ -79,6 +82,8 @@ export interface ApiOptions {
   commands: Commands;
   /** The current time, replaced in tests. */
   now?: () => Date;
+  /** The locale the API renders kozo's messages in. */
+  locale?: () => Locale;
   /** Where a task's diff lives, for `kozo show --diff`. */
   locateTask?(ref: string): Promise<{ repository: string; branch: string; base: string } | null>;
   /** An item's request body, as the human or the Issue wrote it. */
@@ -119,6 +124,17 @@ async function jsonBody(c: Context): Promise<unknown> {
   return JSON.parse(text);
 }
 
+/** `value` with each of kozo's messages in it rendered in `locale`. */
+function shown(value: unknown, locale: Locale): unknown {
+  if (Array.isArray(value)) return value.map((entry) => shown(entry, locale));
+  if (value === null || typeof value !== "object") return value;
+  const recorded = messageSchema.safeParse(value);
+  if (recorded.success) return render(recorded.data, locale);
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [key, shown(entry, locale)]),
+  );
+}
+
 /**
  * The local API. Every request needs the API token and a Host of this machine; a write that
  * carries an Origin must come from the dashboard's own origin. No CORS header is ever sent.
@@ -130,6 +146,7 @@ export function createApi({
   mode,
   commands,
   now = () => new Date(),
+  locale = () => "en",
   locateTask,
   request,
   handoff,
@@ -172,6 +189,13 @@ export function createApi({
       return error(c, 403, "writes are accepted only from this machine's own origin");
     }
     await next();
+  });
+
+  app.use("/api/*", async (c, next) => {
+    await next();
+    if (!c.res.headers.get("content-type")?.startsWith("application/json")) return;
+    const body = shown(await c.res.json(), locale());
+    c.res = new Response(JSON.stringify(body), { status: c.res.status, headers: c.res.headers });
   });
 
   app.onError((thrown, c) => {
@@ -339,7 +363,11 @@ export function createApi({
         wake?.();
       });
       for (const row of eventsAfter(store.db, parsedReference, ref, after)) {
-        await stream.writeSSE({ id: String(row.id), event: "event", data: row.line });
+        await stream.writeSSE({
+          id: String(row.id),
+          event: "event",
+          data: JSON.stringify(shown(JSON.parse(row.line), locale())),
+        });
         last = row.id;
       }
       while (!stream.aborted) {
@@ -355,7 +383,7 @@ export function createApi({
         await stream.writeSSE({
           id: String(next.id),
           event: "event",
-          data: JSON.stringify(next.event),
+          data: JSON.stringify(shown(next.event, locale())),
         });
         last = next.id;
       }

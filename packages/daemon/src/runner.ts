@@ -4,6 +4,8 @@ import {
   demotedCharter,
   isClosed,
   type KozoHome,
+  type Message,
+  message,
   runFiles,
   type Stage,
   type TaskState,
@@ -183,7 +185,7 @@ export class Runner implements RunnerOps {
     item: string,
     task: string | null,
     kind: "question" | "attention",
-    reason: string,
+    reason: Message,
     run?: string,
     blocked?: BlockedReason,
   ) {
@@ -232,7 +234,7 @@ export class Runner implements RunnerOps {
           this.store.state.tasks[taskRef]?.item ?? "",
           taskRef,
           "attention",
-          `no progress after ${attempts} attempts: ${outcome.failure}`,
+          message("hold.no-progress", { attempts, failure: outcome.failure }),
         );
         return;
       }

@@ -1,5 +1,6 @@
 import type { AutonomyLevel, Charter, WorkClass } from "./charter.ts";
 import type { Event, EventType, NoteKind } from "./event.ts";
+import type { Message } from "./message.ts";
 import type { Plan } from "./plan.ts";
 import type { ReviewVerdict } from "./verdict.ts";
 import {
@@ -15,7 +16,7 @@ import {
 
 export interface Hold {
   kind: HoldKind;
-  reason: string;
+  reason: Message;
   since: string;
   /** Which approval an approval hold waits for. */
   approval?: ApprovalKind;
@@ -683,7 +684,8 @@ export function planNeeded(approvals: Approvals, level: AutonomyLevel, plan: Pla
 export type ReviewOutcome =
   | { stage: "handoff" }
   | { stage: "building" }
-  | { hold: "attention" | "question"; reason: string };
+  | { hold: "question"; escalated: true }
+  | { hold: "attention"; escalated: false; revisions: number };
 
 /**
  * Revision needed?: where a task goes after review. A revise verdict goes back to Building
@@ -695,9 +697,9 @@ export function afterReview(
   innerRetries: number,
 ): ReviewOutcome {
   if (verdict === "accept") return { stage: "handoff" };
-  if (verdict === "escalate") return { hold: "question", reason: "review escalated" };
+  if (verdict === "escalate") return { hold: "question", escalated: true };
   if (revisions < innerRetries) return { stage: "building" };
-  return { hold: "attention", reason: `review asked for a revision after ${revisions} retries` };
+  return { hold: "attention", escalated: false, revisions };
 }
 
 /** Replays events in order into a new state. */

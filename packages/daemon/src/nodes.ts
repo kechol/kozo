@@ -2,6 +2,8 @@ import { join, relative } from "node:path";
 import {
   afterReview,
   type Brief,
+  message,
+  render,
   renderBrief,
   runFiles,
   runReportJsonSchema,
@@ -56,7 +58,7 @@ const claim: NodeStep = async (run, current) => {
       hold: "attention",
       reason: claimed.reason,
       end: "failed",
-      why: claimed.reason,
+      why: render(claimed.reason, "en"),
     });
   }
   if (claimed.created) {
@@ -95,7 +97,7 @@ export async function startServices(run: BlueprintRun): Promise<RunEnd | undefin
     if (code !== 0) {
       return await run.halt("prepare", {
         hold: "attention",
-        reason: `prepare failed: ${command} exited with ${code}`,
+        reason: message("hold.prepare-failed", { command, code }),
         summary: `${command} exited with ${code}`,
         end: "failed",
         why: "prepare failed",
@@ -126,7 +128,7 @@ const prepare: NodeStep = async (run) => {
     if (code !== 0) {
       return await run.halt("prepare", {
         hold: "attention",
-        reason: `prepare failed: ${command} exited with ${code}`,
+        reason: message("hold.prepare-failed", { command, code }),
         summary: `${command} exited with ${code}`,
         end: "failed",
         why: "prepare failed",
@@ -285,7 +287,7 @@ const implement: NodeStep = async (run, current) => {
   if (moved.length > 0) {
     return await run.halt("implement", {
       hold: "attention",
-      reason: `the run changed refs outside its branch: ${moved.join(", ")}`,
+      reason: message("hold.refs-moved", { refs: moved.join(", ") }),
       summary: `refs changed outside the task branch: ${moved.join(", ")}`,
       end: "failed",
       why: "refs changed outside the task branch",
@@ -298,7 +300,7 @@ const implement: NodeStep = async (run, current) => {
   if (result.status !== "answered") {
     return await run.halt("implement", {
       hold: "attention",
-      reason: `the run ${describe(result)}`,
+      reason: message("hold.run-failed", { outcome: describe(result) }),
       summary: describe(result),
       end: result.status === "lost" ? "lost" : "failed",
       why: describe(result),
@@ -318,7 +320,7 @@ const implement: NodeStep = async (run, current) => {
     }
     return await run.halt("implement", {
       hold: "question",
-      reason: `${blocked.reason}: ${blocked.question}`,
+      reason: message("hold.blocked", { blocked: blocked.reason, question: blocked.question }),
       summary: `blocked: ${blocked.reason}`,
       blocked: blocked.reason,
       end: "succeeded",
@@ -354,7 +356,7 @@ async function applyCodemod(run: BlueprintRun, codemod: string): Promise<RunEnd 
   if (code !== 0) {
     return await run.halt("implement", {
       hold: "attention",
-      reason: `the codemod ${codemod} exited with ${code}`,
+      reason: message("hold.codemod-failed", { codemod, code }),
       summary: `codemod exited with ${code}`,
       end: "failed",
       why: "codemod failed",
@@ -416,7 +418,7 @@ const verifyDeterministic: NodeStep = async (run, current) => {
   if (gates.status === "MISCONFIGURED") {
     return await run.halt(node, {
       hold: "attention",
-      reason: `the ${run.level} gates are MISCONFIGURED: ${gates.reason}`,
+      reason: message("hold.gates-misconfigured", { level: run.level, reason: gates.reason }),
       summary: `gates are MISCONFIGURED: ${gates.reason}`,
       end: "failed",
       why: "gates misconfigured",
@@ -448,7 +450,7 @@ const verifyDeterministic: NodeStep = async (run, current) => {
     if (prove.status === "MISCONFIGURED") {
       return await run.halt(node, {
         hold: "attention",
-        reason: `prove is MISCONFIGURED: ${prove.reason}`,
+        reason: message("hold.prove-misconfigured", { reason: prove.reason }),
         end: "failed",
         why: "prove misconfigured",
       });
@@ -475,7 +477,7 @@ const verifyDeterministic: NodeStep = async (run, current) => {
     await run.checkpoint("brief");
     return await run.halt(node, {
       hold: "question",
-      reason: `diff-guard refused the diff: ${line}`,
+      reason: message("hold.diff-guard", { line }),
       summary: line,
       end: "failed",
       why: "diff-guard refused the diff",
@@ -520,7 +522,7 @@ const review: NodeStep = async (run, current) => {
     await runner.endRun(child, "failed", reviewed.message, reviewed.costUsd);
     return await run.halt("review", {
       hold: "attention",
-      reason: `review failed: ${reviewed.message}`,
+      reason: message("hold.review-failed", { error: reviewed.message }),
       summary: reviewed.message,
       end: "failed",
       why: "review failed",
@@ -542,10 +544,13 @@ const review: NodeStep = async (run, current) => {
   const findings = reviewed.record.findings
     .map((finding) => `${finding.criterion}: ${finding.issue}`)
     .join("; ");
+  const details = `${reviewed.record.summary} ${findings}`.trim();
   if ("hold" in next) {
     return await run.halt("review", {
       hold: next.hold,
-      reason: `${next.reason}: ${reviewed.record.summary} ${findings}`.trim(),
+      reason: next.escalated
+        ? message("hold.review-escalated", { details })
+        : message("hold.review-revisions", { revisions: next.revisions, details }),
       summary: `${reviewed.record.verdict}: ${reviewed.record.summary}`,
       end: "succeeded",
     });
@@ -626,7 +631,7 @@ const verifyApp: NodeStep = async (run, current) => {
     await runner.endRun(child, "failed", verify.message, verify.costUsd);
     return await run.halt(node, {
       hold: "attention",
-      reason: `verify failed to run: ${verify.message}`,
+      reason: message("hold.verify-not-run", { error: verify.message }),
       summary: `${verify.message}${discarded}`,
       end: "failed",
       why: "verify failed to run",
@@ -636,7 +641,7 @@ const verifyApp: NodeStep = async (run, current) => {
   if (verify.record.result === "blocked") {
     return await run.halt(node, {
       hold: "question",
-      reason: `verify could not check the change: ${verify.record.summary}`,
+      reason: message("hold.verify-unchecked", { summary: verify.record.summary }),
       summary: `${verify.record.summary}${discarded}`,
       end: "succeeded",
     });
@@ -649,7 +654,7 @@ const verifyApp: NodeStep = async (run, current) => {
         item.ref,
         run.task.ref,
         "attention",
-        `verify failed: ${verify.record.summary}`,
+        message("hold.verify-failed", { summary: verify.record.summary }),
         run.run,
       );
       return await run.stopHere("succeeded");

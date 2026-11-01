@@ -6,6 +6,7 @@ export * from "./factory-fixtures.ts";
 export * from "./fake-agent.ts";
 export * from "./fake-github.ts";
 export * from "./git-repository.ts";
+export * from "./messages.ts";
 export * from "./replay.ts";
 export * from "./temp-directory.ts";
 export * from "./waits.ts";

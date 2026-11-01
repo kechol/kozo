@@ -6,6 +6,7 @@ import {
   finallyVerified,
   isRunOver,
   lowerLevel,
+  message,
   type TaskState,
   type WorkClass,
 } from "@kozo/core";
@@ -170,7 +171,7 @@ export class Reconciler {
         this.store,
         { item: item.ref, task: task.ref },
         "attention",
-        `${branch} was deleted without a merge`,
+        message("hold.branch-deleted", { branch }),
       );
       return;
     }

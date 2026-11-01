@@ -110,7 +110,7 @@ describe("ControlPlane.addItem", () => {
     });
     expect(env.store.state.items["K-1"]).toMatchObject({
       stage: "intake",
-      hold: { kind: "approval", reason: "start approval" },
+      hold: { kind: "approval", reason: { code: "hold.start-approval" } },
     });
   });
 

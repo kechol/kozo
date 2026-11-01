@@ -33,7 +33,7 @@ kozod は、作業中のファイルではなく、このリポジトリのデ�
 | `version`               | `1`                 | 形式のバージョン。いつも `1` です。                                                                                                                        |
 | `mode`                  | `local`             | `local` か `github`。[GitHub モード](../github-mode/) を参照してください。モードの変更は、kozod を起動し直したときに適用されます。                         |
 | `runtime`               | `sdk`               | エージェントがあなたの `claude` を動かす方法。`sdk` は Agent SDK 経由、`cli` は `claude -p` です。review と verify は、いつも Agent SDK を使います。       |
-| `locale`                | `en`                | kozo の通知の言語。`en` か `ja` です。起動し直さなくても適用されます。                                                                                     |
+| `locale`                | `en`                | kozo の通知と、hold の理由を書く言語。`en` か `ja` です。起動し直さなくても適用されます。                                                                  |
 | `repositories`          | `[]`                | kozo が作業するローカルのクローン。                                                                                                                        |
 | `repositories[].path`   |                     | クローンのパス。`~` は展開されます。                                                                                                                       |
 | `repositories[].github` |                     | GitHub モードでの `<owner>/<name>`。GitHub モードでは必須で、同じ名前のリポジトリを 2 つは登録できません。                                                 |

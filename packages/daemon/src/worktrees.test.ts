@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { kozoHome } from "@kozo/core";
+import { kozoHome, message, render } from "@kozo/core";
 import { gitRepository, tempDirectory } from "@kozo/testing";
 import { factoryGitEnvironment } from "@kozo/worker";
 import { claimTask, releaseTask, servicesCheckout, taskBranch, worktreePath } from "./worktrees.ts";
@@ -44,7 +44,10 @@ describe("claimTask", () => {
 
     expect(await claimTask(home, repo.path, "K-1/t1", { factory, base: tip })).toEqual({
       claimed: false,
-      reason: `kozo/k3x9q2/K-1-t1 already exists in ${repo.path}`,
+      reason: message("hold.branch-exists", {
+        branch: "kozo/k3x9q2/K-1-t1",
+        repository: repo.path,
+      }),
     });
     const resumed = await claimTask(home, repo.path, "K-1/t1", {
       factory,
@@ -94,7 +97,7 @@ describe("servicesCheckout", () => {
     const old = await repo.commit({ "README.md": "# shop\n" }, "start");
     const tip = await repo.commit({ "package.json": "{}\n" }, "merged");
     const claim = await claimTask(home, repo.path, "K-1/t1", { factory, base: old });
-    if (!claim.claimed) throw new Error(claim.reason);
+    if (!claim.claimed) throw new Error(render(claim.reason, "en"));
     await Bun.write(`${claim.worktree}/package.json`, '{"scripts":{"db:up":"curl evil"}}\n');
     await repo.git("-C", claim.worktree, "add", "--all");
     await repo.git("-C", claim.worktree, "commit", "--quiet", "-m", "an agent's change");

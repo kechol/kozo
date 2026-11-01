@@ -3,9 +3,9 @@ import {
   highestTask,
   issueText,
   itemLevel,
+  message,
   numberAfter,
   type Plan,
-  planApprovalReason,
   planNeeded,
   planSchema,
   runFiles,
@@ -33,7 +33,7 @@ const draftRounds = 2;
 const draftOf = ({ version: _version, item: _item, ...draft }: Plan) => draft;
 
 const holdForPlanApproval = (runner: Runner, itemRef: string) =>
-  hold(runner.store, { item: itemRef, task: null }, "approval", planApprovalReason, {
+  hold(runner.store, { item: itemRef, task: null }, "approval", message("hold.plan-approval"), {
     approval: "plan",
   });
 
@@ -155,7 +155,13 @@ async function draftPlan(
   );
   if (result.status !== "answered") {
     if (result.status !== "stopped")
-      await runner.hold(itemRef, null, "attention", `${agent} ${describe(result)}`, run);
+      await runner.hold(
+        itemRef,
+        null,
+        "attention",
+        message("hold.draft-failed", { agent, outcome: describe(result) }),
+        run,
+      );
     await runner.endRun(
       run,
       result.status === "lost" || result.status === "stopped" ? result.status : "failed",
@@ -165,7 +171,13 @@ async function draftPlan(
   }
   const answer = triageAnswerSchema.safeParse(result.outcome.output);
   if (answer.success && answer.data.outcome === "question") {
-    await runner.hold(itemRef, null, "question", answer.data.question, run);
+    await runner.hold(
+      itemRef,
+      null,
+      "question",
+      message("text", { text: answer.data.question }),
+      run,
+    );
     await runner.endRun(run, "succeeded");
     return { plan: null };
   }
@@ -198,7 +210,7 @@ async function draftPlan(
       itemRef,
       null,
       "attention",
-      `kozod refused the plan draft twice: ${issues.join("; ")}`,
+      message("hold.draft-refused", { issues: issues.join("; ") }),
       run,
     );
     await runner.endRun(run, "failed", "kozod refused the plan draft");

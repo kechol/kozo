@@ -203,6 +203,7 @@ export class Daemon {
       token: await apiToken(home),
       port,
       mode: definition.current.factory.mode,
+      locale: () => definition.current.factory.locale,
       commands,
       repositories: () => definition.current.factory.repositories.map(({ path }) => path),
       reservedUsd: () => runner.reservedUsd,

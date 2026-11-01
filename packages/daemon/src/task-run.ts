@@ -10,7 +10,10 @@ import {
   type GateLevel,
   type ItemState,
   type KozoHome,
+  type Message,
+  message,
   type Plan,
+  render,
   runFiles,
   type Stage,
   type TaskState,
@@ -75,7 +78,7 @@ export interface RunnerOps {
     item: string,
     task: string | null,
     hold: "question" | "attention",
-    reason: string,
+    reason: Message,
     run?: string,
     blocked?: BlockedReason,
   ): Promise<void>;
@@ -104,7 +107,7 @@ export interface RunnerOps {
 /** How a node ends the run with the task held for a human. */
 interface Halt {
   hold: "attention" | "question";
-  reason: string;
+  reason: Message;
   /** What the node's exit says, the reason when unset. */
   summary?: string;
   end: "succeeded" | "failed" | "lost";
@@ -240,7 +243,7 @@ export class BlueprintRun {
 
   /** Ends the run at `node` with the task held for a human. */
   async halt(node: Node, held: Halt): Promise<RunEnd> {
-    await this.exit(node, held.ok ?? false, held.summary ?? held.reason);
+    await this.exit(node, held.ok ?? false, held.summary ?? render(held.reason, "en"));
     await this.runner.hold(
       this.item.ref,
       this.task.ref,
@@ -274,7 +277,7 @@ export class BlueprintRun {
       this.item.ref,
       this.task.ref,
       "attention",
-      `the final verification failed after ${fixes} fixes: ${why}`,
+      message("hold.final-verification", { fixes, failure: why }),
       this.run,
     );
     return await this.stopHere("failed", "final verification failed");

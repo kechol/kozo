@@ -7,6 +7,8 @@ import {
   isClosed,
   isRunOver,
   lastBlueprintRun,
+  type Message,
+  message,
   startBlocker,
   type TaskState,
   waitsOnOwner,
@@ -86,8 +88,8 @@ export class Scheduler {
     const release = this.runner.reserve(reserveUsd);
     const promise = work()
       .catch(async (error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        this.report(`kozod: ${ref}: ${message}`);
+        const text = error instanceof Error ? error.message : String(error);
+        this.report(`kozod: ${ref}: ${text}`);
         const state = this.store.state;
         const subject = target === "item" ? state.items[ref] : state.tasks[ref];
         if (!subject || subject.hold || isClosed(subject.stage)) return;
@@ -96,7 +98,7 @@ export class Scheduler {
           this.store,
           { item, task: target === "task" ? ref : null },
           "attention",
-          `kozod could not run it: ${message}`,
+          message("hold.could-not-run", { error: text }),
         ).catch(() => {});
       })
       .finally(() => {
@@ -112,28 +114,28 @@ export class Scheduler {
    * running now holds back its sessions' limits from the budget, so that concurrent sessions
    * cannot spend past it.
    */
-  private capacity(repository: string, result: CharterResult): string | null {
-    if (!result.ok) return `the Charter keeps the repository from running: ${result.reason}`;
+  private capacity(repository: string, result: CharterResult): Message | null {
+    if (!result.ok) return message("hold.capacity.charter", { reason: result.reason });
     const { charter } = result;
     const budget = this.factory().budget.daily_usd;
     const spent = costToday(this.store.db, this.now());
-    if (spent >= budget) return `the daily budget of ${budget} USD is spent`;
+    if (spent >= budget) return message("hold.capacity.budget-spent", { budget });
     if (spent + this.runner.reservedUsd >= budget)
-      return `the daily budget of ${budget} USD is spent or held back by the work running now`;
+      return message("hold.capacity.budget-held", { budget });
     const state = this.store.state;
     const tasks = Object.values(state.tasks).filter(
       (task) => state.items[task.item]?.repository === repository,
     );
     const waiting = tasks.filter((task) => awaitingMerge(state, task)).length;
     if (waiting >= charter.backpressure.max_awaiting_merge) {
-      return `${waiting} tasks await a merge, the Charter's limit`;
+      return message("hold.capacity.awaiting-merge", { count: waiting });
     }
     const held = [
       ...Object.values(state.items).filter((item) => item.repository === repository),
       ...tasks,
     ].filter((subject) => waitsOnOwner(subject.hold)).length;
     if (held >= charter.backpressure.max_held)
-      return `${held} items and tasks wait on questions or attention, the Charter's limit`;
+      return message("hold.capacity.held", { count: held });
     return null;
   }
 
@@ -157,10 +159,15 @@ export class Scheduler {
           this.store,
           subject,
           "attention",
-          `${cancelled.join(", ")} was cancelled, so ${task.ref} cannot start; close it or plan it again`,
+          message("hold.dependency-cancelled", { cancelled: cancelled.join(", "), task: task.ref }),
         );
       } else {
-        await hold(this.store, subject, "dependency", `waits for ${open.join(", ")} to complete`);
+        await hold(
+          this.store,
+          subject,
+          "dependency",
+          message("hold.dependency", { open: open.join(", ") }),
+        );
       }
     }
   }

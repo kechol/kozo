@@ -10,8 +10,11 @@ import {
   isClosed,
   itemStage,
   type KozoHome,
+  type Message,
+  message,
   parseReference,
   type Repository,
+  render,
   runFiles,
   sha256,
   stageSchema,
@@ -312,7 +315,9 @@ export class GitHubSync {
         this.store,
         { item: item.ref, task: null },
         "attention",
-        `${closer ?? "someone"} closed the Issue but may not ${cancelled ? "cancel" : "complete"} it; kozo close decides`,
+        message(cancelled ? "hold.close-refused.cancel" : "hold.close-refused.complete", {
+          closer: closer ?? "someone",
+        }),
       );
       return;
     }
@@ -351,7 +356,7 @@ export class GitHubSync {
         this.store,
         { item: ref, task: null },
         "attention",
-        `${issue.author}, who may not write, edited the request after it started; kozo retry takes the new text`,
+        message("hold.untrusted-edit", { author: issue.author }),
       );
     }
     const edited = { ...file, title, body: issue.body };
@@ -394,7 +399,7 @@ export class GitHubSync {
       const branch = taskBranch(this.store.factoryId, task);
       const pull = (await this.github.pullsFor(github, branch)).find((entry) => entry.url === url);
       if (pull?.state === "closed") {
-        const reason = `${url} was closed without a merge`;
+        const reason = message("hold.pull-closed", { url });
         // `kozo retry` after this hold asks for a new pull request of the same head.
         if (this.heldFor(task, reason)) await this.handOff(path, github, issue, ref, task, true);
         else await this.holdTask(ref, task, reason);
@@ -404,7 +409,7 @@ export class GitHubSync {
     }
   }
 
-  private heldFor(task: string, reason: string): boolean {
+  private heldFor(task: string, reason: Message): boolean {
     return heldBefore(this.store.db, task, reason);
   }
 
@@ -451,7 +456,7 @@ export class GitHubSync {
       await this.holdTask(
         item,
         task,
-        `${branch} on GitHub no longer builds on ${head.slice(0, 12)}; kozo retry continues from kozod's commit`,
+        message("hold.diverged", { branch, head: head.slice(0, 12) }),
       );
       return;
     }
@@ -478,7 +483,11 @@ export class GitHubSync {
     const rounds = charter.ok ? charter.charter.limits.ci_fix_rounds : 0;
     const fixes = this.store.state.tasks[task]?.handoffFixes ?? 0;
     if (fixes >= rounds) {
-      await this.holdTask(item, task, `CI failed after ${fixes} fixes: ${failed.join(", ")}`);
+      await this.holdTask(
+        item,
+        task,
+        message("hold.ci-failed", { fixes, checks: failed.join(", ") }),
+      );
       return;
     }
     await note(
@@ -494,7 +503,7 @@ export class GitHubSync {
     await move(this.store, { item, task }, "building", reason, { by, from: "handoff" });
   }
 
-  private async holdTask(item: string, task: string, reason: string) {
+  private async holdTask(item: string, task: string, reason: Message) {
     await hold(this.store, { item, task }, "attention", reason);
   }
 
@@ -533,7 +542,7 @@ export class GitHubSync {
         github,
         issue,
         marker,
-        `**Question about ${subject.ref}:** ${quiet(subject.hold.reason)}
+        `**Question about ${subject.ref}:** ${quiet(render(subject.hold.reason, "en"))}
 
 Answer with a reply here if you may write to this repository, or with \`kozo say ${subject.ref} <answer>\`.`,
       );

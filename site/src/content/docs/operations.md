@@ -162,13 +162,14 @@ kozo keeps the branch of every completed task, so step 2 is also how you tidy up
 
 `kozo up` says so and points at `~/.kozo/kozod.log`, which gives the reason:
 
-| Message                                                                          | What to do                                                                                |
-| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `sandbox-exec does not run`, `bwrap does not run`, `bubblewrap is not installed` | Make the sandbox work; `kozo check` shows what it lacks. On Linux, allow user namespaces. |
-| `kozod is already running as pid <n>`                                            | Another kozod serves this home. Use it, or stop it with `kozo down`.                      |
-| `... does not match its seal`, `... is missing; it was sealed at ...`            | An event log was edited or removed. Restore it from a backup.                             |
-| `the factory definition is invalid`                                              | Run `kozo check` and fix the definition.                                                  |
-| `api.token is readable by others`                                                | Run `chmod 600 ~/.kozo/api.token`.                                                        |
+| Message                                                                          | What to do                                                                                                                                  |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sandbox-exec does not run`, `bwrap does not run`, `bubblewrap is not installed` | Make the sandbox work; `kozo check` shows what it lacks. On Linux, allow user namespaces.                                                   |
+| `kozod is already running as pid <n>`                                            | Another kozod serves this home. Use it, or stop it with `kozo down`.                                                                        |
+| `... does not match its seal`, `... is missing; it was sealed at ...`            | An event log was edited or removed. Restore it from a backup.                                                                               |
+| `the line has event version 1 and this kozo reads only version 2`                | The home was written by an earlier, unreleased kozo. Move `~/.kozo` aside, copy its `factory/` into a new `~/.kozo`, and start kozod again. |
+| `the factory definition is invalid`                                              | Run `kozo check` and fix the definition.                                                                                                    |
+| `api.token is readable by others`                                                | Run `chmod 600 ~/.kozo/api.token`.                                                                                                          |
 
 ### Something is stuck
 

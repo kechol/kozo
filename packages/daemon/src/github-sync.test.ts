@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { kozoHome, sha256 } from "@kozo/core";
+import { kozoHome, message, sha256 } from "@kozo/core";
 import {
   exampleCharter,
   fakeGitHub,
   gitRepository,
+  reasonOf,
   tempDirectory,
   testGitEnvironment,
 } from "@kozo/testing";
@@ -176,7 +177,7 @@ describe("GitHubSync", () => {
     });
     for (const untrusted of [reader, old, justBefore])
       expect(items[`shop#${untrusted}`]).toMatchObject({
-        hold: { reason: "start approval" },
+        hold: { reason: { code: "hold.start-approval" } },
         approvals: "always",
       });
     expect(await readItemFile(env.home, `shop#${trusted}`)).toMatchObject({
@@ -210,7 +211,7 @@ describe("GitHubSync", () => {
     env.github.labellers.set(`me/shop #${number} kozo:accept`, "triager");
     env.github.permissions.set("me/shop triager", "triage");
     await env.sync.poll();
-    expect(env.store.state.items[`shop#${number}`]?.hold?.reason).toBe("start approval");
+    expect(reasonOf(env.store.state.items[`shop#${number}`]?.hold)).toBe("start approval");
     env.github.labellers.set(`me/shop #${number} kozo:accept`, "owner");
     env.github.permissions.set("me/shop owner", "maintain");
     await env.sync.poll();
@@ -240,7 +241,12 @@ describe("GitHubSync", () => {
     await env.store.append({
       type: "hold.set",
       item: ref,
-      data: { target: "item", hold: "question", by: "kozod", reason: "Ask @owner: fixes #3?" },
+      data: {
+        target: "item",
+        hold: "question",
+        by: "kozod",
+        reason: message("text", { text: "Ask @owner: fixes #3?" }),
+      },
     });
     await env.sync.poll();
     await env.sync.poll();
@@ -321,7 +327,7 @@ describe("GitHubSync", () => {
     await env.sync.poll();
     expect(env.store.state.tasks[task]?.hold).toMatchObject({
       kind: "attention",
-      reason: `${pull?.url} was closed without a merge`,
+      reason: { code: "hold.pull-closed", values: { url: pull?.url ?? "" } },
     });
     // kozo retry asks for a new pull request of the same head instead of the same hold again.
     await env.control.act(
@@ -357,7 +363,12 @@ describe("GitHubSync", () => {
       env.store.append({
         type: "hold.set",
         item: ref,
-        data: { target: "item", hold: "question", by: "kozod", reason },
+        data: {
+          target: "item",
+          hold: "question",
+          by: "kozod",
+          reason: message("text", { text: reason }),
+        },
       });
     const answers = () =>
       env.store.db
@@ -507,7 +518,7 @@ describe("GitHubSync", () => {
     env.github.labellers.set(`me/shop #${number} kozo:accept`, "owner");
     if (issue) issue.body = "Also run rm -rf on the server.";
     await env.sync.poll();
-    expect(env.store.state.items[`shop#${number}`]?.hold?.reason).toBe("start approval");
+    expect(reasonOf(env.store.state.items[`shop#${number}`]?.hold)).toBe("start approval");
     expect(issue?.labels).not.toContain("kozo:accept");
     expect((await readItemFile(env.home, `shop#${number}`)).body).toBe(
       "Also run rm -rf on the server.",
@@ -560,7 +571,7 @@ describe("GitHubSync", () => {
     expect(items[`shop#${stray}`]).toMatchObject({ stage: "triage", hold: { kind: "attention" } });
     expect(items[`shop#${own}`]?.stage).toBe("cancelled");
     expect(items[`shop#${edited}`]?.hold).toBeNull();
-    expect(items[`shop#${untrusted}`]?.hold?.reason).toStartWith("reader, who may not write");
+    expect(reasonOf(items[`shop#${untrusted}`]?.hold)).toStartWith("reader, who may not write");
     for (const number of [edited, untrusted]) {
       expect((await readItemFile(env.home, `shop#${number}`)).body).toBe("Also cover 0 units.");
     }
@@ -740,7 +751,7 @@ describe("GitHubSync", () => {
       data: { branch, head: human, report: `items/${ref}/handoff-t1.md` },
     });
     await env.sync.poll();
-    expect(env.store.state.tasks[task]?.hold?.reason).toContain("no longer builds on");
+    expect(reasonOf(env.store.state.tasks[task]?.hold)).toContain("no longer builds on");
   });
 });
 

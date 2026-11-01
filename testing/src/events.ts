@@ -1,4 +1,4 @@
-import { type Event, type EventType, sha256 } from "@kozo/core";
+import { type Event, type EventType, eventVersion, sha256 } from "@kozo/core";
 
 type Data<T extends EventType> = Extract<Event, { type: T }>["data"];
 type Envelope = Partial<
@@ -21,7 +21,7 @@ export function eventWriter(start = "2026-10-21T09:00:00.000Z") {
     const ts = new Date(clock).toISOString();
     clock += 1;
     const event = {
-      v: 1,
+      v: eventVersion,
       ts,
       prev: lasts.get(run) ?? null,
       api_call: envelope.api_call ?? null,

@@ -140,7 +140,7 @@ describe("GitHub mode", () => {
       await settle();
       expect(store.state.items[ref]).toMatchObject({
         stage: "planning",
-        hold: { kind: "approval", reason: "plan approval" },
+        hold: { kind: "approval", reason: { code: "hold.plan-approval" } },
       });
       await control.act(ref, { kind: "item", item: { repo: "shop", number } }, "approve", {});
       await settle();

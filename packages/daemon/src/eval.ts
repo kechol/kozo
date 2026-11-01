@@ -12,6 +12,7 @@ import {
   parseEvalCase,
   parseReference,
   type Reference,
+  render,
   sha256,
   waitsOnOwner,
 } from "@kozo/core";
@@ -102,7 +103,7 @@ function reachedOutcome(
     .map((subject) => subject.hold)
     .filter(waitsOnOwner);
   const held = holds.find((hold) => hold.kind === "question") ?? holds[0];
-  if (held) return { outcome: held.kind, reason: held.reason };
+  if (held) return { outcome: held.kind, reason: render(held.reason, "en") };
   if (item.stage === "complete") return { outcome: "complete" };
   const planned = item.draft ?? item.plan;
   return planned && planned.tasks.length > 1 ? { outcome: "split" } : null;
