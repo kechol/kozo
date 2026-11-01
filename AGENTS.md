@@ -81,10 +81,15 @@ entries and commits are linked by IDs such as `T-012` and `D-003`.
 
 ### User documentation
 
-- A change to a command, a flag, a configuration key, an environment variable
-  or what the dashboard shows changes its pages in `site/src/content/docs/` in
-  the same commit, the English page and its Japanese page together.
-- Every English page has a Japanese page at the same path under `ja/`.
+- A change to a command, a flag, a configuration key, an environment variable,
+  what the dashboard shows or any behaviour a page describes changes its pages
+  in `site/src/content/docs/` in the same commit, the English page and its
+  Japanese page together.
+- Every English page has a Japanese page at the same path under `ja/` and an
+  entry in the sidebar in `site/astro.config.mjs`.
+- `packages/cli/src/site.test.ts` checks the CLI page against `kozo`'s usage,
+  the configuration pages against the schemas, and the Japanese pages and the
+  sidebar against the English pages; the rest is kept in step by hand.
 - Write the Japanese pages as natural Japanese, translating the meaning rather
   than the English sentence structure. Keep glossary terms, commands, keys and
   paths in their English or code form, and put no ASCII space between Japanese
