@@ -139,6 +139,7 @@
 | factory definition | The git repository of agents, skills, blueprints, automations, eval cases and `factory.yml` that kozod applies only after `kozo check` passes. | `~/.kozo/factory/`, `factory.yml` | factory config | - |
 | intervention | A human's work on a task: taking it with `kozo take`, committing to its branch at Handoff or sending it back from there. | `humanCommits`, `sentBack` | - | - |
 | limits | The Charter caps per task and per run, such as changed lines, files, retries, turns, minutes and cost. | `limits` | - | - |
+| locale | The language, `en` or `ja`, in which kozo renders its messages, set by `locale` in `factory.yml`. | `locale`, `Locale` | language setting, lang | - |
 | mode | The way kozo connects to the outside: `local` with local branches, or `github` with Issues and pull requests. | `mode` | - | - |
 | promotion proposal | kozod's suggestion to raise a class from L2 to L3 once its last 20 merged diffs were all autonomous and free of defects, which only a human applies in the Charter. | `promotionProposals` | upgrade | - |
 | protected path | A Charter path pattern that is never changed unattended, so that touching it raises a question; it also covers everything under what it matches, read both as a glob and as a literal path. | `protected_paths` | - | - |
@@ -155,6 +156,7 @@
 | handoff report | The report that kozod writes at Handoff with five sections: why, what changed, out of scope, why it is safe, and verification. | pull request body | - | - |
 | inbox | The oldest-first list of what waits for a human: approval, question and attention holds, and tasks awaiting merge. | `kozo ls inbox` | queue, todo list | - |
 | issue move | Moving a local item without tasks to an Issue of its repository in GitHub mode, which cancels the local item and leaves the Issue to intake. | `kozo issue` | - | - |
+| message | Text that kozo words itself, kept and served as a code with values and turned into a sentence in a locale only when shown. | `Message`, `message()`, `render()`, `messages/<locale>.ts` | i18n string, translation key | - |
 | status comment | The single Issue comment that kozod keeps rewriting with the stage, holds, tasks, pull requests and cost. | - | - | - |
 | take | Handing a task to the human, who commits in its worktree until giving it back with `kozo return` to the checks after implement. | `kozo take`, `kozo return`, `task.returned` | hijack, takeover | - |
 | toast | The dashboard's corner message that answers a verb, which leaves after a few seconds unless it says that a verb without a field of its own failed. | `Toasts`, `notify` | popup, snackbar | - |
