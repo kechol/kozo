@@ -35,6 +35,7 @@ export default defineConfig({
           items: [
             { label: 'GitHub mode', translations: { ja: 'GitHub モード' }, slug: 'github-mode' },
             { label: 'Dashboard', translations: { ja: 'ダッシュボード' }, slug: 'dashboard' },
+            { label: 'Operating kozo', translations: { ja: '運用' }, slug: 'operations' },
           ],
         },
       ],
