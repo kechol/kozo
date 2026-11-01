@@ -1,0 +1,45 @@
+version: 2
+
+# Weekly, one grouped pull request per ecosystem where it can be. A release must be a week old
+# before it is proposed, so a compromised version is likely pulled before it reaches kozo.
+updates:
+  # The workflows pin each action to a commit; Dependabot moves the pin and its version comment.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+      include: scope
+
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    # A major version changes an API kozo calls, so it comes on its own.
+    groups:
+      dependencies:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: chore
+      include: scope
+
+  # The documentation site is an npm package of its own.
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      site:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: chore(site)
