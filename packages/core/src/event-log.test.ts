@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { eventWriter } from "@kozo/testing";
 import { mergeLogs, parseEventLog, sealIssues, sha256 } from "./event-log.ts";
+import { message } from "./message.ts";
 
 describe("parseEventLog", () => {
   test("parses every line and ignores the final newline", () => {
     const write = eventWriter();
     const text = `${[
-      write("factory.changed", { paused: true, reason: "kozo pause" }),
-      write("factory.changed", { paused: false, reason: "kozo resume" }),
+      write("factory.changed", { paused: true, reason: message("text", { text: "kozo pause" }) }),
+      write("factory.changed", { paused: false, reason: message("text", { text: "kozo resume" }) }),
     ]
       .map((event) => JSON.stringify(event))
       .join("\n")}\n`;
@@ -19,9 +20,9 @@ describe("parseEventLog", () => {
   test("a changed or removed line breaks the hash chain", () => {
     const write = eventWriter();
     const lines = [
-      write("factory.changed", { paused: true, reason: "a" }),
-      write("factory.changed", { paused: false, reason: "b" }),
-      write("factory.changed", { paused: true, reason: "c" }),
+      write("factory.changed", { paused: true, reason: message("text", { text: "a" }) }),
+      write("factory.changed", { paused: false, reason: message("text", { text: "b" }) }),
+      write("factory.changed", { paused: true, reason: message("text", { text: "c" }) }),
     ].map((event) => JSON.stringify(event));
     const changed = [lines[0]?.replace('"a"', '"x"'), lines[1], lines[2]].join("\n");
     const result = parseEventLog(changed, "events.jsonl");
@@ -53,9 +54,18 @@ describe("parseEventLog", () => {
 describe("mergeLogs", () => {
   test("orders the events of several logs by ts", () => {
     const write = eventWriter();
-    const first = write("factory.changed", { paused: true, reason: "a" });
-    const second = write("factory.changed", { paused: false, reason: "b" });
-    const third = write("factory.changed", { paused: true, reason: "c" });
+    const first = write("factory.changed", {
+      paused: true,
+      reason: message("text", { text: "a" }),
+    });
+    const second = write("factory.changed", {
+      paused: false,
+      reason: message("text", { text: "b" }),
+    });
+    const third = write("factory.changed", {
+      paused: true,
+      reason: message("text", { text: "c" }),
+    });
     expect(mergeLogs([[second], [first, third]])).toEqual([first, second, third]);
   });
 });

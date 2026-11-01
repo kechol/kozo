@@ -149,7 +149,10 @@ export class IndexDb {
         if (event.task === null) break;
         this.db
           .query("update tasks set last_failure = ? where ref = ?")
-          .run(event.data.ok ? null : (event.data.summary ?? null), event.task);
+          .run(
+            event.data.ok || !event.data.summary ? null : JSON.stringify(event.data.summary),
+            event.task,
+          );
         break;
     }
   }

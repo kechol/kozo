@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { exampleCharter } from "@kozo/testing";
 import { demotedCharter, demotionDue, lowerLevel, promotionProposals } from "./autonomy.ts";
 import { type Charter, parseCharter } from "./charter.ts";
+import { message } from "./message.ts";
 import {
   autonomyLevel,
   demotionKey,
@@ -45,17 +46,19 @@ describe("demotionDue", () => {
     const defect = merged(3, (index) =>
       index === 2 ? { defectAt: "2026-10-02T00:00:00.000Z" } : {},
     );
-    expect(demotionDue(defect, repository, "bugfix")).toBe("a post-merge defect in K-2/t1");
+    expect(demotionDue(defect, repository, "bugfix")).toEqual(
+      message("demotion.defect", { task: "K-2/t1" }),
+    );
     expect(demotionDue(defect, repository, "docs")).toBeNull();
     const three = merged(10, (index) => ({ humanCommits: index <= 3 }));
     expect(demotionDue(three, repository, "bugfix")).toBeNull();
     const four = merged(10, (index) => ({ humanCommits: index <= 4 }));
-    expect(demotionDue(four, repository, "bugfix")).toBe(
-      "a human intervened in 4 of the last 10 merged diffs",
+    expect(demotionDue(four, repository, "bugfix")).toEqual(
+      message("demotion.intervention", { intervened: 4, recent: 10 }),
     );
     const sentBack = merged(10, (index) => ({ sentBack: index <= 4 }));
-    expect(demotionDue(sentBack, repository, "bugfix")).toBe(
-      "a human intervened in 4 of the last 10 merged diffs",
+    expect(demotionDue(sentBack, repository, "bugfix")).toEqual(
+      message("demotion.intervention", { intervened: 4, recent: 10 }),
     );
     // Fewer than ten diffs are not enough to judge the share.
     expect(
@@ -77,7 +80,7 @@ describe("demotionDue", () => {
       from: "L3",
       to: "L2",
       charterSha: "a".repeat(64),
-      reason: "a post-merge defect in K-2/t1",
+      reason: message("text", { text: "a post-merge defect in K-2/t1" }),
       at: "2026-10-03T00:00:00.000Z",
     };
     expect(demotionDue(state, repository, "bugfix")).toBeNull();
@@ -94,7 +97,7 @@ describe("demotedCharter", () => {
       from: "L3",
       to: "L2",
       charterSha: "a".repeat(64),
-      reason: "x",
+      reason: message("text", { text: "x" }),
       at: "2026-10-03T00:00:00.000Z",
     };
     expect(

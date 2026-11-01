@@ -7,6 +7,7 @@ import {
   isRunOver,
   lowerLevel,
   message,
+  render,
   type TaskState,
   type WorkClass,
 } from "@kozo/core";
@@ -256,21 +257,23 @@ export class Reconciler {
     }
     for (const [key, { repository, workClass }] of pairs) {
       const reason = demotionDue(this.store.state, repository, workClass);
-      if (reason === null || this.atBottom.get(key) === reason) continue;
+      if (reason === null || this.atBottom.get(key) === JSON.stringify(reason)) continue;
       const charter = await readCharter(repository, this.mode(), this.store.state);
       if (!charter.ok) continue;
       const from = autonomyLevel(charter.charter, workClass);
       const to = lowerLevel(from);
       // A class at L1 has nowhere to go, so the same evidence is not read again each minute.
       if (to === null) {
-        this.atBottom.set(key, reason);
+        this.atBottom.set(key, JSON.stringify(reason));
         continue;
       }
       await this.store.append({
         type: "factory.demoted",
         data: { repository, class: workClass, from, to, charter_sha: charter.sha, reason },
       });
-      this.report(`kozod: lowered ${workClass} in ${repository} from ${from} to ${to}: ${reason}`);
+      this.report(
+        `kozod: lowered ${workClass} in ${repository} from ${from} to ${to}: ${render(reason, "en")}`,
+      );
     }
   }
 }

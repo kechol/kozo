@@ -140,13 +140,13 @@ export async function note(
   store: EventStore,
   subject: Subject,
   kind: NoteKind,
-  text: string,
+  text: Message,
 ): Promise<void> {
   await store.append({
     type: "note.added",
     item: subject.item,
     task: subject.task,
-    data: { kind, text },
+    data: { kind, text: cutValues(text) },
   });
 }
 

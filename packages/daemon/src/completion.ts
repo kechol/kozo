@@ -48,13 +48,13 @@ export async function completeTask(
   // A human who closes or takes the task stops the check, which their verb settles.
   if (!checked) return;
   const { result, output } = checked;
-  const defect = `the ${level} gates failed on ${repository.branch} after the merge`;
+  const defect = message("defect.gates", { level, branch: repository.branch });
   const recordDefect = async () => {
     await note(
       runner.store,
       { item: item.ref, task: taskRef },
       "check",
-      `After the merge, the ${level} gates on ${repository.branch} failed, so DONE_WHEN is not met:\n${tail(output)}`,
+      message("note.check-failed", { level, branch: repository.branch, output: tail(output) }),
     );
     await runner.store.append({
       type: "task.defect",

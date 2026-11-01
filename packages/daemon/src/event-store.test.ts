@@ -151,11 +151,13 @@ describe("EventStore", () => {
     await store.append({
       type: "note.added",
       item: "K-1",
-      data: { kind: "instruction", text: "test" },
+      data: { kind: "instruction", text: message("text", { text: "test" }) },
     });
     store.close();
     const reopened = await EventStore.open(home);
-    expect(reopened.state.items["K-1"]?.notes.at(-1)?.text).toBe("test");
+    expect(reopened.state.items["K-1"]?.notes.at(-1)?.text).toEqual(
+      message("text", { text: "test" }),
+    );
     expect(reopened.db.query("select shown_stage from items").get()).toEqual({
       shown_stage: "complete",
     });
@@ -192,10 +194,14 @@ describe("EventStore", () => {
       ...task,
       type: "node.exit",
       node: "final-verify",
-      data: { ok: false, summary: "the deep gates failed" },
+      data: { ok: false, summary: message("text", { text: "the deep gates failed" }) },
     });
     // A later projection of the task keeps the failure the node left.
-    await store.append({ ...task, type: "note.added", data: { kind: "instruction", text: "x" } });
+    await store.append({
+      ...task,
+      type: "note.added",
+      data: { kind: "instruction", text: message("text", { text: "x" }) },
+    });
     const read = (db: typeof store.db) => ({
       pulls: [...pullsOf(db, "K-1")],
       handoff: lastHandoff(db, "K-1/t1"),

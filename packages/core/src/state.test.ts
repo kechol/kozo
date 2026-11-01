@@ -78,12 +78,19 @@ describe("replay", () => {
     const task = { item: "K-1", task: "K-1/t1" };
     const events = [
       ...planned(write),
-      write("note.added", { kind: "check", text: "CI failed before the merge" }, task),
+      write(
+        "note.added",
+        { kind: "check", text: message("text", { text: "CI failed before the merge" }) },
+        task,
+      ),
     ];
     expect(replay(events).tasks["K-1/t1"]?.defectAt).toBeNull();
-    expect(() => replay([...events, write("task.defect", { reason: "too early" }, task)])).toThrow(
-      "is not merged",
-    );
+    expect(() =>
+      replay([
+        ...events,
+        write("task.defect", { reason: message("text", { text: "too early" }) }, task),
+      ]),
+    ).toThrow("is not merged");
     const after = eventWriter();
     const merged = [
       ...planned(after),
@@ -99,8 +106,16 @@ describe("replay", () => {
         task,
       ),
     ];
-    const first = after("task.defect", { reason: "the gates failed" }, task);
-    const state = replay([...merged, first, after("task.defect", { reason: "again" }, task)]);
+    const first = after(
+      "task.defect",
+      { reason: message("text", { text: "the gates failed" }) },
+      task,
+    );
+    const state = replay([
+      ...merged,
+      first,
+      after("task.defect", { reason: message("text", { text: "again" }) }, task),
+    ]);
     expect(state.tasks["K-1/t1"]?.defectAt).toBe(first.ts);
   });
 
@@ -269,23 +284,27 @@ describe("replay", () => {
     const write = eventWriter();
     const state = replay([
       ...planned(write),
-      write("note.added", { kind: "approval", text: "Go." }, { item: "K-1" }),
       write(
         "note.added",
-        { kind: "instruction", text: "Keep 0." },
+        { kind: "approval", text: message("text", { text: "Go." }) },
+        { item: "K-1" },
+      ),
+      write(
+        "note.added",
+        { kind: "instruction", text: message("text", { text: "Keep 0." }) },
         { item: "K-1", task: "K-1/t1" },
       ),
     ]);
     expect(state.items["K-1"]?.notes).toMatchObject([
-      { target: "K-1", kind: "approval", text: "Go." },
-      { target: "K-1/t1", kind: "instruction", text: "Keep 0." },
+      { target: "K-1", kind: "approval", text: { values: { text: "Go." } } },
+      { target: "K-1/t1", kind: "instruction", text: { values: { text: "Keep 0." } } },
     ]);
     expect(() =>
       replay([
         ...planned(eventWriter()),
         eventWriter("2026-10-22T00:00:00.000Z")(
           "note.added",
-          { kind: "answer", text: "x" },
+          { kind: "answer", text: message("text", { text: "x" }) },
           { item: "K-1", task: "K-1/t9" },
         ),
       ]),
@@ -475,8 +494,10 @@ describe("replay", () => {
 
   test("factory pauses are recorded", () => {
     const write = eventWriter();
-    const state = replay([write("factory.changed", { paused: true, reason: "kozo pause" })]);
-    expect(state).toMatchObject({ paused: true, pausedReason: "kozo pause" });
+    const state = replay([
+      write("factory.changed", { paused: true, reason: message("text", { text: "kozo pause" }) }),
+    ]);
+    expect(state).toMatchObject({ paused: true, pausedReason: { values: { text: "kozo pause" } } });
   });
 });
 
@@ -731,7 +752,7 @@ describe("holds", () => {
     const write2 = eventWriter();
     const paused = replay([
       ...planned(write2, plan(2)),
-      write2("factory.changed", { paused: true, reason: "kozo pause" }),
+      write2("factory.changed", { paused: true, reason: message("text", { text: "kozo pause" }) }),
     ]);
     const pausedFirst = paused.tasks["K-1/t1"];
     if (pausedFirst) {
@@ -746,15 +767,33 @@ describe("holds", () => {
     expect(replay(base).tasks["K-1/t1"]?.risk).toBe("low");
     const raised = [
       ...base,
-      write("risk.raised", { from: "low", to: "normal", reason: "src changed" }, t1),
+      write(
+        "risk.raised",
+        { from: "low", to: "normal", reason: message("text", { text: "src changed" }) },
+        t1,
+      ),
     ];
     const state = replay(raised);
     expect(state.tasks["K-1/t1"]?.risk).toBe("normal");
     expect(() =>
-      applyEvent(state, write("risk.raised", { from: "normal", to: "low", reason: "x" }, t1)),
+      applyEvent(
+        state,
+        write(
+          "risk.raised",
+          { from: "normal", to: "low", reason: message("text", { text: "x" }) },
+          t1,
+        ),
+      ),
     ).toThrow("a risk tier only goes up, not from normal to low");
     expect(() =>
-      applyEvent(state, write("risk.raised", { from: "low", to: "high", reason: "x" }, t1)),
+      applyEvent(
+        state,
+        write(
+          "risk.raised",
+          { from: "low", to: "high", reason: message("text", { text: "x" }) },
+          t1,
+        ),
+      ),
     ).toThrow("K-1/t1 is rated normal, not low");
   });
 });
@@ -820,7 +859,11 @@ describe("applyEvent in place", () => {
         },
         task,
       ),
-      write("note.added", { kind: "instruction", text: "x" }, { item: "K-1", task: "K-1/t9" }),
+      write(
+        "note.added",
+        { kind: "instruction", text: message("text", { text: "x" }) },
+        { item: "K-1", task: "K-1/t9" },
+      ),
       write("plan.proposed", { plan: { ...plan(), item: "K-2" } }, item),
       write("plan.accepted", { plan: plan(), by: "human" }, item),
       write("run.changed", { from: "running", to: "succeeded" }, run),
@@ -833,8 +876,12 @@ describe("applyEvent in place", () => {
           task: "K-1/t9",
         },
       ),
-      write("risk.raised", { from: "low", to: "high", reason: "x" }, task),
-      write("task.defect", { reason: "x" }, task),
+      write(
+        "risk.raised",
+        { from: "low", to: "high", reason: message("text", { text: "x" }) },
+        task,
+      ),
+      write("task.defect", { reason: message("text", { text: "x" }) }, task),
       write("task.returned", {}, { item: "K-1", task: "K-1/t9" }),
       write("checkpoint", { head: null }, { item: "K-1", task: "K-1/t9" }),
     ];

@@ -474,7 +474,9 @@ export class GitHubSync {
         this.store,
         { item, task },
         "instruction",
-        review.body.trim() || `${review.author} requested changes`,
+        review.body.trim()
+          ? message("text", { text: review.body.trim() })
+          : message("note.changes-requested", { author: review.author }),
       );
       await this.sendBack(
         item,
@@ -504,7 +506,7 @@ export class GitHubSync {
       this.store,
       { item, task },
       "check",
-      `The CI checks ${failed.join(", ")} failed on ${head}.`,
+      message("note.ci-failed", { checks: failed.join(", "), head }),
     );
     await this.sendBack(
       item,
@@ -664,7 +666,7 @@ Part of #${issue}`;
     this.pausedBy.add(ref);
     await this.store.append({
       type: "factory.changed",
-      data: { paused: true, reason: `${login} put kozo:paused on ${ref}` },
+      data: { paused: true, reason: message("factory.paused-label", { login, ref }) },
     });
   }
 

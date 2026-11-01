@@ -91,7 +91,7 @@ export class RunRecords {
         type: "factory.changed",
         data: {
           paused: true,
-          reason: `three sessions in a row failed on the API; the last: ${reason}`.slice(0, 500),
+          reason: message("factory.api-failures", { reason: reason.slice(0, 500) }),
         },
       });
       this.apiFailures = 0;

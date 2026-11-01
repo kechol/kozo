@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { ListKind, Message, Reference } from "@kozo/core";
+import { type ListKind, type Message, type Reference, render } from "@kozo/core";
 
 const parsed = (row: Record<string, unknown> | null, columns: readonly string[]) => {
   if (!row) return row;
@@ -176,15 +176,14 @@ export function heldBefore(db: Database, task: string, reason: Message): boolean
   );
 }
 
-/** What the task's last node said when it did not pass, or null when it passed. */
+/** What the task's last node said when it did not pass, in English, or null when it passed. */
 export function lastFailure(db: Database, task: string): string | null {
-  return (
-    db
-      .query<{ failure: string | null }, [string]>(
-        "select last_failure as failure from tasks where ref = ?",
-      )
-      .get(task)?.failure ?? null
-  );
+  const failure = db
+    .query<{ failure: string | null }, [string]>(
+      "select last_failure as failure from tasks where ref = ?",
+    )
+    .get(task)?.failure;
+  return failure ? render(JSON.parse(failure) as Message, "en") : null;
 }
 
 /** Local midnight on the day of `now`, where the daily budget starts again. */

@@ -818,7 +818,7 @@ describe("the minimal path", () => {
       .all();
     expect(exits[0]).toMatchObject({
       ok: 0,
-      summary: expect.stringContaining("the diff conflicts with the latest main"),
+      summary: expect.stringContaining('"code":"stage.conflict"'),
     });
     // The task reached Handoff, final-verify sent it back to Building, and a new implement
     // session ran from there.
@@ -1421,7 +1421,7 @@ describe("the minimal path", () => {
     expect(env.store.state.items[ref]?.notes.at(-1)).toMatchObject({
       target: task,
       kind: "check",
-      text: expect.stringContaining("DONE_WHEN is not met"),
+      text: { code: "note.check-failed", values: { level: "full", branch: "main" } },
     });
     expect(env.store.state.tasks[task]?.defectAt).not.toBeNull();
   }, 180_000);
@@ -1505,7 +1505,7 @@ describe("the minimal path", () => {
         class: "bugfix",
         from: "L2",
         to: "L1",
-        reason: `a post-merge defect in ${task}`,
+        reason: { code: "demotion.defect", values: { task } },
       }),
     ]);
     const charter = await readCharter(env.repo.path, "local", env.store.state);
@@ -2586,7 +2586,7 @@ test("one unit is still counted", () => {
       .get();
     expect(delivered?.n).toBe(1);
     expect(env.store.state.items[ref]?.notes).toMatchObject([
-      { target: task, kind: "instruction", text: "Keep 0 as Sold out." },
+      { target: task, kind: "instruction", text: { values: { text: "Keep 0 as Sold out." } } },
     ]);
     expect(env.store.state.tasks[task]?.stage).toBe("handoff");
   }, 120_000);
@@ -2636,6 +2636,6 @@ test("one unit is still counted", () => {
       await env.settle();
     }
     expect(env.store.state).toMatchObject({ paused: true });
-    expect(env.store.state.pausedReason).toStartWith("three sessions in a row failed on the API");
+    expect(env.store.state.pausedReason?.code).toBe("factory.api-failures");
   }, 120_000);
 });

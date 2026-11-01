@@ -1,4 +1,5 @@
 import { type AutonomyLevel, type Charter, type WorkClass, workClassSchema } from "./charter.ts";
+import { type Message, message } from "./message.ts";
 import { autonomyLevel, demotionKey, type FactoryState, type TaskState } from "./state.ts";
 
 /** How many merged diffs, all autonomous and free of defects, call for a promotion proposal. */
@@ -51,16 +52,16 @@ export function demotionDue(
   state: FactoryState,
   repository: string,
   workClass: WorkClass,
-): string | null {
+): Message | null {
   const since = state.demotions[demotionKey(repository, workClass)]?.at ?? "";
   const diffs = mergedDiffs(state, repository, workClass);
   const defect = diffs.find((task) => task.defectAt !== null && task.defectAt > since);
-  if (defect) return `a post-merge defect in ${defect.ref}`;
+  if (defect) return message("demotion.defect", { task: defect.ref });
   const recent = diffs.filter((task) => (task.merged?.at ?? "") > since).slice(-interventionWindow);
   if (recent.length < interventionWindow) return null;
   const intervened = recent.filter((task) => task.humanCommits || task.sentBack).length;
   return intervened / recent.length > interventionLimit
-    ? `a human intervened in ${intervened} of the last ${recent.length} merged diffs`
+    ? message("demotion.intervention", { intervened, recent: recent.length })
     : null;
 }
 

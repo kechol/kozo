@@ -137,7 +137,7 @@ export const eventSchema = z
     ),
     /** The factory's ID, drawn once at its first start and written into branch names. */
     event("factory.created", z.strictObject({ factory_id: factoryIdSchema })),
-    event("factory.changed", z.strictObject({ paused: z.boolean(), reason: text })),
+    event("factory.changed", z.strictObject({ paused: z.boolean(), reason: messageSchema })),
     /** An applied factory definition named this GitHub repository for the first time. */
     event(
       "factory.repository",
@@ -146,7 +146,10 @@ export const eventSchema = z
     /** The factory definition at `commit` validated and is in use for runs that start after. */
     event("factory.applied", z.strictObject({ commit: text })),
     /** The factory definition at `commit` did not validate; the one in use stays. */
-    event("factory.refused", z.strictObject({ commit: text, issues: z.array(text).nonempty() })),
+    event(
+      "factory.refused",
+      z.strictObject({ commit: text, issues: z.array(messageSchema).nonempty() }),
+    ),
     /** kozod lowered a class of a repository one level for its record since the last demotion. */
     event(
       "factory.demoted",
@@ -157,7 +160,7 @@ export const eventSchema = z
         to: autonomyLevelSchema,
         /** The SHA-256 of the Charter text it demoted from; an edited Charter ends the demotion. */
         charter_sha: sha256,
-        reason: text,
+        reason: messageSchema,
       }),
     ),
     /** A human pruned the records of `runs`, whose items closed before `before`, to their logs. */
@@ -203,20 +206,20 @@ export const eventSchema = z
       }),
     ),
     /** A note about the event's task, or about its item when the task is null. */
-    event("note.added", z.strictObject({ kind: noteKindSchema, text })),
+    event("note.added", z.strictObject({ kind: noteKindSchema, text: messageSchema })),
     /** A human gave back a task they took; its next run starts at verify-deterministic. */
     event("task.returned", z.strictObject({})),
     event("plan.proposed", z.strictObject({ plan: planSchema })),
     event("plan.accepted", z.strictObject({ plan: planSchema, by: actor })),
     /** A check on the default branch failed after the task's merge, a post-merge defect. */
-    event("task.defect", z.strictObject({ reason: text })),
+    event("task.defect", z.strictObject({ reason: messageSchema })),
     /** kozod re-rated the event's task from its diff; a tier only ever goes up. */
     event(
       "risk.raised",
-      z.strictObject({ from: riskTierSchema, to: riskTierSchema, reason: text }),
+      z.strictObject({ from: riskTierSchema, to: riskTierSchema, reason: messageSchema }),
     ),
     event("node.enter", z.strictObject({ kind: z.enum(["D", "A"]) })),
-    event("node.exit", z.strictObject({ ok: z.boolean(), summary: text.optional() })),
+    event("node.exit", z.strictObject({ ok: z.boolean(), summary: messageSchema.optional() })),
     event("agent.message", z.strictObject({ agent: agentNameSchema, text })),
     event("tool.call", z.strictObject({ call_id: text, tool: text, input: z.unknown() })),
     /** A tool call the guard refused before it ran; the agent gets the reason instead. */

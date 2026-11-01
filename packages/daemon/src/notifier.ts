@@ -130,7 +130,13 @@ export class Notifier {
           await send(message("notice.paused", { reason: event.data.reason }));
         break;
       case "factory.refused":
-        await send(message("notice.refused", { issues: event.data.issues.join("; ") }));
+        await send(
+          message("notice.refused", {
+            issues: event.data.issues
+              .map((issue) => render(issue, this.factory().locale))
+              .join("; "),
+          }),
+        );
         break;
       case "factory.demoted":
         await send(

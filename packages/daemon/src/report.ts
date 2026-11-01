@@ -4,6 +4,7 @@ import {
   dayMs,
   type Factory,
   type FactoryState,
+  type Message,
   promotionProposals,
   type TaskState,
   waitsOnOwner,
@@ -49,7 +50,8 @@ export interface Failure {
   kind: "revise" | "escalate" | "defect" | "human-commit" | "missing-tool";
   ref: string;
   at: string;
-  text: string;
+  /** A review's own words, or a message of kozo's. */
+  text: string | Message;
 }
 
 /**
@@ -70,7 +72,11 @@ function failures(db: Database, state: FactoryState, since: string): Failure[] {
     return [{ kind: "defect", ref: task.ref, at: task.defectAt, text: note?.text ?? "" }];
   });
   const found = rows.flatMap((row): Failure[] => {
-    const failure = (kind: Failure["kind"], text = row.text ?? "") => [
+    // A message comes out of the event as its JSON; a review's summary is text.
+    const recorded = row.text?.startsWith("{")
+      ? (JSON.parse(row.text) as Message)
+      : (row.text ?? "");
+    const failure = (kind: Failure["kind"], text: string | Message = recorded) => [
       { kind, ref: row.ref, at: row.ts, text },
     ];
     if (row.type === "review.verdict" && (row.verdict === "revise" || row.verdict === "escalate"))

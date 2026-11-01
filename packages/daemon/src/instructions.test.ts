@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { message, type Plan, replay } from "@kozo/core";
+import { message, type Plan, render, replay } from "@kozo/core";
 import { eventWriter } from "@kozo/testing";
 import { taskOwnerNotes } from "./instructions.ts";
 
@@ -56,7 +56,11 @@ test("a task follows what was said about it, and about its item from its plan on
       },
       item,
     ),
-    write("note.added", { kind: "answer", text: "Add a header switcher too." }, item),
+    write(
+      "note.added",
+      { kind: "answer", text: message("text", { text: "Add a header switcher too." }) },
+      item,
+    ),
     write("plan.proposed", { plan }, item),
     write(
       "stage.changed",
@@ -70,19 +74,25 @@ test("a task follows what was said about it, and about its item from its plan on
       item,
     ),
     write("plan.accepted", { plan, by: "human" }, item),
-    write("note.added", { kind: "approval", text: "Keep JPY whole." }, item),
     write(
       "note.added",
-      { kind: "instruction", text: "Name it convert." },
+      { kind: "approval", text: message("text", { text: "Keep JPY whole." }) },
+      item,
+    ),
+    write(
+      "note.added",
+      { kind: "instruction", text: message("text", { text: "Name it convert." }) },
       {
         ...item,
         task: "K-1/t1",
       },
     ),
   ]);
-  expect(taskOwnerNotes(state, "K-1/t1").map((note) => note.text)).toEqual([
+  expect(taskOwnerNotes(state, "K-1/t1").map((note) => render(note.text, "en"))).toEqual([
     "Keep JPY whole.",
     "Name it convert.",
   ]);
-  expect(taskOwnerNotes(state, "K-1/t2").map((note) => note.text)).toEqual(["Keep JPY whole."]);
+  expect(taskOwnerNotes(state, "K-1/t2").map((note) => render(note.text, "en"))).toEqual([
+    "Keep JPY whole.",
+  ]);
 });

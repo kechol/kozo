@@ -67,15 +67,24 @@ describe("Notifier", () => {
       data: { target: "item", hold: "paused", by: "human", reason: message("hold.pause") },
     });
     await env.store.during(Bun.randomUUIDv7(), () =>
-      env.store.append({ type: "factory.changed", data: { paused: true, reason: "kozo pause" } }),
+      env.store.append({
+        type: "factory.changed",
+        data: { paused: true, reason: message("text", { text: "kozo pause" }) },
+      }),
     );
     await env.store.append({
       type: "factory.changed",
-      data: { paused: true, reason: "three sessions in a row failed on the API" },
+      data: {
+        paused: true,
+        reason: message("text", { text: "three sessions in a row failed on the API" }),
+      },
     });
     await env.store.append({
       type: "factory.refused",
-      data: { commit: "abc1234", issues: ["factory.yml: concurrency: Expected int"] },
+      data: {
+        commit: "abc1234",
+        issues: [message("text", { text: "factory.yml: concurrency: Expected int" })],
+      },
     });
     await env.notifier.settled();
     expect(env.sent).toEqual([
@@ -100,7 +109,10 @@ describe("Notifier", () => {
     });
     await env.store.append({
       type: "factory.changed",
-      data: { paused: true, reason: "three sessions in a row failed on the API" },
+      data: {
+        paused: true,
+        reason: message("text", { text: "three sessions in a row failed on the API" }),
+      },
     });
     await env.notifier.settled();
     expect(env.sent).toEqual([

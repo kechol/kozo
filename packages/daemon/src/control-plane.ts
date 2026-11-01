@@ -230,7 +230,12 @@ export class ControlPlane {
 
   /** Keeps what a human said about an item or a task for the runs that follow. */
   private async note(item: string, target: string, kind: NoteKind, text: string) {
-    await note(this.store, { item, task: target === item ? null : target }, kind, text);
+    await note(
+      this.store,
+      { item, task: target === item ? null : target },
+      kind,
+      message("text", { text }),
+    );
   }
 
   /** Moves an item or a task as a human asked, with the command that asked as the reason. */
@@ -522,7 +527,7 @@ export class ControlPlane {
     if (this.store.state.paused) return { message: "the factory is already paused" };
     await this.store.append({
       type: "factory.changed",
-      data: { paused: true, reason: "kozo pause" },
+      data: { paused: true, reason: message("factory.pause") },
     });
     return { message: "paused the factory; nothing new starts" };
   }
@@ -531,7 +536,7 @@ export class ControlPlane {
     if (!this.store.state.paused) return { message: "the factory is not paused" };
     await this.store.append({
       type: "factory.changed",
-      data: { paused: false, reason: "kozo resume" },
+      data: { paused: false, reason: message("factory.resume") },
     });
     return { message: "resumed the factory" };
   }

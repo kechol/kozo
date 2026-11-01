@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { kozoHome, message, sha256 } from "@kozo/core";
+import { kozoHome, message, render, sha256 } from "@kozo/core";
 import {
   exampleCharter,
   fakeGitHub,
@@ -376,7 +376,7 @@ describe("GitHubSync", () => {
           "select json_extract(line, '$.data.text') as text from events where type = 'note.added' and json_extract(line, '$.data.kind') = 'answer'",
         )
         .all()
-        .map((row) => row.text);
+        .map((row) => render(JSON.parse(row.text), "en"));
     await env.sync.poll();
     reply("dev", "Before the question");
     await ask("Fixes #3?");
@@ -436,7 +436,7 @@ describe("GitHubSync", () => {
     await env.sync.poll();
     expect(env.store.state).toMatchObject({
       paused: true,
-      pausedReason: `owner put kozo:paused on shop#${number}`,
+      pausedReason: { values: { login: "owner", ref: `shop#${number}` } },
     });
     await env.control.resumeFactory();
     await env.sync.poll();
@@ -684,7 +684,7 @@ describe("GitHubSync", () => {
     expect(env.store.state.items[ref]?.notes.at(-1)).toMatchObject({
       target: task,
       kind: "check",
-      text: `The CI checks test failed on ${first.head}.`,
+      text: { code: "note.ci-failed", values: { checks: "test", head: first.head } },
     });
     // While a new run takes the task through Handoff to final verification, the failing checks
     // of the earlier head say nothing about it.
@@ -741,7 +741,7 @@ describe("GitHubSync", () => {
     expect(env.store.state.tasks[task]).toMatchObject({ stage: "building", handoffFixes: 1 });
     expect(env.store.state.items[ref]?.notes.at(-1)).toMatchObject({
       kind: "instruction",
-      text: "Keep 0 as Sold out",
+      text: { values: { text: "Keep 0 as Sold out" } },
     });
 
     const third = await handOff("building");

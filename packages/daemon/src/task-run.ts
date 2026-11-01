@@ -33,6 +33,7 @@ import { taskOwnerNotes } from "./instructions.ts";
 import { atLeast, layersFor } from "./risk.ts";
 import type { RunnerDeps } from "./runner.ts";
 import type { Envelope, SessionResult } from "./session-pump.ts";
+import { cutValues } from "./transitions.ts";
 import { taskBranch, worktreePath } from "./worktrees.ts";
 
 export type Node = BlueprintNode;
@@ -109,7 +110,7 @@ interface Halt {
   hold: "attention" | "question";
   reason: Message;
   /** What the node's exit says, the reason when unset. */
-  summary?: string;
+  summary?: Message;
   end: "succeeded" | "failed" | "lost";
   why?: Message;
   ok?: boolean;
@@ -227,12 +228,12 @@ export class BlueprintRun {
     await this.runner.store.append({ ...this.envelope, node, type: "node.enter", data: { kind } });
   }
 
-  async exit(node: Node, ok: boolean, summary?: string) {
+  async exit(node: Node, ok: boolean, summary?: Message) {
     await this.runner.store.append({
       ...this.envelope,
       node,
       type: "node.exit",
-      data: { ok, ...(summary ? { summary: summary.slice(0, 2000) } : {}) },
+      data: { ok, ...(summary ? { summary: cutValues(summary) } : {}) },
     });
   }
 
@@ -243,7 +244,7 @@ export class BlueprintRun {
 
   /** Ends the run at `node` with the task held for a human. */
   async halt(node: Node, held: Halt): Promise<RunEnd> {
-    await this.exit(node, held.ok ?? false, held.summary ?? render(held.reason, "en"));
+    await this.exit(node, held.ok ?? false, held.summary ?? held.reason);
     await this.runner.hold(
       this.item.ref,
       this.task.ref,
@@ -257,8 +258,9 @@ export class BlueprintRun {
 
   /** Ends the run to try again; the next attempt reads the reason and `details` in English. */
   async retry(node: Node, reason: Message, details?: string): Promise<RunEnd> {
-    const failure = details ? `${render(reason, "en")}:\n${details}` : render(reason, "en");
-    await this.exit(node, false, failure);
+    const summary = details ? message("node.failure", { reason, details }) : reason;
+    const failure = render(summary, "en");
+    await this.exit(node, false, summary);
     await this.runner.endRun(this.run, "failed", reason);
     return { kind: "retry", failure, rounds: this.charter.limits.no_progress_rounds };
   }
@@ -271,8 +273,10 @@ export class BlueprintRun {
   }
 
   /** A failed final verification goes back to Building until the fix rounds run out. */
-  async backToBuilding(node: Node, why: string, reason: Message): Promise<RunEnd> {
-    await this.exit(node, false, why);
+  async backToBuilding(node: Node, reason: Message, details?: string): Promise<RunEnd> {
+    const summary = details ? message("node.failure", { reason, details }) : reason;
+    const why = render(summary, "en");
+    await this.exit(node, false, summary);
     const fixes = this.runner.store.state.tasks[this.task.ref]?.handoffFixes ?? 0;
     if (fixes < this.charter.limits.ci_fix_rounds) return await this.sendBack(why, reason);
     await this.runner.hold(

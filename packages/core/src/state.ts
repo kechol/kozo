@@ -1,6 +1,6 @@
 import type { AutonomyLevel, Charter, WorkClass } from "./charter.ts";
 import type { Event, EventType, NoteKind } from "./event.ts";
-import type { Message } from "./message.ts";
+import { type Message, render } from "./message.ts";
 import type { Plan } from "./plan.ts";
 import type { ReviewVerdict } from "./verdict.ts";
 import {
@@ -27,7 +27,7 @@ export interface Note {
   /** The item or task reference the note is about. */
   target: string;
   kind: NoteKind;
-  text: string;
+  text: Message;
 }
 
 export interface ItemState {
@@ -126,7 +126,7 @@ export interface Demotion {
   from: AutonomyLevel;
   to: AutonomyLevel;
   charterSha: string;
-  reason: string;
+  reason: Message;
   at: string;
 }
 
@@ -137,7 +137,7 @@ export interface FactoryState {
   /** The factory's ID from `factory.created`, null only before kozod first starts. */
   factoryId: string | null;
   paused: boolean;
-  pausedReason: string | null;
+  pausedReason: Message | null;
   /**
    * The commit of the factory definition last applied, and of the last one refused since; both
    * null while the definition is not a git repository.
@@ -726,7 +726,8 @@ export function inOrder(state: FactoryState): { items: ItemState[]; tasks: TaskS
 
 /** Why a task may not start a run now, or null when it may. */
 export function startBlocker(state: FactoryState, task: TaskState): string | null {
-  if (state.paused) return `the factory is paused: ${state.pausedReason}`;
+  if (state.paused)
+    return `the factory is paused: ${state.pausedReason ? render(state.pausedReason, "en") : ""}`;
   const item = state.items[task.item];
   if (item?.hold) return `${item.ref} is held by ${item.hold.kind}`;
   if (task.hold) return `${task.ref} is held by ${task.hold.kind}`;

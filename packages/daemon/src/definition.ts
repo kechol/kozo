@@ -1,4 +1,4 @@
-import type { KozoHome } from "@kozo/core";
+import { type KozoHome, type Message, message } from "@kozo/core";
 import {
   type Definition,
   type DefinitionResult,
@@ -115,7 +115,13 @@ async function recordRefused(
   if (store.state.definition.refused === result.commit) return false;
   await store.append({
     type: "factory.refused",
-    data: { commit: result.commit, issues: [first, ...rest] },
+    data: {
+      commit: result.commit,
+      issues: [first, ...rest].map((issue) => message("text", { text: issue })) as [
+        Message,
+        ...Message[],
+      ],
+    },
   });
   return true;
 }
