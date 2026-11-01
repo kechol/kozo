@@ -29,6 +29,14 @@ export default defineConfig({
             { label: 'Installation', translations: { ja: 'インストール' }, slug: 'installation' },
           ],
         },
+        {
+          label: 'Guides',
+          translations: { ja: 'ガイド' },
+          items: [
+            { label: 'GitHub mode', translations: { ja: 'GitHub モード' }, slug: 'github-mode' },
+            { label: 'Dashboard', translations: { ja: 'ダッシュボード' }, slug: 'dashboard' },
+          ],
+        },
       ],
     }),
   ],
