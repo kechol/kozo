@@ -64,7 +64,7 @@ mode while it runs.
 kozo admin install ~/src/shop
 ```
 
-In GitHub mode kozod opens a pull request named **Install kozo** from the branch
+In GitHub mode kozod opens a pull request named **Install kozo**, in the repository's `locale`, from the branch
 `kozo/<factory ID>/install`. It adds the same files as in local mode, and
 `.github/workflows/kozo.yml`, which runs `kozo check .` on every pull request. Before you merge
 it:

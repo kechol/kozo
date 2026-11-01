@@ -13,6 +13,13 @@ kozo admin init
 
 `kozo admin init` は、kozo のテンプレートを `~/.kozo/factory` に書き出してコミットします。ここは独立した git リポジトリです。factory definition には、`factory.yml`、agents、skills、blueprints、automations が入っています。kozod はこのリポジトリのデフォルトブランチの先端から読むので、変更はコミットしてはじめて効きます。
 
+kozo の表示を日本語にするには、`~/.kozo/factory/factory.yml` の `locale` を `ja` にしてコミットします。
+
+```sh
+sed -i.bak 's/^locale: en$/locale: ja/' ~/.kozo/factory/factory.yml && rm ~/.kozo/factory/factory.yml.bak
+git -C ~/.kozo/factory commit -am "Show kozo in Japanese"
+```
+
 ## 2. リポジトリを登録する
 
 kozo はローカルのクローンで作業します。`~/.kozo/factory/factory.yml` の `repositories` に、作業させるリポジトリを足します。
@@ -67,7 +74,7 @@ factory definition、各リポジトリの Charter と constraints、`claude` �
 kozo up
 ```
 
-`kozo up` は kozod をバックグラウンドで起動し、`kozod is up: http://127.0.0.1:7420` と表示します。kozod のログは `~/.kozo/kozod.log` に書かれます。いま何をしているかは `kozo status` で見られます。
+`kozo up` は kozod をバックグラウンドで起動し、`kozod を起動しました: http://127.0.0.1:7420`（`locale: en` なら `kozod is up: http://127.0.0.1:7420`）と表示します。kozod のログは `~/.kozo/kozod.log` に書かれます。いま何をしているかは `kozo status` で見られます。
 
 ## 6. 依頼を追加する
 

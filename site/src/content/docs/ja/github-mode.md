@@ -56,7 +56,7 @@ repositories:
 kozo admin install ~/src/shop
 ```
 
-GitHub モードでは、kozod がブランチ `kozo/<factory ID>/install` から **Install kozo** という pull request を開きます。追加されるファイルは local モードと同じで、ほかに `.github/workflows/kozo.yml` が加わります。このワークフローは、pull request のたびに `kozo check .` を実行します。マージする前に、次を済ませます。
+GitHub モードでは、kozod がブランチ `kozo/<factory ID>/install` から **kozo を導入する**（リポジトリの `locale` が `en` なら **Install kozo**）という pull request を開きます。追加されるファイルは local モードと同じで、ほかに `.github/workflows/kozo.yml` が加わります。このワークフローは、pull request のたびに `kozo check .` を実行します。マージする前に、次を済ませます。
 
 1. `AGENTS.md` にリポジトリの説明を書く。
 2. `.kozo/constraints.yml` と `.kozo/verify-app.md` のコマンドを、リポジトリのものに置き換える。
@@ -118,7 +118,7 @@ kozod は、作業している Issue ごとに **status comment** を 1 つ置�
 
 ## pull request
 
-タスクがすべての確認を通ると、kozod はそのブランチ `kozo/<factory ID>/<n>-t<t>`（`<n>` は Issue の番号）を push し、デフォルトブランチへの pull request を開きます。タイトルはタスクの目的で、本文は handoff report のあとに `Part of #<n>` を続けたものです。下書き（draft）ではなく、すぐレビューできる状態で開きます。
+タスクがすべての確認を通ると、kozod はそのブランチ `kozo/<factory ID>/<n>-t<t>`（`<n>` は Issue の番号）を push し、デフォルトブランチへの pull request を開きます。タイトルはタスクの目的で、本文は handoff report のあとに `#<n> の一部です`（`en` なら `Part of #<n>`）を続けたものです。下書き（draft）ではなく、すぐレビューできる状態で開きます。
 
 そのあと kozod は、pull request の動きを追います。
 
