@@ -9,6 +9,23 @@ function issuesOf(text: string) {
 }
 
 describe("parseCharter", () => {
+  test("words its issues in a locale, kozo's own and zod's alike", () => {
+    const result = parseCharter(
+      example
+        .replace("isolation: worktree", "isolation: docker")
+        .replace("version: 1", "version: one"),
+      "ja",
+    );
+    if (result.ok) throw new Error("expected the Charter to be rejected");
+    expect(result.issues).toContain(
+      "isolation: worktree を指定します。kozo の隔離の方法はこれだけです",
+    );
+    expect(result.issues.find((issue) => issue.startsWith("version:"))).toMatch(/[ぁ-ん]/);
+    expect(issuesOf(example.replace("isolation: worktree", "isolation: docker"))).toContain(
+      "isolation: Use worktree, the only isolation kozo has",
+    );
+  });
+
   test("parses the example Charter", () => {
     const result = parseCharter(example);
     expect(result.ok).toBe(true);

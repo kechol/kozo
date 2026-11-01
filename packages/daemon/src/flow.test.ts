@@ -1778,7 +1778,12 @@ describe("the minimal path", () => {
       reason: {
         code: "hold.draft-refused",
         values: {
-          issues: "t1 is estimated at 500 lines in 2 files, over the Charter's 60 lines in 4 files",
+          issues: [
+            {
+              code: "plan.too-big",
+              values: { task: "t1", lines: 500, files: 2, maxLines: 60, maxFiles: 4 },
+            },
+          ],
         },
       },
     });

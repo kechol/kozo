@@ -1,4 +1,4 @@
-import type { Charter, Plan, PlanTask } from "@kozo/core";
+import { type Charter, type Message, message, type Plan, type PlanTask } from "@kozo/core";
 import { globMatcher, protectedPathMatcher } from "@kozo/verify";
 
 /**
@@ -11,25 +11,34 @@ export function checkPlan(
   plan: Plan,
   charter: Charter,
   files: readonly string[],
-): { plan: Plan; issues: string[] } {
+): { plan: Plan; issues: Message[] } {
   const { limits, protected_paths } = charter;
-  const issues: string[] = [];
+  const issues: Message[] = [];
   if (plan.tasks.length > limits.max_tasks_per_item) {
     issues.push(
-      `the plan has ${plan.tasks.length} tasks, more than the Charter's max_tasks_per_item of ${limits.max_tasks_per_item}`,
+      message("plan.too-many-tasks", {
+        count: plan.tasks.length,
+        limit: limits.max_tasks_per_item,
+      }),
     );
   }
   for (const task of plan.tasks) {
     if (task.estimate.lines > limits.max_changed_lines || task.estimate.files > limits.max_files) {
       issues.push(
-        `${task.id} is estimated at ${task.estimate.lines} lines in ${task.estimate.files} files, over the Charter's ${limits.max_changed_lines} lines in ${limits.max_files} files`,
+        message("plan.too-big", {
+          task: task.id,
+          lines: task.estimate.lines,
+          files: task.estimate.files,
+          maxLines: limits.max_changed_lines,
+          maxFiles: limits.max_files,
+        }),
       );
     }
   }
 
   const byId = new Map(plan.tasks.map((task) => [task.id, task]));
   const cycle = dependencyCycle(plan.tasks, byId);
-  if (cycle) issues.push(`the dependencies form a cycle: ${cycle.join(" -> ")}`);
+  if (cycle) issues.push(message("plan.cycle", { cycle: cycle.join(" -> ") }));
 
   // Tasks joined by a dependency run one after the other, so only the others must not overlap.
   const matchers = new Map(plan.tasks.map((task) => [task.id, globMatcher(task.scope)]));
@@ -41,7 +50,7 @@ export function checkPlan(
   plan.tasks.forEach((a, index) => {
     for (const b of plan.tasks.slice(index + 1)) {
       if (reaches(a, b.id, byId) || reaches(b, a.id, byId) || !overlap(a, b)) continue;
-      issues.push(`${a.id} and ${b.id} share scope, but neither depends on the other`);
+      issues.push(message("plan.shared-scope", { a: a.id, b: b.id }));
     }
   });
 
@@ -54,26 +63,25 @@ export function checkPlan(
         : task.depends_on.length === 0;
       if (!chained) {
         issues.push(
-          `a migration's tasks form one chain in order, so ${task.id} depends on ${before ? `${before.id} alone` : "no task"}`,
+          before
+            ? message("plan.migration-after", { task: task.id, before: before.id })
+            : message("plan.migration-first", { task: task.id }),
         );
       }
     });
     const [first] = plan.tasks;
     if (first && !first.characterize) {
-      issues.push(
-        `a migration starts with a task that characterizes: ${first.id} must add tests that pin the behaviour the migration keeps`,
-      );
+      issues.push(message("plan.migration-start", { task: first.id }));
     }
   }
   for (const task of plan.tasks) {
     if (task.characterize && task.codemod !== undefined)
-      issues.push(`${task.id} characterizes, so it adds tests only and runs no codemod`);
+      issues.push(message("plan.characterize-codemod", { task: task.id }));
   }
 
   const carried = new Set(plan.tasks.flatMap((task) => task.done_when.map((text) => text.trim())));
   for (const condition of plan.done_when) {
-    if (!carried.has(condition.trim()))
-      issues.push(`no task's done_when repeats the item's DONE_WHEN condition "${condition}"`);
+    if (!carried.has(condition.trim())) issues.push(message("plan.done-when", { condition }));
   }
 
   const guarded = protected_paths.map(protectedPathMatcher);

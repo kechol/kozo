@@ -92,7 +92,7 @@ const exists = (path: string) =>
 
 async function checkPath(directory: string, t: Words): Promise<Check[]> {
   if ((await exists(join(directory, "factory.yml"))) || (await exists(join(directory, "agents")))) {
-    return [definitionCheck(await readDefinition(directory, null), directory, t)];
+    return [definitionCheck(await readDefinition(directory, null, t.locale), directory, t)];
   }
   if (await exists(join(directory, ".kozo"))) {
     const read = (path: string) =>
@@ -140,7 +140,7 @@ function documentChecks(
   t: Words,
 ): Check[] {
   const checks: Check[] = [];
-  const charter = charterText === null ? null : parseCharter(charterText);
+  const charter = charterText === null ? null : parseCharter(charterText, t.locale);
   if (!charter)
     checks.push({
       name: `${repository} Charter`,
@@ -160,7 +160,7 @@ function documentChecks(
       detail: t("cli.check-charter-status", { status: charter.value.status }),
     });
   else checks.push({ name: `${repository} Charter`, status: "ok", detail: t("cli.check-ready") });
-  const constraints = constraintsText === null ? null : parseConstraints(constraintsText);
+  const constraints = constraintsText === null ? null : parseConstraints(constraintsText, t.locale);
   if (!constraints)
     checks.push({
       name: `${repository} constraints`,
@@ -193,7 +193,7 @@ async function checkFactory(t: Words): Promise<Check[]> {
   let definition: Definition | null = null;
   try {
     const tip = await definitionTip(home.factory);
-    const result = await readDefinition(home.factory, tip);
+    const result = await readDefinition(home.factory, tip, t.locale);
     checks.push(definitionCheck(result, home.factory, t));
     if (result.ok) definition = result.definition;
   } catch (error) {

@@ -4,10 +4,12 @@ import { join, resolve } from "node:path";
 import {
   type Automation,
   type Blueprint,
+  errorsIn,
   type Factory,
   factorySchema,
   factoryTemplate,
   issueText,
+  type Locale,
   parseAutomation,
   parseBlueprint,
   type WorkClass,
@@ -43,7 +45,11 @@ function expandHome(path: string): string {
  * The text of a `factory.yml` merged over the built-in settings key by key and checked, with `~`
  * expanded in repository paths, or null with the problems added to `issues`.
  */
-export function parseFactoryConfig(text: string, issues: string[]): Factory | null {
+export function parseFactoryConfig(
+  text: string,
+  issues: string[],
+  locale: Locale = "en",
+): Factory | null {
   let overrides: unknown;
   try {
     overrides = Bun.YAML.parse(text) ?? {};
@@ -55,9 +61,9 @@ export function parseFactoryConfig(text: string, issues: string[]): Factory | nu
     issues.push("factory.yml: expected a mapping");
     return null;
   }
-  const result = factorySchema.safeParse({ ...builtInFactory, ...overrides });
+  const result = factorySchema.safeParse({ ...builtInFactory, ...overrides }, errorsIn(locale));
   if (!result.success) {
-    issues.push(...result.error.issues.map((issue) => `factory.yml: ${issueText(issue)}`));
+    issues.push(...result.error.issues.map((issue) => `factory.yml: ${issueText(issue, locale)}`));
     return null;
   }
   const factory = result.data;
@@ -133,6 +139,7 @@ export async function definitionTip(directory: string): Promise<string | null> {
 export async function readDefinition(
   directory: string,
   commit: string | null,
+  locale: Locale = "en",
 ): Promise<DefinitionResult> {
   const issues: string[] = [];
   const template = factoryTemplate as Record<string, string | undefined>;
@@ -163,7 +170,7 @@ export async function readDefinition(
     }
   };
 
-  const factory = parseFactoryConfig(await read("factory.yml"), issues);
+  const factory = parseFactoryConfig(await read("factory.yml"), issues, locale);
   const agents: Partial<Record<DefinedAgent, AgentDefinition>> = {};
   for (const agent of definedAgents) {
     const path = `agents/${agent}/agent.md` as const;
@@ -180,7 +187,7 @@ export async function readDefinition(
     const path = `blueprints/${workClass}.yml`;
     const text = await readOptional(path);
     if (text === null) continue;
-    const result = parseBlueprint(text);
+    const result = parseBlueprint(text, locale);
     if (result.ok) blueprints[workClass] = result.value;
     else issues.push(...result.issues.map((issue) => `${path}: ${issue}`));
   }

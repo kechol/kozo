@@ -4,6 +4,7 @@ import {
   addItemSchema,
   type EvalCaseRequest,
   type Event,
+  errorsIn,
   evalCaseRequestSchema,
   helloProof,
   type Install,
@@ -417,13 +418,13 @@ export function createApi({
   });
 
   app.post("/api/items", async (c) => {
-    const body = addItemSchema.safeParse(await jsonBody(c));
+    const body = addItemSchema.safeParse(await jsonBody(c), errorsIn(locale()));
     if (!body.success)
       return error(
         c,
         400,
         message("api.invalid-item"),
-        body.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+        body.error.issues.map((issue) => issueText(issue, locale())),
       );
     return c.json(await commands.addItem(body.data), 201);
   });
@@ -442,13 +443,13 @@ export function createApi({
         message("api.verb-kind", { kind: parsedReference.kind, verb: verb.data }),
       );
     }
-    const body = verbBodySchemas[verb.data].safeParse(await jsonBody(c));
+    const body = verbBodySchemas[verb.data].safeParse(await jsonBody(c), errorsIn(locale()));
     if (!body.success) {
       return error(
         c,
         400,
         message("api.invalid-verb", { verb: verb.data }),
-        body.error.issues.map((i) => `${i.path.join(".") || "<body>"}: ${i.message}`),
+        body.error.issues.map((issue) => issueText(issue, locale())),
       );
     }
     if (!exists(ref)) return error(c, 404, message("api.missing", { ref }));
@@ -460,21 +461,36 @@ export function createApi({
   app.post("/api/factory/resume", async (c) => c.json(await commands.resumeFactory()));
   app.post("/api/admin/db-rebuild", async (c) => c.json(await commands.rebuildIndex()));
   app.post("/api/admin/install", async (c) => {
-    const body = installSchema.safeParse(await jsonBody(c));
+    const body = installSchema.safeParse(await jsonBody(c), errorsIn(locale()));
     if (!body.success)
-      return error(c, 400, message("api.invalid-install"), body.error.issues.map(issueText));
+      return error(
+        c,
+        400,
+        message("api.invalid-install"),
+        body.error.issues.map((issue) => issueText(issue, locale())),
+      );
     return c.json(await commands.install(body.data));
   });
   app.post("/api/admin/eval-case", async (c) => {
-    const body = evalCaseRequestSchema.safeParse(await jsonBody(c));
+    const body = evalCaseRequestSchema.safeParse(await jsonBody(c), errorsIn(locale()));
     if (!body.success)
-      return error(c, 400, message("api.invalid-eval"), body.error.issues.map(issueText));
+      return error(
+        c,
+        400,
+        message("api.invalid-eval"),
+        body.error.issues.map((issue) => issueText(issue, locale())),
+      );
     return c.json(await commands.evalCase(body.data));
   });
   app.post("/api/admin/prune", async (c) => {
-    const body = pruneSchema.safeParse(await jsonBody(c));
+    const body = pruneSchema.safeParse(await jsonBody(c), errorsIn(locale()));
     if (!body.success)
-      return error(c, 400, message("api.invalid-prune"), body.error.issues.map(issueText));
+      return error(
+        c,
+        400,
+        message("api.invalid-prune"),
+        body.error.issues.map((issue) => issueText(issue, locale())),
+      );
     return c.json(await commands.prune(body.data));
   });
 

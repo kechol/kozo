@@ -28,7 +28,13 @@ export const cutValues = ({ code, values }: Message): Message => ({
   values: Object.fromEntries(
     Object.entries(values).map(([name, value]) => [
       name,
-      typeof value === "string" ? cut(value) : typeof value === "object" ? cutValues(value) : value,
+      typeof value === "string"
+        ? cut(value)
+        : Array.isArray(value)
+          ? value.map(cutValues)
+          : typeof value === "object"
+            ? cutValues(value)
+            : value,
     ]),
   ),
 });

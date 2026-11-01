@@ -560,4 +560,32 @@ as refs/remotes/origin/main, or a branch name, read as refs/heads/<name>.`,
   "handoff.verify-none": "- verify: not run",
   "handoff.verification": "## Verification",
   "handoff.merge": "Merge it with: git merge --no-ff {branch}",
+  "issue.owner-name": "Use <owner>/<name>",
+  "issue.kozo-label": "kozo: labels are kozo's own",
+  "issue.github-required": "Name the GitHub repository in github mode",
+  "issue.duplicate-repository": "Another repository is also named {name}",
+  "issue.worktree-only": "Use worktree, the only isolation kozo has",
+  "issue.gate-name": "Use lowercase letters, digits and -",
+  "issue.gate-once": "List each gate once",
+  "issue.prove-files": "Put {files} where the test files go",
+  "issue.gate-undefined": 'Gate "{name}" is not defined in gates',
+  "issue.blueprint-nodes":
+    "List every node in the order {nodes}; the risk tier decides whether verify-app runs",
+  "issue.task-id": "Use t<n>",
+  "issue.codemod-line": "Write the codemod as one line of printable ASCII characters",
+  "issue.task-twice": "Task {id} is listed twice",
+  "plan.too-many-tasks":
+    "the plan has {count} tasks, more than the Charter's max_tasks_per_item of {limit}",
+  "plan.too-big":
+    "{task} is estimated at {lines} lines in {files} files, over the Charter's {maxLines} lines in {maxFiles} files",
+  "plan.cycle": "the dependencies form a cycle: {cycle}",
+  "plan.shared-scope": "{a} and {b} share scope, but neither depends on the other",
+  "plan.migration-after":
+    "a migration's tasks form one chain in order, so {task} depends on {before} alone",
+  "plan.migration-first":
+    "a migration's tasks form one chain in order, so {task} depends on no task",
+  "plan.migration-start":
+    "a migration starts with a task that characterizes: {task} must add tests that pin the behaviour the migration keeps",
+  "plan.characterize-codemod": "{task} characterizes, so it adds tests only and runs no codemod",
+  "plan.done-when": "no task's done_when repeats the item's DONE_WHEN condition \"{condition}\"",
 } as const;

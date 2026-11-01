@@ -6,7 +6,7 @@ export * from "./brief.ts";
 export * from "./charter.ts";
 export * from "./constraints.ts";
 export * from "./cron.ts";
-export { issueText, type ParseResult } from "./document.ts";
+export { errorsIn, issueText, type ParseResult } from "./document.ts";
 export * from "./eval-case.ts";
 export * from "./event.ts";
 export * from "./event-log.ts";

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { gateLevelSchema } from "./constraints.ts";
 import { type ParseResult, parseYamlDocument } from "./document.ts";
+import type { Locale } from "./message.ts";
 
 /** Every node a blueprint can run from Building to Handoff, in the only order they run in. */
 export const blueprintNodes = [
@@ -32,12 +33,13 @@ export const blueprintSchema = z
       context.addIssue({
         code: "custom",
         path: ["nodes"],
-        message: `List every node in the order ${blueprintNodes.join(", ")}; the risk tier decides whether verify-app runs`,
+        message: "issue.blueprint-nodes",
+        params: { nodes: blueprintNodes.join(", ") },
       });
     }
   });
 export type Blueprint = z.infer<typeof blueprintSchema>;
 
-export function parseBlueprint(text: string): ParseResult<Blueprint> {
-  return parseYamlDocument(blueprintSchema, text);
+export function parseBlueprint(text: string, locale: Locale = "en"): ParseResult<Blueprint> {
+  return parseYamlDocument(blueprintSchema, text, locale);
 }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type ParseResult, parseYamlDocument } from "./document.ts";
+import type { Locale } from "./message.ts";
 
 export const workClassSchema = z.enum([
   "docs",
@@ -24,7 +25,7 @@ export const charterSchema = z.strictObject({
   version: z.literal(1),
   status: z.enum(["ready", "incomplete"]),
   // A worktree per task is the only isolation kozo has; a value that changed nothing would mislead.
-  isolation: z.literal("worktree", { error: "Use worktree, the only isolation kozo has" }),
+  isolation: z.literal("worktree", { error: "issue.worktree-only" }),
   protected_paths: z.array(z.string().min(1)),
   existing_tests_protected: z.boolean(),
   levels: z.strictObject({
@@ -55,6 +56,6 @@ export const charterSchema = z.strictObject({
 });
 export type Charter = z.infer<typeof charterSchema>;
 
-export function parseCharter(text: string): ParseResult<Charter> {
-  return parseYamlDocument(charterSchema, text);
+export function parseCharter(text: string, locale: Locale = "en"): ParseResult<Charter> {
+  return parseYamlDocument(charterSchema, text, locale);
 }

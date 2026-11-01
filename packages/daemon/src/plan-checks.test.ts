@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { type Charter, type Plan, type PlanTask, parseCharter } from "@kozo/core";
+import { type Charter, type Plan, type PlanTask, parseCharter, render } from "@kozo/core";
 import { suiteBase } from "@kozo/testing";
 import { checkPlan } from "./plan-checks.ts";
+
+/** checkPlan with its issues in English, as the plan agent reads them. */
+const checked = (...args: Parameters<typeof checkPlan>) => {
+  const result = checkPlan(...args);
+  return { ...result, issues: result.issues.map((issue) => render(issue, "en")) };
+};
 
 const parsed = parseCharter(suiteBase[".kozo/charter.yml"] ?? "");
 if (!parsed.ok) throw new Error(parsed.issues.join("; "));
@@ -33,7 +39,7 @@ const planOf = (tasks: PlanTask[], done_when = tasks.flatMap((entry) => entry.do
 describe("checkPlan", () => {
   test("takes a plan of independent tasks with disjoint scopes as it is", () => {
     const plan = planOf([task("t1"), task("t2", { scope: ["docs/**"] })]);
-    expect(checkPlan(plan, charter, files)).toEqual({ plan, issues: [] });
+    expect(checked(plan, charter, files)).toEqual({ plan, issues: [] });
   });
 
   test("takes a migration as one chain from a task that characterizes", () => {
@@ -43,9 +49,9 @@ describe("checkPlan", () => {
       task("t2", { depends_on: ["t1"], codemod: "npx codemod" }),
       task("t3", { depends_on: ["t2"] }),
     ];
-    expect(checkPlan(migration(chain), charter, files).issues).toEqual([]);
+    expect(checked(migration(chain), charter, files).issues).toEqual([]);
     expect(
-      checkPlan(
+      checked(
         migration([
           task("t1"),
           task("t2", { depends_on: ["t1"] }),
@@ -69,7 +75,7 @@ describe("checkPlan", () => {
       task("t2", { depends_on: ["t1"] }),
       task("t3", { depends_on: ["t2"] }),
     ]);
-    expect(checkPlan(plan, charter, files).issues).toEqual([
+    expect(checked(plan, charter, files).issues).toEqual([
       "the dependencies form a cycle: t1 -> t3 -> t2 -> t1",
     ]);
   });
@@ -79,25 +85,25 @@ describe("checkPlan", () => {
       task("t1", { scope: ["src/**"] }),
       task("t2", { scope: ["src/stock.ts"] }),
     ]);
-    expect(checkPlan(shared, charter, files).issues).toEqual([
+    expect(checked(shared, charter, files).issues).toEqual([
       "t1 and t2 share scope, but neither depends on the other",
     ]);
     const byFile = planOf([
       task("t1", { scope: ["src/*.ts"] }),
       task("t2", { scope: ["src/stock*"] }),
     ]);
-    expect(checkPlan(byFile, charter, files).issues).toHaveLength(1);
+    expect(checked(byFile, charter, files).issues).toHaveLength(1);
     const chained = planOf([
       task("t1", { scope: ["src/**"] }),
       task("t2", { scope: ["docs/**"], depends_on: ["t1"] }),
       task("t3", { scope: ["src/stock.ts"], depends_on: ["t2"] }),
     ]);
-    expect(checkPlan(chained, charter, files).issues).toEqual([]);
+    expect(checked(chained, charter, files).issues).toEqual([]);
   });
 
   test("refuses an item DONE_WHEN condition that no task repeats", () => {
     const plan = planOf([task("t1")], ["t1 is done", "The notice shows on the product page"]);
-    expect(checkPlan(plan, charter, files).issues).toEqual([
+    expect(checked(plan, charter, files).issues).toEqual([
       `no task's done_when repeats the item's DONE_WHEN condition "The notice shows on the product page"`,
     ]);
   });
@@ -107,7 +113,7 @@ describe("checkPlan", () => {
     const tasks = Array.from({ length: count }, (_, index) =>
       task(`t${index + 1}`, index === 1 ? { estimate: { lines: 61, files: 2 } } : {}),
     );
-    expect(checkPlan(planOf(tasks), charter, files).issues).toEqual([
+    expect(checked(planOf(tasks), charter, files).issues).toEqual([
       `the plan has ${count} tasks, more than the Charter's max_tasks_per_item of ${charter.limits.max_tasks_per_item}`,
       "t2 is estimated at 61 lines in 2 files, over the Charter's 60 lines in 4 files",
     ]);
@@ -115,8 +121,8 @@ describe("checkPlan", () => {
 
   test("raises the risk of a task that reaches a protected path or covers every file", () => {
     for (const scope of [["db/**"], ["db/migrations/002.sql"], ["**"]]) {
-      expect(checkPlan(planOf([task("t1", { scope })]), charter, files).plan.risk).toBe("high");
+      expect(checked(planOf([task("t1", { scope })]), charter, files).plan.risk).toBe("high");
     }
-    expect(checkPlan(planOf([task("t1")]), charter, files).plan.risk).toBe("low");
+    expect(checked(planOf([task("t1")]), charter, files).plan.risk).toBe("low");
   });
 });

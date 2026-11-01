@@ -3,7 +3,7 @@ import { type ParseResult, parseYamlDocument } from "./document.ts";
 import { type Locale, localeSchema } from "./message.ts";
 import { agentNameSchema } from "./work-model.ts";
 
-const githubRepository = z.string().regex(/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/, "Use <owner>/<name>");
+const githubRepository = z.string().regex(/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/, "issue.owner-name");
 
 const agentSettings = z.strictObject({ model: z.string().min(1) });
 
@@ -14,7 +14,7 @@ export const repositorySchema = z.strictObject({
   label: z
     .string()
     .min(1)
-    .refine((label) => !label.startsWith("kozo:"), "kozo: labels are kozo's own")
+    .refine((label) => !label.startsWith("kozo:"), "issue.kozo-label")
     .optional(),
   /** The language of what belongs to this repository; the factory's `locale` when unset. */
   locale: localeSchema.optional(),
@@ -44,7 +44,7 @@ export const factorySchema = z
         context.addIssue({
           code: "custom",
           path: ["repositories", index, "github"],
-          message: "Name the GitHub repository in github mode",
+          message: "issue.github-required",
         });
         return;
       }
@@ -55,7 +55,8 @@ export const factorySchema = z
         context.addIssue({
           code: "custom",
           path: ["repositories", index, "github"],
-          message: `Another repository is also named ${name}`,
+          message: "issue.duplicate-repository",
+          params: { name },
         });
       }
       names.add(name);

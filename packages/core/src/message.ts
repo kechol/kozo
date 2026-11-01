@@ -18,14 +18,25 @@ const codes = Object.keys(en) as [MessageCode, ...MessageCode[]];
 /** Text kozo words itself, kept as a code with values and rendered only when shown. */
 export interface Message {
   code: MessageCode;
-  /** A value is text, a number, or a message of its own that renders in the same locale. */
+  /**
+   * A value is text, a number, a message of its own that renders in the same locale, or a list
+   * of messages that renders as one sentence after another.
+   */
   values: Record<string, Value>;
 }
-type Value = string | number | Message;
+type Value = string | number | Message | Message[];
 
 export const messageSchema: z.ZodType<Message> = z.strictObject({
   code: z.enum(codes),
-  values: z.record(z.string(), z.union([z.string(), z.number(), z.lazy(() => messageSchema)])),
+  values: z.record(
+    z.string(),
+    z.union([
+      z.string(),
+      z.number(),
+      z.lazy(() => messageSchema),
+      z.array(z.lazy(() => messageSchema)),
+    ]),
+  ),
 });
 
 /** The message of `code`, which takes exactly the values its English sentence names. */
@@ -38,10 +49,18 @@ export function message<Code extends MessageCode>(
 
 const catalogs: Record<Locale, Record<MessageCode, string>> = { en, ja };
 
+// How a list of messages joins into one text.
+const separators: Record<Locale, string> = { en: "; ", ja: "。" };
+
+/** Whether `text` names a message, as a schema's own issue does. */
+export const isMessageCode = (text: string): text is MessageCode => text in en;
+
 /** The sentence of `message` in `locale`, with its values in place. */
 export function render(message: Message, locale: Locale): string {
   return catalogs[locale][message.code].replace(/\{(\w+)\}/g, (_, name: string) => {
     const value = message.values[name] ?? "";
+    if (Array.isArray(value))
+      return value.map((entry) => render(entry, locale)).join(separators[locale]);
     return typeof value === "object" ? render(value, locale) : String(value);
   });
 }

@@ -570,4 +570,34 @@ item の <ref> は K-<n> か <repo>#<n>、タスクは <item>/t<n>、run は r-<
   "handoff.verify-none": "- verify: 実行していません",
   "handoff.verification": "## 確認の結果",
   "handoff.merge": "マージするには: git merge --no-ff {branch}",
+  "issue.owner-name": "<owner>/<name> の形にします",
+  "issue.kozo-label": "kozo: で始まるラベルは kozo のものです",
+  "issue.github-required": "github モードでは GitHub のリポジトリを指定します",
+  "issue.duplicate-repository": "ほかのリポジトリも {name} という名前です",
+  "issue.worktree-only": "worktree を指定します。kozo の隔離の方法はこれだけです",
+  "issue.gate-name": "英小文字、数字、- を使います",
+  "issue.gate-once": "各 gate は 1 回だけ書きます",
+  "issue.prove-files": "テストファイルを置く位置に {files} を書きます",
+  "issue.gate-undefined": "gate「{name}」が gates にありません",
+  "issue.blueprint-nodes":
+    "すべてのノードを {nodes} の順に書きます。verify-app を実行するかどうかは risk tier が決めます",
+  "issue.task-id": "t<n> の形にします",
+  "issue.codemod-line": "codemod は、印字できる ASCII 文字の 1 行で書きます",
+  "issue.task-twice": "タスク {id} が 2 回書かれています",
+  "plan.too-many-tasks":
+    "計画のタスクは {count} 件で、Charter の max_tasks_per_item（{limit}）を超えています",
+  "plan.too-big":
+    "{task} の見積もりは {files} ファイル {lines} 行で、Charter の上限（{maxFiles} ファイル {maxLines} 行）を超えています",
+  "plan.cycle": "依存関係が循環しています（{cycle}）",
+  "plan.shared-scope": "{a} と {b} は scope が重なっていますが、どちらも他方に依存していません",
+  "plan.migration-after":
+    "migration のタスクは順に 1 本の鎖になるので、{task} は {before} だけに依存します",
+  "plan.migration-first":
+    "migration のタスクは順に 1 本の鎖になるので、{task} はどのタスクにも依存しません",
+  "plan.migration-start":
+    "migration は振る舞いを記録するタスクから始まります。{task} で、migration が保つ振る舞いを固定するテストを足してください",
+  "plan.characterize-codemod":
+    "{task} は振る舞いを記録するタスクなので、テストを足すだけで codemod は実行しません",
+  "plan.done-when":
+    "item の DONE_WHEN の条件「{condition}」を、どのタスクの done_when も繰り返していません",
 };

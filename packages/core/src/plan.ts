@@ -6,7 +6,7 @@ import { riskTierSchema } from "./work-model.ts";
 
 const text = z.string().min(1);
 const conditions = z.array(text).nonempty();
-const taskId = z.string().regex(/^t[1-9][0-9]*$/, "Use t<n>");
+const taskId = z.string().regex(/^t[1-9][0-9]*$/, "issue.task-id");
 
 export const planTaskSchema = z.strictObject({
   id: taskId,
@@ -22,9 +22,7 @@ export const planTaskSchema = z.strictObject({
    * is printable ASCII on one line, so the plan a human approves shows all of it as it runs:
    * no control, bidirectional or invisible character can hide part of it.
    */
-  codemod: text
-    .regex(/^[\x20-\x7e]+$/, "Write the codemod as one line of printable ASCII characters")
-    .optional(),
+  codemod: text.regex(/^[\x20-\x7e]+$/, "issue.codemod-line").optional(),
 });
 export type PlanTask = z.infer<typeof planTaskSchema>;
 
@@ -44,7 +42,8 @@ function checkTasks(plan: { tasks: PlanTask[] }, context: z.RefinementCtx) {
       context.addIssue({
         code: "custom",
         path: ["tasks", index, "id"],
-        message: `Task ${task.id} is listed twice`,
+        message: "issue.task-twice",
+        params: { id: task.id },
       });
     }
     ids.add(task.id);

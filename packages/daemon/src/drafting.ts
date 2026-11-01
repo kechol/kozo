@@ -3,6 +3,7 @@ import {
   highestTask,
   issueText,
   itemLevel,
+  type Message,
   message,
   numberAfter,
   type Plan,
@@ -47,7 +48,7 @@ export async function draftItem(runner: Runner, itemRef: string, agent: "triage"
   const checkout = triageCheckoutPath(runner.home, repository.path, itemRef);
   await detachedCheckout(runner.home, repository.path, checkout, repository.tip);
   try {
-    let refused: string[] = [];
+    let refused: Message[] = [];
     for (let round = 1; round <= draftRounds; round += 1) {
       const drafted = await draftPlan(
         runner,
@@ -88,9 +89,9 @@ async function draftPlan(
   repository: Repository,
   file: ItemFile,
   checkout: string,
-  refused: readonly string[],
+  refused: readonly Message[],
   round: number,
-): Promise<{ plan: Plan | null } | { refused: string[] }> {
+): Promise<{ plan: Plan | null } | { refused: Message[] }> {
   const definition = runner.deps.definition.current;
   const run = await runner.startRun(
     { item: itemRef, task: null },
@@ -120,7 +121,7 @@ async function draftPlan(
     ),
     ...(refused.length > 0
       ? [
-          `REFUSED     kozod refused your previous draft; draft again without these issues: ${wrapRequest(refused.map((issue) => `- ${issue}`).join("\n"))}`,
+          `REFUSED     kozod refused your previous draft; draft again without these issues: ${wrapRequest(refused.map((issue) => `- ${render(issue, "en")}`).join("\n"))}`,
         ]
       : []),
     "Answer with the plan draft or the question, matching the JSON Schema you were given.",
@@ -176,10 +177,10 @@ async function draftPlan(
     await runner.endRun(run, "succeeded");
     return { plan: null };
   }
-  const issues: string[] = [];
+  const issues: Message[] = [];
   let proposed: Plan | null = null;
   if (!answer.success) {
-    issues.push(...answer.error.issues.map(issueText));
+    issues.push(...answer.error.issues.map((issue) => message("text", { text: issueText(issue) })));
   } else if (answer.data.outcome === "plan") {
     const item = runner.store.state.items[itemRef];
     const draft = planSchema.safeParse(
@@ -188,7 +189,10 @@ async function draftPlan(
         item ? highestTask(item) : 0,
       ),
     );
-    if (!draft.success) issues.push(...draft.error.issues.map(issueText));
+    if (!draft.success)
+      issues.push(
+        ...draft.error.issues.map((issue) => message("text", { text: issueText(issue) })),
+      );
     else {
       const files = await listFiles(repository.path, repository.tip);
       const checked = checkPlan(draft.data, repository.charter, files);
@@ -201,13 +205,7 @@ async function draftPlan(
       await runner.endRun(run, "failed", message("run.draft-refused"));
       return { refused: issues };
     }
-    await runner.hold(
-      itemRef,
-      null,
-      "attention",
-      message("hold.draft-refused", { issues: issues.join("; ") }),
-      run,
-    );
+    await runner.hold(itemRef, null, "attention", message("hold.draft-refused", { issues }), run);
     await runner.endRun(run, "failed", message("run.draft-refused"));
     return { plan: null };
   }
