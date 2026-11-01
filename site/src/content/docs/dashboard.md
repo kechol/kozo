@@ -70,7 +70,8 @@ The board shows every item, or with **Tasks** every task, as cards in stage colu
 to Cancelled. The address keeps the view, so a link opens the same one.
 
 - An item card shows its reference, its autonomy level, the title, any hold, the work class, and
-  how many of its tasks are done, held or ready to merge.
+  how many of its tasks are done, held or ready to merge. Under them it lists its tasks, each with
+  its goal and its hold, its wait for a merge or else its stage; selecting one opens it in the pane.
 - A task card shows its reference, its goal, any hold, whether it is ready to merge, and how many
   revisions review asked for.
 - Complete and Cancelled are folded to their count; open one to see its ten newest cards.

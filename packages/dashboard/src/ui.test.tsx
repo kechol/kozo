@@ -4,15 +4,17 @@ import { render } from "preact";
 import { act } from "preact/test-utils";
 import { type Action, ActionButton, Composer, cancelAction } from "./actions.tsx";
 import { AddItem } from "./add-item.tsx";
+import { Board } from "./board.tsx";
+import { route } from "./format.ts";
 import { Api, type InboxRow } from "./api.ts";
 import { Header } from "./header.tsx";
 import { Inbox } from "./inbox.tsx";
-import { inbox, locale, refreshedAt, status, toasts } from "./store.ts";
+import { inbox, items, locale, refreshedAt, status, tasks, toasts } from "./store.ts";
 
 // The components run in a DOM of their own; the globals they read are put back afterwards, so
 // the other test files keep Bun's own.
 const window = new Window({ url: "http://127.0.0.1:7420/" });
-const globals = ["window", "document", "Node", "HTMLElement", "KeyboardEvent"] as const;
+const globals = ["window", "document", "Node", "HTMLElement", "KeyboardEvent", "history"] as const;
 const saved = globals.map((name) => [name, Reflect.get(globalThis, name)] as const);
 
 beforeAll(() => {
@@ -191,6 +193,50 @@ describe("Composer", () => {
     expect((root.querySelector("textarea") as HTMLTextAreaElement).value).toBe("");
     await mount(<Composer key="K-12" api={api} refName="K-12" actions={plan} />);
     expect((root.querySelector("textarea") as HTMLTextAreaElement).value).toBe("Split t2");
+  });
+});
+
+describe("Board", () => {
+  test("lists an item's tasks on its card, each opening in the pane", async () => {
+    const task = (id: string, goal: string, stage: string, hold: string | null) => ({
+      ref: `K-9/${id}`,
+      item: "K-9",
+      goal,
+      stage,
+      hold,
+      hold_reason: null,
+      revisions: 0,
+      awaiting_merge: 0,
+      updated_at: "2026-11-01T00:00:00Z",
+    });
+    items.value = [
+      {
+        ref: "K-9",
+        title: "Validate coupon codes",
+        stage: "building",
+        shown_stage: "building",
+      } as never,
+    ];
+    tasks.value = [
+      task("t1", "Reject malformed codes", "complete", null),
+      task("t2", "Show the same message", "building", "question"),
+    ];
+    status.value = null;
+    refreshedAt.value = new Date();
+    await mount(<Board api={answering({ status: 200, body: {} })} asked="items" />);
+    const rows = [...root.querySelectorAll(".card-tasks li")].map((row) => [
+      row.querySelector("a")?.getAttribute("href"),
+      row.textContent,
+    ]);
+    expect(rows).toEqual([
+      ["#/board?view=items&ref=K-9%2Ft1", "t1Reject malformed codescomplete"],
+      ["#/board?view=items&ref=K-9%2Ft2", "t2Show the same messageQuestion"],
+    ]);
+    items.value = [];
+    tasks.value = [];
+    route.value = { page: "inbox" };
+    refreshedAt.value = null;
+    await mount(null);
   });
 });
 

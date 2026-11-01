@@ -791,6 +791,8 @@ select:focus-visible {
 .board-card {
   position: relative;
   display: grid;
+  /* A card's one-line task goals are cut to the card rather than widening it. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2);
   padding: var(--space-3);
   transition: background-color var(--duration-hover) var(--ease);
@@ -875,6 +877,64 @@ select:focus-visible {
 
 .tally progress::-moz-progress-bar {
   background: var(--positive-solid);
+}
+
+/* The tasks sit above the link that covers the card, so each opens on its own. */
+.card-tasks {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  margin: 0 calc(-1 * var(--space-2));
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}
+
+.card-tasks li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.card-tasks li:has(.card-task[aria-current="true"]) {
+  background: var(--secondary-bg);
+}
+
+@media (hover: hover) {
+  .card-tasks li:has(.card-task:hover) {
+    background: var(--hover);
+  }
+}
+
+.card-task {
+  display: flex;
+  flex: 1;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.card-task .ref {
+  flex: none;
+  color: var(--muted);
+  font-size: inherit;
+}
+
+.card-task-goal {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-task-stage {
+  flex: none;
+  color: var(--tone-fg);
 }
 
 .reorder {

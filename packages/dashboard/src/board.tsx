@@ -15,6 +15,7 @@ import {
 import { Icon } from "./icons.tsx";
 import { Loading, Placeholder, Unread } from "./placeholder.tsx";
 import { items, loaded, problem, run, status, tasks } from "./store.ts";
+import { toneOf } from "./tone.ts";
 import { stageName, t } from "./words.ts";
 
 /**
@@ -59,9 +60,12 @@ export function Board({ api, asked }: { api: Api; asked?: BoardView }) {
   // A factory with one repository need not say which one each card is in.
   const several = (status.value?.repositories.length ?? 0) > 1;
   const repositoryOf = new Map(allItems.map((item) => [item.ref, item.repository]));
-  // Each card counts its item's tasks, so they are counted in one pass rather than per card.
+  // Each card counts and lists its item's tasks, so they are gathered in one pass rather than
+  // per card.
   const tally = new Map<string, Tally>();
+  const taskLists = new Map<string, TaskRow[]>();
   for (const task of tasks.value) {
+    taskLists.set(task.item, [...(taskLists.get(task.item) ?? []), task]);
     const count = tally.get(task.item) ?? { done: 0, total: 0, held: 0, merge: 0 };
     count.total += 1;
     if (task.stage === "complete") count.done += 1;
@@ -120,6 +124,7 @@ export function Board({ api, asked }: { api: Api; asked?: BoardView }) {
                   api={api}
                   item={card as ItemRow}
                   tally={tally.get(card.ref)}
+                  tasks={taskLists.get(card.ref) ?? []}
                   repository={several ? (card as ItemRow).repository : undefined}
                   up={closed ? undefined : moveTarget(column, order, index, "up")}
                   down={closed ? undefined : moveTarget(column, order, index, "down")}
@@ -200,6 +205,7 @@ function ItemCard({
   api,
   item,
   tally,
+  tasks,
   repository,
   up,
   down,
@@ -207,6 +213,7 @@ function ItemCard({
   api: Api;
   item: ItemRow;
   tally: Tally | undefined;
+  tasks: TaskRow[];
   repository: string | undefined;
   up: string | null | undefined;
   down: string | null | undefined;
@@ -236,6 +243,7 @@ function ItemCard({
           <progress value={tally.done} max={tally.total} aria-hidden="true" />
         </div>
       ) : null}
+      {tasks.length > 0 ? <CardTasks tasks={tasks} /> : null}
       {up !== undefined || down !== undefined ? (
         <div class="row reorder">
           <button
@@ -259,6 +267,40 @@ function ItemCard({
         </div>
       ) : null}
     </article>
+  );
+}
+
+/**
+ * An item's tasks on its card, each opening in the pane: its number and goal, then its hold, its
+ * wait for a merge or else its stage, so the board need not switch to tasks to show how each goes.
+ */
+function CardTasks({ tasks }: { tasks: TaskRow[] }) {
+  const open = route.value.ref;
+  return (
+    <ul class="card-tasks">
+      {tasks.map((task) => (
+        <li key={task.ref}>
+          <a
+            href={detailHash(task.ref)}
+            class="card-task"
+            title={task.goal}
+            aria-current={task.ref === open ? "true" : undefined}
+          >
+            <span class="ref">{task.ref.slice(task.ref.lastIndexOf("/") + 1)}</span>
+            <span class="card-task-goal">{task.goal}</span>
+          </a>
+          {task.hold ? (
+            <HoldBadge hold={task.hold} />
+          ) : task.awaiting_merge ? (
+            <HoldBadge hold="merge" />
+          ) : (
+            <span class={`card-task-stage ${toneOf("stage", task.stage)}`}>
+              {stageName(task.stage)}
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 
