@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { link, mkdir, symlink } from "node:fs/promises";
 import { join } from "node:path";
+import { render } from "@kozo/core";
 import { tempDirectory } from "@kozo/testing";
 import { guardToolCall, type TaskPolicy } from "./guard.ts";
 import { parseShell } from "./shell.ts";
@@ -215,11 +216,20 @@ describe("guardToolCall", () => {
     });
   });
 
+  test("a refusal names its reason as a message, read in English by the agent and in a locale by people", async () => {
+    await withPolicy(async (policy) => {
+      const decision = await guardToolCall("Bash", { command: "git push" }, policy);
+      if (decision.allow) throw new Error("expected git push to be refused");
+      expect(render(decision.reason, "en")).toBe("git push: only kozod pushes");
+      expect(render(decision.reason, "ja")).toBe("git push: push するのは kozod だけです");
+    });
+  });
+
   test("keeps the file tools inside the worktree, out of .git and away from what a task may not write", async () => {
     await withPolicy(async (policy, root) => {
       const reasons = async (tool: string, input: object) => {
         const decision = await guardToolCall(tool, input, policy);
-        return decision.allow ? "allowed" : decision.reason;
+        return decision.allow ? "allowed" : render(decision.reason, "en");
       };
       expect(await reasons("Read", { file_path: join(root, "outside.sh") })).toContain(
         "outside the worktree",

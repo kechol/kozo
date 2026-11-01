@@ -1,5 +1,6 @@
 import { lstatSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { type Message, type MessageCode, message } from "@kozo/core";
 import { globMatcher, isNewTestCase, protectedPathMatcher } from "@kozo/verify";
 import type { GuardDecision } from "./coding-agent.ts";
 import { parseShell, ShellParseError, type Word } from "./shell.ts";
@@ -20,8 +21,11 @@ export interface TaskPolicy {
   baseFiles?: ReadonlySet<string>;
 }
 
+/** The codes of why a command is refused, which every refusal of it quotes. */
+type WhyCode = Extract<MessageCode, `guard.why.${string}`>;
+
 const allow: GuardDecision = { allow: true };
-const refuse = (reason: string): GuardDecision => ({ allow: false, reason });
+const refuse = (reason: Message): GuardDecision => ({ allow: false, reason });
 
 /** The real path of `path`, resolving symbolic links through its nearest existing ancestor. */
 function realPath(path: string): string {
@@ -55,7 +59,7 @@ function insideWorktree(policy: TaskPolicy, path: string): string | null {
  * symbolic link on the way, which the shell could re-point after the check, or a file with
  * several hard links, which may be one outside the worktree.
  */
-function linkProblem(policy: TaskPolicy, path: string): string | null {
+function linkProblem(policy: TaskPolicy, path: string): Message | null {
   const absolute = isAbsolute(path) ? path : resolve(policy.worktree, path);
   // The worktree itself may sit below a symbolic link, such as /var on macOS; only what lies
   // below it is the agent's to have made.
@@ -72,28 +76,28 @@ function linkProblem(policy: TaskPolicy, path: string): string | null {
     } catch {
       return null;
     }
-    if (stats.isSymbolicLink()) return `${path} goes through a symbolic link`;
-    if (stats.isFile() && stats.nlink > 1) return `${path} has more than one hard link`;
+    if (stats.isSymbolicLink()) return message("guard.symlink", { path });
+    if (stats.isFile() && stats.nlink > 1) return message("guard.hard-link", { path });
   }
   return null;
 }
 
 function checkRead(policy: TaskPolicy, path: unknown): GuardDecision {
   if (path === undefined) return allow;
-  if (typeof path !== "string") return refuse("the path is not text");
-  if (insideWorktree(policy, path) === null) return refuse(`${path} is outside the worktree`);
+  if (typeof path !== "string") return refuse(message("guard.not-text"));
+  if (insideWorktree(policy, path) === null) return refuse(message("guard.outside", { path }));
   const problem = linkProblem(policy, path);
   return problem ? refuse(problem) : allow;
 }
 
 function checkWrite(policy: TaskPolicy, path: unknown): GuardDecision {
-  if (typeof path !== "string") return refuse("the path is not text");
+  if (typeof path !== "string") return refuse(message("guard.not-text"));
   const rel = insideWorktree(policy, path);
-  if (rel === null) return refuse(`${path} is outside the worktree`);
+  if (rel === null) return refuse(message("guard.outside", { path }));
   const problem = linkProblem(policy, path);
   if (problem) return refuse(problem);
   if (policy.protectedPaths.some((pattern) => protectedPathMatcher(pattern)(rel))) {
-    return refuse(`${rel} is a protected path; ask with kozo_blocked if it must change`);
+    return refuse(message("guard.protected", { path: rel }));
   }
   // A test case that did not exist at the base may go outside the scope; its "new" comes from
   // the base, so an agent may also edit the test it wrote itself.
@@ -103,37 +107,37 @@ function checkWrite(policy: TaskPolicy, path: unknown): GuardDecision {
     !policy.baseFiles.has(rel) &&
     isNewTestCase(rel, policy.tests);
   if (!globMatcher(policy.scope)(rel) && !newTest) {
-    return refuse(`${rel} is outside the task's scope (${policy.scope.join(", ")})`);
+    return refuse(message("guard.out-of-scope", { path: rel, scope: policy.scope.join(", ") }));
   }
   if (policy.existingTests.has(rel)) {
-    return refuse(`${rel} is an existing test, which this repository does not let a task change`);
+    return refuse(message("guard.existing-test", { path: rel }));
   }
   return allow;
 }
 
 // Commands that act outside the worktree in ways the sandbox cannot see, or hand out access.
-const refusedCommands = new Map([
-  ["gh", "the factory alone talks to GitHub"],
-  ["hub", "the factory alone talks to GitHub"],
-  ["glab", "the factory alone talks to a forge"],
-  ["sudo", "commands run as the worker's own user"],
-  ["su", "commands run as the worker's own user"],
-  ["doas", "commands run as the worker's own user"],
-  ["alias", "aliases would hide what a later command runs"],
-  ["nohup", "nothing may keep running after its command"],
-  ["setsid", "nothing may keep running after its command"],
-  ["disown", "nothing may keep running after its command"],
-  ["crontab", "nothing may be scheduled outside the run"],
-  ["at", "nothing may be scheduled outside the run"],
-  ["launchctl", "nothing may be started outside the run"],
-  ["systemctl", "nothing may be started outside the run"],
-  ["osascript", "it runs outside the sandbox"],
-  ["open", "it runs outside the sandbox"],
-  ["docker", "it runs outside the sandbox"],
-  ["podman", "it runs outside the sandbox"],
-  ["ssh", "the run has no network beyond this machine"],
-  ["scp", "the run has no network beyond this machine"],
-  ["kozo", "the gates run through the kozo_gates tool"],
+const refusedCommands = new Map<string, WhyCode>([
+  ["gh", "guard.why.github"],
+  ["hub", "guard.why.github"],
+  ["glab", "guard.why.forge"],
+  ["sudo", "guard.why.own-user"],
+  ["su", "guard.why.own-user"],
+  ["doas", "guard.why.own-user"],
+  ["alias", "guard.why.alias"],
+  ["nohup", "guard.why.keeps-running"],
+  ["setsid", "guard.why.keeps-running"],
+  ["disown", "guard.why.keeps-running"],
+  ["crontab", "guard.why.scheduled"],
+  ["at", "guard.why.scheduled"],
+  ["launchctl", "guard.why.started"],
+  ["systemctl", "guard.why.started"],
+  ["osascript", "guard.why.outside-sandbox"],
+  ["open", "guard.why.outside-sandbox"],
+  ["docker", "guard.why.outside-sandbox"],
+  ["podman", "guard.why.outside-sandbox"],
+  ["ssh", "guard.why.network"],
+  ["scp", "guard.why.network"],
+  ["kozo", "guard.why.gates"],
 ]);
 
 const shells = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
@@ -307,18 +311,18 @@ const gitListing: Record<string, (args: string[]) => boolean> = {
   worktree: (args) => args[0] === "list" && onlyFlags(args.slice(1), ["--porcelain"]),
 };
 
-const gitRefusedReasons: Record<string, string> = {
-  push: "only kozod pushes",
-  pull: "the task branch starts from the default branch kozod chose",
-  fetch: "the run has no network beyond this machine",
-  merge: "humans merge",
-  "update-ref": "the run may change only its task branch",
-  "symbolic-ref": "the run may change only its task branch",
-  switch: "the run stays on its task branch",
-  "filter-branch": "history outside the task branch is not the run's",
-  replace: "the run may change only its task branch",
-  submodule: "submodules change what the repository checks out",
-  bisect: "it moves HEAD off the task branch",
+const gitRefusedReasons: Record<string, WhyCode> = {
+  push: "guard.why.push",
+  pull: "guard.why.pull",
+  fetch: "guard.why.network",
+  merge: "guard.why.merge",
+  "update-ref": "guard.why.ref",
+  "symbolic-ref": "guard.why.ref",
+  switch: "guard.why.switch",
+  "filter-branch": "guard.why.history",
+  replace: "guard.why.ref",
+  submodule: "guard.why.submodule",
+  bisect: "guard.why.bisect",
 };
 
 // The options of each command that runs another, and whether each takes a value, as the next
@@ -393,12 +397,12 @@ const wrapperOptions: Record<string, Record<string, boolean>> = {
  * The command a wrapper runs, after its options, refusing an option the wrapper does not list
  * or one built from an expansion.
  */
-function wrapped(name: string, args: readonly Word[]): { command: Word[] } | { refused: string } {
+function wrapped(name: string, args: readonly Word[]): { command: Word[] } | { refused: Message } {
   const options = wrapperOptions[name] ?? {};
   let index = 0;
   while (index < args.length) {
     const word = args[index] as Word;
-    if (word.dynamic) return { refused: `${name} with an argument built from an expansion` };
+    if (word.dynamic) return { refused: message("guard.wrapper-dynamic", { name }) };
     const text = word.text;
     if (text === "--") {
       index += 1;
@@ -414,7 +418,7 @@ function wrapped(name: string, args: readonly Word[]): { command: Word[] } | { r
     const takes = options[flag];
     const attached = long ? text.includes("=") : text.length > 2;
     if (takes === undefined || (takes === false && attached)) {
-      return { refused: `${name} ${text}: an option the guard does not know` };
+      return { refused: message("guard.wrapper-option", { name, option: text }) };
     }
     if (takes === false) {
       index += 1;
@@ -423,8 +427,8 @@ function wrapped(name: string, args: readonly Word[]): { command: Word[] } | { r
     const value = attached
       ? { text: long ? text.slice(flag.length + 1) : text.slice(2), dynamic: false }
       : args[index + 1];
-    if (!value) return { refused: `${name} ${flag} without its value` };
-    if (value.dynamic) return { refused: `${name} ${flag} with a value built from an expansion` };
+    if (!value) return { refused: message("guard.wrapper-no-value", { name, flag }) };
+    if (value.dynamic) return { refused: message("guard.wrapper-dynamic-value", { name, flag }) };
     index += attached ? 1 : 2;
   }
   return { command: args.slice(index) };
@@ -455,10 +459,10 @@ function analyzeGit(args: Word[], context: Analysis): GuardDecision {
   while (words.length > 0 && words[0]?.text.startsWith("-")) {
     const option = words.shift()?.text ?? "";
     if (option === "-c" || option.startsWith("--config-env")) {
-      return refuse("git -c and --config-env would change git's configuration for the command");
+      return refuse(message("guard.git-config"));
     }
     if (/^--(git-dir|work-tree|namespace|exec-path|super-prefix|bare)/.test(option)) {
-      return refuse(`git ${option} would point git somewhere other than the worktree`);
+      return refuse(message("guard.git-elsewhere", { option }));
     }
     if (option === "-C") {
       const path = words.shift();
@@ -468,13 +472,13 @@ function analyzeGit(args: Word[], context: Analysis): GuardDecision {
         path.text.includes("{}") ||
         insideWorktree(context.policy, path.text) === null
       ) {
-        return refuse("git -C must name a directory inside the worktree");
+        return refuse(message("guard.git-c-dir"));
       }
     }
   }
   const subcommand = words.shift();
   if (!subcommand) return allow;
-  if (subcommand.dynamic) return refuse("a git subcommand built from an expansion");
+  if (subcommand.dynamic) return refuse(message("guard.git-dynamic-subcommand"));
   const name = subcommand.text;
   // A path built from an expansion may be empty, which would leave `checkout <commit> --` alone.
   const rest = words
@@ -489,38 +493,37 @@ function analyzeGit(args: Word[], context: Analysis): GuardDecision {
     const flag = words[index - 1];
     return !(takesMessage && flag && !flag.dynamic && /^(-m|--message|-F|--file)$/.test(flag.text));
   });
-  if (dynamicOption !== -1) return refuse(`git ${name}: an argument built from an expansion`);
+  if (dynamicOption !== -1) return refuse(message("guard.git-dynamic-argument", { name }));
   const reason = gitRefusedReasons[name];
-  if (reason) return refuse(`git ${name}: ${reason}`);
+  if (reason) return refuse(message("guard.git", { name, why: message(reason) }));
   // The sandbox keeps a run from writing refs/stash, so a stash fails after the call; reading
   // what is stashed is harmless.
   if (name === "stash" && rest[0] !== "list" && rest[0] !== "show") {
-    return refuse(
-      "git stash: the run keeps its changes in its worktree; commit them or keep editing",
-    );
+    return refuse(message("guard.git-stash"));
   }
   if (name === "stash") return allow;
   if (name === "grep" && rest.some(opensPager)) {
-    return refuse("git grep --open-files-in-pager runs another program");
+    return refuse(message("guard.git-pager"));
   }
   if (gitAllowed.has(name)) return allow;
   const listing = gitListing[name];
   if (listing?.(rest)) return allow;
-  if (listing) return refuse(`git ${name} ${rest.join(" ")} would change a ref or a setting`);
-  return refuse(`git ${name} is not a command a run may use`);
+  if (listing)
+    return refuse(message("guard.git-changes", { command: `${name} ${rest.join(" ")}` }));
+  return refuse(message("guard.git-unlisted", { name }));
 }
 
 function analyzeScript(text: string, context: Analysis): GuardDecision {
-  if (context.depth > 8) return refuse("the command nests too deeply to check");
+  if (context.depth > 8) return refuse(message("guard.too-deep"));
   let parsed: ReturnType<typeof parseShell>;
   try {
     parsed = parseShell(text);
   } catch (error) {
     if (error instanceof ShellParseError)
-      return refuse(`the command does not parse: ${error.message}`);
+      return refuse(message("guard.unparsed", { error: error.message }));
     throw error;
   }
-  if (parsed.background) return refuse("background jobs could change files after this check");
+  if (parsed.background) return refuse(message("guard.background"));
   const inner: Analysis = {
     ...context,
     heredocs: [...context.heredocs, ...parsed.heredocs],
@@ -547,8 +550,8 @@ async function readScript(policy: TaskPolicy, path: string): Promise<string | nu
  */
 function runScript(how: string, path: string, context: Analysis): GuardDecision {
   const script = context.scripts.get(path) ?? null;
-  if (script === null) return refuse(`${how} ${path}: only scripts inside the worktree may run`);
-  if (!context.alone) return refuse(`run ${path} in a Bash call of its own`);
+  if (script === null) return refuse(message("guard.script-outside", { how, path }));
+  if (!context.alone) return refuse(message("guard.script-alone", { path }));
   return analyzeScript(script, context);
 }
 
@@ -557,21 +560,21 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
   while (words.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]?.text ?? "")) {
     const assignment = words.shift()?.text ?? "";
     if (assignment.startsWith("GIT_"))
-      return refuse(`${assignment.split("=")[0]} would redirect git`);
+      return refuse(message("guard.redirect-git", { name: assignment.split("=")[0] ?? "" }));
   }
   const first = words[0];
   if (!first) return allow;
-  if (first.dynamic) return refuse("a command name built from an expansion");
+  if (first.dynamic) return refuse(message("guard.dynamic-command"));
   // find -exec and xargs put found paths in place of {}, so the name could be any program.
-  if (first.text.includes("{}")) return refuse("a command name that find or xargs fills in");
+  if (first.text.includes("{}")) return refuse(message("guard.filled-command"));
   const name = basename(first.text);
   const args = words.slice(1);
   const refused = refusedCommands.get(name);
-  if (refused) return refuse(`${name}: ${refused}`);
+  if (refused) return refuse(message("guard.command", { name, why: message(refused) }));
 
   if (name === "export" || name === "declare" || name === "typeset" || name === "local") {
     const git = args.find((arg) => arg.text.startsWith("GIT_"));
-    if (git) return refuse(`${git.text.split("=")[0]} would redirect git`);
+    if (git) return refuse(message("guard.redirect-git", { name: git.text.split("=")[0] ?? "" }));
     return allow;
   }
   if (name === "git") return analyzeGit(args, context);
@@ -583,38 +586,35 @@ function analyzeCommand(input: Word[], context: Analysis): GuardDecision {
     while (name === "env" && /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[0]?.text ?? "")) {
       const assignment = rest.shift()?.text ?? "";
       if (assignment.startsWith("GIT_"))
-        return refuse(`${assignment.split("=")[0]} would redirect git`);
+        return refuse(message("guard.redirect-git", { name: assignment.split("=")[0] ?? "" }));
     }
     const target = basename(rest[0]?.text ?? "");
     if (name === "xargs" && argumentsRead.has(target))
-      return refuse(
-        `xargs ${target}: xargs adds arguments from its input that the guard never reads`,
-      );
+      return refuse(message("guard.xargs", { target }));
     return analyzeCommand(rest, context);
   }
   if (name === "eval") {
-    if (args.some((arg) => arg.dynamic)) return refuse("eval of text built from an expansion");
+    if (args.some((arg) => arg.dynamic)) return refuse(message("guard.dynamic-eval"));
     return analyzeScript(args.map((arg) => arg.text).join(" "), context);
   }
   if (name === "source" || name === ".") {
     const path = args[0];
-    if (!path || path.dynamic) return refuse(`${name} of a path built from an expansion`);
+    if (!path || path.dynamic) return refuse(message("guard.dynamic-path", { name }));
     return runScript(name, path.text, context);
   }
   if (shells.has(name)) {
     const command = args.findIndex((arg) => /^-[a-z]*c[a-z]*$/.test(arg.text));
     if (command !== -1) {
       const script = args[command + 1];
-      if (!script || script.dynamic)
-        return refuse(`${name} -c with a script built from an expansion`);
+      if (!script || script.dynamic) return refuse(message("guard.dynamic-script", { name }));
       return analyzeScript(script.text, context);
     }
     const file = args.find((arg) => !arg.text.startsWith("-"));
     if (file) {
-      if (file.dynamic) return refuse(`${name} with a script path built from an expansion`);
+      if (file.dynamic) return refuse(message("guard.dynamic-script-path", { name }));
       return runScript(name, file.text, context);
     }
-    if (context.heredocs.length === 0) return refuse(`${name} reading its script from a pipe`);
+    if (context.heredocs.length === 0) return refuse(message("guard.piped-script", { name }));
     for (const heredoc of context.heredocs) {
       const decision = analyzeScript(heredoc, { ...context, heredocs: [] });
       if (!decision.allow) return decision;
@@ -691,7 +691,7 @@ export async function guardToolCall(
         typeof pattern === "string" &&
         (isAbsolute(pattern) || pattern.split("/").includes(".."))
       ) {
-        return refuse("the pattern reaches outside the worktree");
+        return refuse(message("guard.pattern-outside"));
       }
       return checkRead(policy, fields.path);
     }
@@ -699,7 +699,7 @@ export async function guardToolCall(
     case "Write":
       return checkWrite(policy, fields.file_path);
     case "Bash": {
-      if (typeof fields.command !== "string") return refuse("the command is not text");
+      if (typeof fields.command !== "string") return refuse(message("guard.command-not-text"));
       const scripts = await scriptsOf(fields.command, policy);
       return analyzeScript(fields.command, {
         policy,
@@ -713,6 +713,6 @@ export async function guardToolCall(
     case "StructuredOutput":
       return allow;
     default:
-      return tool.startsWith("mcp__kozo__") ? allow : refuse(`${tool} is not a tool a run may use`);
+      return tool.startsWith("mcp__kozo__") ? allow : refuse(message("guard.tool", { tool }));
   }
 }

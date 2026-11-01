@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { chmod } from "node:fs/promises";
 import { join } from "node:path";
+import { message } from "@kozo/core";
 import { tempDirectory } from "@kozo/testing";
 import { z } from "zod";
 import { claudeCliAgent } from "./claude-cli-agent.ts";
@@ -61,7 +62,7 @@ function request(cwd: string, records: AgentRecord[]): AgentRequest {
     pendingInstructions: async () => [],
     record: (record) => records.push(record),
     signal: new AbortController().signal,
-    guard: async (tool) => ({ allow: false, reason: `no ${tool} here` }),
+    guard: async (tool) => ({ allow: false, reason: message("guard.tool", { tool }) }),
     sandbox: { denyRead: ["/x/.kozo"], allowRead: [], allowWrite: [], denyWrite: [] },
     tools: [
       { name: "kozo_note", description: "Note.", input: { text: z.string() }, run: async () => "" },
@@ -85,7 +86,7 @@ describe("claudeCliAgent", () => {
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "deny",
-        permissionDecisionReason: "no Bash here",
+        permissionDecisionReason: "Bash is not a tool a run may use",
       },
     });
     expect(output.prompt).toBe("GOAL x");

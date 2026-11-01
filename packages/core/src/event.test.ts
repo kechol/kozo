@@ -121,7 +121,14 @@ const examples: Record<EventType, unknown> = {
   "node.exit": { ok: false, summary: { code: "run.gate-failed", values: { gate: "unit" } } },
   "agent.message": { agent: "implement", text: "The test now fails before the fix." },
   "tool.call": { call_id: "c1", tool: "gates", input: { level: "fast" } },
-  "guard.denied": { call_id: "c2", tool: "Bash", reason: "git push is not allowed" },
+  "guard.denied": {
+    call_id: "c2",
+    tool: "Bash",
+    reason: {
+      code: "guard.git",
+      values: { name: "push", why: { code: "guard.why.push", values: {} } },
+    },
+  },
   "tool.result": { call_id: "c1", is_error: false, output: "status=pass" },
   "instruction.delivered": { queue_seq: 0, text: "Keep the old label for zero." },
   checkpoint: { head: null },

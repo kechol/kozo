@@ -1,4 +1,4 @@
-import type { AgentName, Event } from "@kozo/core";
+import type { AgentName, Event, Message } from "@kozo/core";
 import type { ZodType } from "zod";
 import type { SandboxPaths } from "./task-sandbox.ts";
 
@@ -25,7 +25,7 @@ export interface Instruction {
   text: string;
 }
 
-export type GuardDecision = { allow: true } | { allow: false; reason: string };
+export type GuardDecision = { allow: true } | { allow: false; reason: Message };
 
 /** A tool that runs in the worker's own process, offered to the agent beside the built-in ones. */
 export interface AgentTool {

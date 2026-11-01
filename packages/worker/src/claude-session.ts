@@ -1,5 +1,5 @@
 import type { HookInput, HookJSONOutput, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { sha256 } from "@kozo/core";
+import { render, sha256 } from "@kozo/core";
 import {
   deniedCredentials,
   localSandbox,
@@ -103,7 +103,8 @@ export function sessionHooks(request: AgentRequest) {
         type: "guard.denied",
         data: { call_id: input.tool_use_id, tool: input.tool_name, reason: decision.reason },
       });
-      return deny(decision.reason);
+      // The agent reads the refusal in English, whatever the factory's locale.
+      return deny(render(decision.reason, "en"));
     },
 
     async afterTool(input: HookInput): Promise<HookJSONOutput> {
