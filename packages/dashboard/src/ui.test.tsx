@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { Window } from "happy-dom";
 import { render } from "preact";
 import { act } from "preact/test-utils";
-import { type Action, ActionButton, cancelAction } from "./actions.tsx";
+import { type Action, ActionButton, Composer, cancelAction } from "./actions.tsx";
 import { AddItem } from "./add-item.tsx";
 import { Api, type InboxRow } from "./api.ts";
 import { Header } from "./header.tsx";
@@ -135,6 +135,62 @@ describe("ActionButton", () => {
     expect(active()).toBe(button("Take K-2") as HTMLElement);
     await mount(rows([]));
     expect(active()).toBe(root);
+  });
+});
+
+describe("Composer", () => {
+  const plan: Action[] = [
+    {
+      verb: "approve",
+      label: "Approve plan",
+      emphasis: "primary",
+      text: { field: "text", required: false, placeholder: "Anything the runs should know" },
+    },
+    {
+      verb: "reject",
+      label: "Reject plan",
+      text: { field: "reason", required: true, placeholder: "What the plan should change" },
+    },
+  ];
+  /** An API that keeps what each verb sent, and whose reads answer empty lists. */
+  function recording() {
+    const sent: { url: string; body: unknown }[] = [];
+    const api = new Api("token", async (input, init) => {
+      if (init?.method === "POST")
+        sent.push({ url: String(input), body: JSON.parse(String(init.body)) });
+      return Response.json(init?.method === "POST" ? { message: "done" } : []);
+    });
+    return { api, sent };
+  }
+
+  test("opens one field for the verbs that take text, sending the first on Cmd+Enter", async () => {
+    const { api, sent } = recording();
+    await mount(<Composer api={api} refName="K-12" actions={plan} />);
+    const field = root.querySelector("textarea") as HTMLTextAreaElement;
+    expect(field.placeholder).toBe(
+      "Approve plan: Anything the runs should know (optional)\nReject plan: What the plan should change",
+    );
+    expect(button("Reject plan")?.disabled).toBe(true);
+    await typeInto(field, "Keep the endpoint small");
+    expect(button("Reject plan")?.disabled).toBe(false);
+    await act(async () => {
+      key(field, { key: "Enter", metaKey: true });
+      await Bun.sleep(10);
+    });
+    expect(sent).toEqual([
+      { url: "/api/refs/K-12/approve", body: { text: "Keep the endpoint small" } },
+    ]);
+    expect(field.value).toBe("");
+  });
+
+  test("keeps what was typed for a reference while the pane shows another", async () => {
+    const { api } = recording();
+    await mount(<Composer key="K-12" api={api} refName="K-12" actions={plan} />);
+    await typeInto(root.querySelector("textarea") as HTMLTextAreaElement, "Split t2");
+    await mount(<Composer key="K-14" api={api} refName="K-14" actions={plan} />);
+    expect((root.querySelector("textarea") as HTMLTextAreaElement).value).toBe("");
+    await mount(<Composer key="K-12" api={api} refName="K-12" actions={plan} />);
+    expect((root.querySelector("textarea") as HTMLTextAreaElement).value).toBe("Split t2");
   });
 });
 

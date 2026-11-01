@@ -87,8 +87,16 @@ usable; on a narrow screen the pane comes up from below. The address names both 
 reference, so a link opens the same pair, and the row or card the pane shows is marked. Escape or
 the close button closes the pane and returns to that row or card.
 
-The path from item to task to run sits above the title. The verbs sit under the title, after any hold's reason; the ones you seldom need, such as
-Pause, Take it over, Close as done and Cancel, sit behind **More**.
+The path from item to task to run sits above the title. The foot of the pane stays in view while
+the rest scrolls, so you act where you finish reading:
+
+- **What waits comes first**: what a question asks or why the work needs attention.
+- **One text field, open from the start**, serves every verb that takes text, and says what each
+  takes. A verb that needs text, such as **Answer** or **Reject plan**, waits until there is some.
+  Cmd+Enter or Ctrl+Enter sends the first verb.
+- **What you type stays** while the pane shows other references, until you send it.
+- **Close as done** and **Cancel** sit behind **More** and confirm in a dialog, as does **Take it
+  over** while the task works unhindered.
 
 ### Item
 

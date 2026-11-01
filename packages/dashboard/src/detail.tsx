@@ -1,4 +1,4 @@
-import type { Event, Verb } from "@kozo/core";
+import type { Event } from "@kozo/core";
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
@@ -6,6 +6,7 @@ import {
   ActionButton,
   actionKey,
   busyAttributes,
+  Composer,
   cancelAction,
   inboxActions,
   takeAction,
@@ -133,9 +134,6 @@ export function detailActions(
   ];
 }
 
-/** Verbs seldom wanted, which the detail view keeps behind More, closing work last. */
-const seldom = new Set<Verb>(["pause", "resume", "take", "close"]);
-
 const text = (value: unknown) => (value === null || value === undefined ? "" : String(value));
 
 /** One item, task or run: what it is, what it did and what the human can do about it. */
@@ -192,12 +190,14 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
         <div class="detail-head">
           <Placeholder />
         </div>
-        <div class="detail-main">
-          <div class="card">
-            <Placeholder lines={4} />
-          </div>
-          <div class="card">
-            <Placeholder lines={4} />
+        <div class="detail-scroll">
+          <div class="detail-main">
+            <div class="card">
+              <Placeholder lines={4} />
+            </div>
+            <div class="card">
+              <Placeholder lines={4} />
+            </div>
           </div>
         </div>
       </article>
@@ -216,8 +216,18 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
     approval,
     kind === "run" ? stage !== "running" : isClosedStage(stage),
   );
-  const shownNow = actions.filter((action) => !seldom.has(action.verb));
-  const behindMore = actions.filter((action) => seldom.has(action.verb));
+  // Closing work asks first and is seldom wanted, as is taking over a task that works unhindered.
+  const behindMore = actions.filter(
+    (action) => action.confirm || (action.verb === "take" && hold === null),
+  );
+  const shownNow = actions.filter((action) => !behindMore.includes(action));
+  // What waits for the human is what the pane was opened for, so its field takes focus, unless
+  // the field would bring up a narrow screen's keyboard over what it answers.
+  const answerNow =
+    hold !== null &&
+    hold !== "paused" &&
+    document.activeElement?.classList.contains("pane") === true &&
+    window.matchMedia("(min-width: 721px)").matches;
   const awaitingMerge = kind === "task" && Boolean(detail.task?.awaiting_merge);
   const tone = toneOf("hold", hold);
   return (
@@ -236,48 +246,55 @@ export function DetailView({ api, refName }: { api: Api; refName: string }) {
           {hold ? <HoldBadge hold={hold} approval={approval} /> : null}
           {awaitingMerge ? <HoldBadge hold="merge" /> : null}
         </div>
-        {/* What a hold asks or why it holds is what the human reads before acting, so it stands out. */}
-        {hold && reason && hold !== "approval" ? (
-          <div class={`callout ${tone}`}>
-            <Icon name={hold === "question" ? "question" : toneIcon[tone]} />
-            <p>{reason}</p>
-          </div>
-        ) : null}
-        {actions.length > 0 ? (
-          <div class="row actions">
-            {shownNow.map((action) => (
-              <ActionButton key={actionKey(action)} api={api} refName={refName} action={action} />
-            ))}
-            {behindMore.length > 0 ? (
-              <More api={api} refName={refName} actions={behindMore} />
-            ) : null}
-          </div>
-        ) : null}
       </header>
-      <div class="detail-body">
-        <div class="detail-main">
-          {kind === "item" && detail.item ? (
-            <ItemBody
-              refName={refName}
-              item={detail.item}
-              request={detail.request ?? null}
-              tasks={detail.tasks ?? []}
-            />
-          ) : null}
-          {kind === "task" && detail.task ? (
-            <TaskBody
-              api={api}
-              refName={refName}
-              task={detail.task}
-              branch={detail.diff ?? null}
-              handoff={detail.handoff ?? null}
-              records={records}
-            />
-          ) : null}
-          <Timeline api={api} refName={refName} />
+      <div class="detail-scroll">
+        <div class="detail-body">
+          <div class="detail-main">
+            {kind === "item" && detail.item ? (
+              <ItemBody
+                refName={refName}
+                item={detail.item}
+                request={detail.request ?? null}
+                tasks={detail.tasks ?? []}
+              />
+            ) : null}
+            {kind === "task" && detail.task ? (
+              <TaskBody
+                api={api}
+                refName={refName}
+                task={detail.task}
+                branch={detail.diff ?? null}
+                handoff={detail.handoff ?? null}
+                records={records}
+              />
+            ) : null}
+            <Timeline api={api} refName={refName} />
+          </div>
+          <Properties kind={kind} refName={refName} detail={detail} records={records} />
         </div>
-        <Properties kind={kind} refName={refName} detail={detail} records={records} />
       </div>
+      {/* The foot stays in view: what a hold asks or why it holds, then the verbs that settle it. */}
+      {actions.length > 0 ? (
+        <section class="dock" aria-label={t("detail.verbs")}>
+          {hold && reason && hold !== "approval" ? (
+            <div class={`callout ${tone}`}>
+              <Icon name={hold === "question" ? "question" : toneIcon[tone]} />
+              <p>{reason}</p>
+            </div>
+          ) : null}
+          <Composer
+            api={api}
+            refName={refName}
+            actions={shownNow}
+            focus={answerNow}
+            more={
+              behindMore.length > 0 ? (
+                <More api={api} refName={refName} actions={behindMore} />
+              ) : null
+            }
+          />
+        </section>
+      ) : null}
     </article>
   );
 }
@@ -291,10 +308,13 @@ function More({ api, refName, actions }: { api: Api; refName: string; actions: A
     <details
       class="more-verbs"
       onKeyDown={(event) => {
-        // A dialog opened from inside handles its own Escape.
+        // A dialog opened from inside handles its own Escape, and a closed disclosure leaves it
+        // to the pane.
         if (event.key !== "Escape" || event.defaultPrevented) return;
         if ((event.target as Element).closest("dialog")) return;
         const more = event.currentTarget;
+        if (!more.open) return;
+        event.preventDefault();
         more.open = false;
         more.querySelector("summary")?.focus();
       }}

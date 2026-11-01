@@ -231,13 +231,22 @@ main:focus {
   grid-template-columns: minmax(0, 1fr) var(--width-pane);
 }
 
+/* The pane's head and foot stay put, and only what lies between them scrolls. */
 .pane {
   position: relative;
   container-type: inline-size;
-  overflow: auto;
-  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-left: 1px solid var(--divider);
   background: var(--surface);
+}
+
+.pane > .detail {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .pane:focus {
@@ -245,11 +254,10 @@ main:focus {
 }
 
 .pane-close {
-  position: sticky;
-  top: 0;
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
   z-index: 1;
-  float: right;
-  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 0 var(--space-2);
 }
 
 /* What the pane shows is marked in the list it was opened from. */
@@ -594,6 +602,10 @@ select:focus-visible {
   color: var(--negative-fg);
 }
 
+.pane > .problem {
+  margin: var(--space-5);
+}
+
 .card,
 .panel {
   background: var(--surface);
@@ -913,12 +925,34 @@ select:focus-visible {
   }
 }
 
-.detail {
+.detail-head {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-2);
+  padding: var(--space-5) calc(var(--space-5) + var(--control-sm)) var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--divider);
 }
 
-.detail-head {
+.detail-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  background: var(--canvas);
+}
+
+.dock {
+  flex: none;
+  display: grid;
+  gap: var(--space-3);
+  max-height: 60%;
+  overflow: auto;
+  padding: var(--space-3) var(--space-5) var(--space-4);
+  border-top: 1px solid var(--divider);
+  background: var(--surface);
+}
+
+.composer {
   display: grid;
   gap: var(--space-2);
 }
@@ -1007,7 +1041,7 @@ select:focus-visible {
 
   .properties {
     position: sticky;
-    top: var(--space-6);
+    top: 0;
   }
 }
 

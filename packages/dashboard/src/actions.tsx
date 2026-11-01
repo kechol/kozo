@@ -1,4 +1,5 @@
 import type { Verb } from "@kozo/core";
+import type { ComponentChildren } from "preact";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Api } from "./api.ts";
 import { Modal } from "./dialog.tsx";
@@ -313,4 +314,119 @@ export function ActionButton({
     );
   }
   return open ? fields : opener;
+}
+
+/** What the human typed for a reference and has not sent, kept while the pane shows others. */
+const drafts = new Map<string, string>();
+
+/**
+ * The verbs of a reference, laid out open: the verbs that take text share one field, which is
+ * there from the start, and send it with their buttons; a verb that needs text waits for some,
+ * and Cmd+Enter or Ctrl+Enter sends the first. The verbs that take no text sit beside them, and
+ * `more` holds the seldom ones. When `focus` is set the field takes focus as it appears.
+ */
+export function Composer({
+  api,
+  refName,
+  actions,
+  more,
+  focus = false,
+}: {
+  api: Api;
+  refName: string;
+  actions: Action[];
+  more?: ComponentChildren;
+  focus?: boolean;
+}) {
+  const [text, setText] = useState(drafts.get(refName) ?? "");
+  const [busy, setBusy] = useState<Action | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
+  const writing = actions.filter((action) => action.text);
+  const plain = actions.filter((action) => !action.text);
+  const words = text.trim();
+  // One field serves several verbs, so it says what each takes, and which take it at will.
+  const hint =
+    writing.length === 1
+      ? writing[0]?.text?.placeholder
+      : writing
+          .map((action) =>
+            t("composer.line", {
+              verb: action.label,
+              hint: action.text?.required
+                ? (action.text.placeholder ?? "")
+                : t("composer.optional", { hint: action.text?.placeholder ?? "" }),
+            }),
+          )
+          .join("\n");
+
+  // Only as it appears: a later render must not pull focus from wherever the human moved it.
+  const focusFirst = useRef(focus);
+  useEffect(() => {
+    if (focusFirst.current) field.current?.focus();
+  }, []);
+
+  const write = (next: string) => {
+    setText(next);
+    if (next === "") drafts.delete(refName);
+    else drafts.set(refName, next);
+  };
+  const send = async (action: Action) => {
+    if (busy || (action.text?.required && words === "")) return;
+    setBusy(action);
+    setFailure(null);
+    const body = {
+      ...action.body,
+      ...(action.text && words ? { [action.text.field]: words } : {}),
+    };
+    const done = await run(
+      api,
+      () => api.act(refName, action.verb, body),
+      action.text ? setFailure : undefined,
+    );
+    setBusy(null);
+    if (done && action.text) write("");
+  };
+  const button = (action: Action) => (
+    <button
+      key={actionKey(action)}
+      type="button"
+      class={action.emphasis}
+      disabled={action.text?.required === true && words === ""}
+      aria-keyshortcuts={action === writing[0] ? "Meta+Enter Control+Enter" : undefined}
+      onClick={() => void send(action)}
+      {...busyAttributes(busy === action)}
+    >
+      {busy === action ? t("action.sending") : action.label}
+    </button>
+  );
+  return (
+    <div class="composer">
+      {writing.length > 0 ? (
+        <textarea
+          ref={field}
+          aria-label={hint}
+          placeholder={hint}
+          value={text}
+          rows={3}
+          onInput={(event) => write((event.target as HTMLTextAreaElement).value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+            event.preventDefault();
+            if (writing[0]) void send(writing[0]);
+          }}
+        />
+      ) : null}
+      {failure ? (
+        <div class="problem" role="alert">
+          {failure}
+        </div>
+      ) : null}
+      <div class="row actions">
+        {writing.map(button)}
+        {plain.map(button)}
+        {more}
+      </div>
+    </div>
+  );
 }
