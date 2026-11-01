@@ -14,7 +14,7 @@ describe("installRepositoryTemplate", () => {
 
   test("adds what is missing, keeps what exists, and a second run adds nothing", async () => {
     await using dir = await tempDirectory({ "AGENTS.md": "# Ours\n" });
-    expect(await installRepositoryTemplate(dir.path, "local")).toEqual([
+    expect(await installRepositoryTemplate(dir.path, { mode: "local" })).toEqual([
       ".kozo/charter.yml",
       ".kozo/constraints.yml",
       ".kozo/verify-app.md",
@@ -22,9 +22,14 @@ describe("installRepositoryTemplate", () => {
     ]);
     expect(await Bun.file(join(dir.path, "AGENTS.md")).text()).toBe("# Ours\n");
     expect(await readlink(join(dir.path, "CLAUDE.md"))).toBe("AGENTS.md");
-    expect(await installRepositoryTemplate(dir.path, "local")).toEqual([]);
-    expect(await installRepositoryTemplate(dir.path, "github")).toEqual([
-      ".github/workflows/kozo.yml",
-    ]);
+    expect(await installRepositoryTemplate(dir.path, { mode: "local" })).toEqual([]);
+    expect(
+      await installRepositoryTemplate(dir.path, { mode: "github", defaultBranch: "trunk" }),
+    ).toEqual([".github/workflows/kozo.yml"]);
+    // The workflow runs on pushes to the repository's own default branch.
+    const workflow = Bun.YAML.parse(
+      await Bun.file(join(dir.path, ".github/workflows/kozo.yml")).text(),
+    ) as { on: { push: { branches: string[] } } };
+    expect(workflow.on.push.branches).toEqual(["trunk"]);
   });
 });

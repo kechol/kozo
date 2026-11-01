@@ -796,7 +796,7 @@ async function installRepository(path: string, json: boolean | undefined, out: L
   const definition = await readDefinition(home.factory, tip);
   if (definition.ok && definition.definition.factory.mode === "github")
     return postAndPrint(out, json, "/api/admin/install", { repository: path });
-  const written = await installRepositoryTemplate(path, "local");
+  const written = await installRepositoryTemplate(path, { mode: "local" });
   const message =
     written.length === 0
       ? `${path} has every file kozo installs`

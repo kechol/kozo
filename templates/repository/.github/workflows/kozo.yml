@@ -3,7 +3,7 @@ name: kozo
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: ["{default_branch}"]
 permissions:
   contents: read
 jobs:

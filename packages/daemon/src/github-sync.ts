@@ -111,7 +111,10 @@ export class GitHubSync {
     const worktree = join(this.home.worktrees, `install-${sha256(repository.path).slice(0, 8)}`);
     await detachedCheckout(this.home, repository.path, worktree, tip);
     try {
-      const written = await installRepositoryTemplate(worktree, "github");
+      const written = await installRepositoryTemplate(worktree, {
+        mode: "github",
+        defaultBranch: base.branch,
+      });
       if (written.length === 0) return { message: `${github} has every file kozo installs` };
       await git(worktree, ["add", "--all"]);
       // The commit is the factory's: kozo's identity, unsigned and past the owner's hooks.
