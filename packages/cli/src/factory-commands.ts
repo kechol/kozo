@@ -672,7 +672,7 @@ export async function metricsReport(args: readonly string[], out: Lines): Promis
       const c = answer.body as unknown as CostReport;
       return [
         `today             ${dollars(c.today_usd)} of ${dollars(c.budget_usd)}`,
-        ...c.days.map((d) => `  ${d.day.slice(0, 10)}  ${dollars(d.usd)}`),
+        ...c.days.map((d) => `  ${d.day}  ${dollars(d.usd)}`),
       ];
     });
   });

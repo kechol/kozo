@@ -15,6 +15,7 @@ import {
   costToday,
   failureEvents,
   itemOwnCost,
+  localDay,
   midnightOf,
   reviewVerdicts,
 } from "./queries.ts";
@@ -136,7 +137,7 @@ export async function buildReport(
       start.setDate(start.getDate() - back);
       const end = new Date(start);
       end.setDate(end.getDate() + 1);
-      return { day: start.toISOString(), usd: costBetween(db, start, end) };
+      return { day: localDay(start), usd: costBetween(db, start, end) };
     });
     return { view, budget_usd: budget, today_usd: today, days: daily };
   }

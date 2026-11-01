@@ -183,6 +183,12 @@ export function midnightOf(now: Date): Date {
   return midnight;
 }
 
+/** The local calendar date of `date` as YYYY-MM-DD, the day the daily budget counts it in. */
+export function localDay(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 /** What the events from `from`, and before `to` when given, added to the cost. */
 export function costBetween(db: Database, from: Date, to?: Date): number {
   const bounds = [from, ...(to ? [to] : [])].map((date) => date.toISOString());

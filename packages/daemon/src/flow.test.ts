@@ -640,6 +640,30 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[taskRef]).toMatchObject({ stage: "handoff", hold: null });
   }, 120_000);
 
+  test("kozo report --cost names each day by its local calendar date, east of UTC too", async () => {
+    const zone = process.env.TZ;
+    process.env.TZ = "Asia/Tokyo";
+    try {
+      const now = new Date("2026-11-01T00:30:00+09:00");
+      await using env = await factoryOf(() => [], judgeWith("accept"), { now: () => now });
+      const report = await buildReport(
+        env.store.db,
+        env.store.state,
+        env.definition.current.factory,
+        "cost",
+        2,
+        now,
+      );
+      expect((report as { days: { day: string }[] }).days.map(({ day }) => day)).toEqual([
+        "2026-11-01",
+        "2026-10-31",
+      ]);
+    } finally {
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
+    }
+  });
+
   test("a running session holds back its limit, so a second one waits for it", async () => {
     // The fixtures' Charter lets a session spend 5 USD.
     let triages = 0;
