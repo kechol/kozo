@@ -19,7 +19,17 @@ export default defineConfig({
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/kechol/kozo' }],
       editLink: { baseUrl: 'https://github.com/kechol/kozo/edit/main/site/' },
       expressiveCode: { defaultProps: { frame: 'code' } },
-      sidebar: [],
+      sidebar: [
+        {
+          label: 'Start Here',
+          translations: { ja: 'はじめに' },
+          items: [
+            { label: 'Quick Start', translations: { ja: 'クイックスタート' }, slug: 'quick-start' },
+            { label: 'Concept', translations: { ja: 'コンセプト' }, slug: 'concept' },
+            { label: 'Installation', translations: { ja: 'インストール' }, slug: 'installation' },
+          ],
+        },
+      ],
     }),
   ],
 });
