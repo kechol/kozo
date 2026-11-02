@@ -54,6 +54,43 @@ npm --prefix site run format:check
 npm --prefix site run build
 ```
 
+## What to change together
+
+A change of one kind touches the places below in the same commit. Those marked
+*checked* fail a test when forgotten; the rest are kept by hand. How kozo is
+built is described in [docs/](docs/); start with
+[docs/architecture.md](docs/architecture.md).
+
+- **A command or a flag:** the usage in `packages/cli/src/index.ts`, its
+  Japanese usage (*checked*), `site/src/content/docs/cli.md` and `ja/cli.md`
+  (*checked*), and a changeset.
+- **A configuration key** of `factory.yml`, the Charter or the constraints: its
+  schema in `packages/core/src`, its configuration page in English and
+  Japanese (*checked*), the factory template in `templates/factory` when it has
+  a default, and a changeset.
+- **Text kozo shows:** a code in `packages/core/src/messages/en.ts` and `ja.ts`
+  with the same values (*checked*), or a word in
+  `packages/dashboard/src/words.ts` in both languages (*checked*).
+- **What the dashboard shows:** `site/src/content/docs/dashboard.md` and
+  `ja/dashboard.md`, and a changeset.
+- **An environment variable:** the table in
+  `site/src/content/docs/operations.md` and `ja/operations.md`.
+- **An event type or a persisted format:** a line in `docs/decisions.md`
+  first, the schema and its version in `packages/core/src`, `applyEvent` and
+  `recordOnlyTypes` in `packages/core/src/state.ts`, the index in
+  `packages/daemon/src/index-db.ts` and its version when its tables change,
+  `docs/data-model.md` (*checked*), and the recorded replay under
+  `testing/fixtures` when the event version changes.
+- **A stage, a hold or a move between them:** a line in `docs/decisions.md`
+  first, `packages/core/src/work-model.ts` and the edges in
+  `packages/core/src/state.ts`, a state test and a flow test,
+  `docs/lifecycle.md` (*checked*), the site's concept page in English and
+  Japanese, and the dashboard's words.
+- **A design invariant:** `AGENTS.md` and `docs/architecture.md` (*checked*).
+- **A new term:** `docs/glossary.md`, before the term is used.
+- **A runtime dependency:** a line in `docs/decisions.md` first, its license
+  checked, and `bun.lock` without registry URLs.
+
 ## Commit messages
 
 We use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`,

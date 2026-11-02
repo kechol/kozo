@@ -71,6 +71,8 @@ entries and commits are linked by IDs such as `T-012` and `D-003`.
   present an implementation plan, and **wait for approval before writing
   code**.
 - Check `docs/glossary.md` before naming a new concept (see Terms).
+- Before committing, check "What to change together" in `CONTRIBUTING.md`
+  for the kind of change.
 - When asked about past reasons, check `git log --grep` instead of guessing.
 
 ### Terms
