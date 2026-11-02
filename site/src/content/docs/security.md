@@ -9,8 +9,9 @@ own `claude`. Its design keeps three things true whatever an agent writes or a r
 - **Humans always merge.** Nothing in kozo can merge.
 - **Agents and commands stay inside the task's worktree.** They hold no credentials and reach no
   host but this machine.
-- **Only kozod acts outside.** It pushes and opens pull requests, and only after every check has
-  passed.
+- **Only kozod acts outside.** It pushes a task and opens its pull request only after every check
+  has passed; the one other pull request it opens adds kozo's own files when you run
+  `kozo admin install`.
 
 ## Two layers around every agent
 
@@ -98,7 +99,8 @@ Only kozod pushes, only the head that passed the final verification after a reba
 default branch, and only to the task's branch, with `--force-with-lease`. It reaches GitHub
 through `gh` with the account you signed in with, and refuses any gh command outside a fixed list,
 which has no merge, no change to repository settings and no free-form API call. Workers never see
-the sign-in. See [GitHub mode](../github-mode/#what-kozod-can-do-on-github).
+the sign-in. The one other push is `kozo admin install` in GitHub mode, which pushes kozo's own
+files to `kozo/<factory ID>/install` for you to review as a pull request. See [GitHub mode](../github-mode/#what-kozod-can-do-on-github).
 
 ## The local API
 

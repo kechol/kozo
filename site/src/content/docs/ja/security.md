@@ -7,7 +7,7 @@ kozo は、エージェントとリポジトリのコマンドを、人が見て
 
 - **マージはいつも人が行います。** kozo には、マージする機能がありません。
 - **エージェントとコマンドは、タスクの worktree の中にとどまります。** 認証情報を持たず、このマシン以外のホストには接続できません。
-- **外に働きかけるのは kozod だけです。** push や pull request を開くのは kozod で、すべての確認を通ったあとに限ります。
+- **外に働きかけるのは kozod だけです。** タスクを push して pull request を開くのは kozod で、すべての確認を通ったあとに限ります。ほかに kozod が開く pull request は、`kozo admin install` を実行したときに kozo のファイルを足すものだけです。
 
 ## エージェントを囲む 2 つの層
 
@@ -68,7 +68,7 @@ Charter と constraints は、確認しようとしている差分からでは�
 
 ## push と GitHub
 
-push するのは kozod だけです。対象は、最新のデフォルトブランチに rebase したあとの最後の確認を通った head だけで、送り先はタスクのブランチだけ、`--force-with-lease` を付けます。kozod は、あなたがサインインしたアカウントの `gh` を通して GitHub に触れます。決まった一覧にない gh のコマンドは拒み、その一覧には、マージ、リポジトリの設定の変更、自由な API の呼び出しが入っていません。ワーカーからは、サインインは見えません。[GitHub モード](../github-mode/#kozod-が-github-でできること) を参照してください。
+push するのは kozod だけです。対象は、最新のデフォルトブランチに rebase したあとの最後の確認を通った head だけで、送り先はタスクのブランチだけ、`--force-with-lease` を付けます。kozod は、あなたがサインインしたアカウントの `gh` を通して GitHub に触れます。決まった一覧にない gh のコマンドは拒み、その一覧には、マージ、リポジトリの設定の変更、自由な API の呼び出しが入っていません。ワーカーからは、サインインは見えません。ほかに kozod が push するのは GitHub モードの `kozo admin install` だけで、kozo のファイルを `kozo/<factory ID>/install` に push し、あなたが pull request として確かめます。[GitHub モード](../github-mode/#kozod-が-github-でできること) を参照してください。
 
 ## local API
 

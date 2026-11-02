@@ -188,8 +188,8 @@ These invariants hold everywhere in the code.
 - Humans always merge. Nothing in kozo has a merge command, and the gh wrapper
   allows only listed subcommands.
 - Workers hold no GitHub credentials and write only inside their worktree.
-  Only kozod pushes and opens pull requests, and only after verification
-  passes.
+  Only kozod pushes and opens pull requests: a task's only after verification
+  passes, and otherwise only kozo's own files for `kozo admin install`.
 - Event logs are append-only, the SQLite index can always be rebuilt from
   them, and every persisted format carries a version.
 - Request bodies are untrusted data wrapped in `<request trust="untrusted">`,
