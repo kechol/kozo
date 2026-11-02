@@ -13,6 +13,7 @@ import pkg from "../package.json" with { type: "json" };
 import { Daemon, kozodCommand } from "./daemon.ts";
 import { EgressProxy, hostAllowed } from "./egress.ts";
 import { type EvalResult, runEvalCase } from "./eval.ts";
+import { ghGitHub } from "./github.ts";
 import { processLauncher } from "./launcher.ts";
 
 export const ExitCode = { success: 0, failure: 1, usage: 2 } as const;
@@ -57,18 +58,11 @@ async function serve(out: Output): Promise<number> {
   return ExitCode.failure;
 }
 
-/** The body of an upstream GitHub issue, read with gh. */
+/** The body of an upstream GitHub issue, read through the gh wrapper. */
 async function issueBody(url: string): Promise<string> {
   const match = url.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/);
-  if (!match) throw new Error(`${url} is not a GitHub issue`);
-  const child = Bun.spawn(["gh", "api", `repos/${match[1]}/issues/${match[2]}`, "--jq", ".body"], {
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [body, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
-  if (code !== 0) throw new Error(`gh could not read ${url}`);
-  return body.replace(/\n$/, "");
+  if (!match?.[1]) throw new Error(`${url} is not a GitHub issue`);
+  return (await ghGitHub().issue(match[1], Number(match[2]))).body;
 }
 
 /**

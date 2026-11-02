@@ -92,9 +92,8 @@ A cell that says none names a gap.
 
 Where the code steps outside an invariant today:
 
-- `kozod --eval` reads an Issue's body with `gh api` outside the wrapper (`issueBody` in
-  `packages/daemon/src/index.ts`), and merges task branches in its throwaway clone
-  (`packages/daemon/src/eval.ts`) in the owner's place.
+- `kozod --eval` merges task branches in its throwaway clone (`packages/daemon/src/eval.ts`) in
+  the owner's place.
 - `install` in `packages/daemon/src/github-sync.ts` pushes kozo's own files and opens their pull
   request with no verification, since no task produced them.
 - Several files under a run carry no version: `decisions.md`, `tool/<id>.json`, `brief.md`, the
