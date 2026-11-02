@@ -1,5 +1,16 @@
 # @kozo/daemon
 
+## 0.1.1
+
+### Patch Changes
+
+- [`301a86e`](https://github.com/kechol/kozo/commit/301a86e4a08c029b65653e64c01dc73e8227afbb) Thanks [@kechol](https://github.com/kechol)! - A task's detail reads each run's report and verdicts through their schemas, so a file that is damaged or of another version shows as missing instead of as whatever it holds.
+- Updated dependencies []:
+  - @kozo/core@0.1.1
+  - @kozo/dashboard@0.1.1
+  - @kozo/verify@0.1.1
+  - @kozo/worker@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes

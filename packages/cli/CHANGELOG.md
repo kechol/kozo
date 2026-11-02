@@ -1,5 +1,13 @@
 # @kozo/cli
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @kozo/core@0.1.1
+  - @kozo/verify@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes
