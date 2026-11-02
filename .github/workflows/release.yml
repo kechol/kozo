@@ -75,6 +75,13 @@ jobs:
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
+      # Before the build, so a version no changelog has stops the release early.
+      - name: Gather the release notes from the changelogs
+        run: |
+          mkdir -p release
+          git ls-files -z '*CHANGELOG.md' |
+            xargs -0 bun run scripts/release-notes.ts --version "$VERSION" > release/NOTES.md
+
       - run: bun test
 
       - name: Cross-compile and package
@@ -92,7 +99,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          flags=(--generate-notes)
+          flags=(--notes-file release/NOTES.md)
           [[ "$TAG" == *-* ]] && flags+=(--prerelease)
           gh release create "$TAG" "${flags[@]}" release/kozo-*.tar.gz release/SHA256SUMS.txt
 
