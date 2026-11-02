@@ -116,26 +116,29 @@ describe("seatbeltProfile", () => {
 describe("bubblewrapArgs", () => {
   test("mounts the system read-only, hides the denied paths and mounts the writable ones on top", async () => {
     await using dir = await tempDirectory();
-    const work = join(dir.path, "work");
+    // kozod hands the sandbox real paths, as withSandboxTemp resolves them.
+    const root = await realpath(dir.path);
+    const work = join(root, "work");
     await mkdir(join(work, ".git"), { recursive: true });
-    await Bun.write(join(dir.path, "token"), "secret");
+    await Bun.write(join(root, "token"), "secret");
+    await symlink(join(root, "token"), join(root, "alias"));
     const args = bubblewrapArgs({
       ...empty,
-      denyRead: [dir.path, join(dir.path, "token"), join(dir.path, "missing")],
+      denyRead: [root, join(root, "token"), join(root, "alias"), join(root, "missing")],
       allowRead: [work],
       allowWrite: [work],
       denyWrite: [join(work, ".git")],
     });
     const text = args.join(" ");
     expect(text).toContain("--unshare-net --ro-bind / /");
-    expect(text).toContain(`--tmpfs ${dir.path}`);
-    expect(text).toContain(`--ro-bind /dev/null ${join(dir.path, "token")}`);
+    expect(text).toContain(`--tmpfs ${root}`);
+    // A link is hidden at the path it leads to, which is hidden once.
+    expect(text.split(`--ro-bind /dev/null ${join(root, "token")}`)).toHaveLength(2);
+    expect(text).not.toContain("alias");
     expect(text).not.toContain("missing");
-    expect(text.indexOf(`--bind ${work} ${work}`)).toBeGreaterThan(
-      text.indexOf(`--tmpfs ${dir.path}`),
-    );
+    expect(text.indexOf(`--bind ${work} ${work}`)).toBeGreaterThan(text.indexOf(`--tmpfs ${root}`));
     expect(text).toContain(`--ro-bind ${join(work, ".git")} ${join(work, ".git")}`);
-    expect(text).toEndWith(`--remount-ro ${dir.path}`);
+    expect(text).toEndWith(`--remount-ro ${root}`);
     expect(bubblewrapArgs({ ...empty, network: "any" })).not.toContain("--unshare-net");
   });
 });

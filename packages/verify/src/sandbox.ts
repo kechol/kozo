@@ -308,6 +308,15 @@ export const seatbelt: Confine = (sandbox, argv) => [
   ...argv,
 ];
 
+/** `path` with symbolic links resolved, or as given when it does not exist. */
+function realOrGiven(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
 /**
  * The bubblewrap arguments of `sandbox` on Linux: the whole system read-only, each denied path
  * hidden under an empty directory or /dev/null, the readable and writable ones mounted again on
@@ -348,7 +357,9 @@ export function bubblewrapArgs(sandbox: CommandSandbox): string[] {
     "/tmp/.X11-unix",
   ];
   const sockets = local ? ["/run", "/tmp", ...known] : known;
-  const hidden = [...sockets, ...sandbox.denyRead];
+  // Each path is hidden at its real path, once: bubblewrap cannot mount through a link that leads
+  // into a directory hidden before it, as /var/run leads into /run on most systems.
+  const hidden = [...new Set([...sockets, ...sandbox.denyRead].map(realOrGiven))];
   // Each empty directory is made read-only once everything is mounted on it.
   const covered = [...hidden, ...sandbox.denyReadInside].filter(
     (path) => kind(path) === "directory",
