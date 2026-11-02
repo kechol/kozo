@@ -34,6 +34,7 @@ entries and commits are linked by IDs such as `T-012` and `D-003`.
 | `README.md` | Overview for users | yes |
 | `site/` | User documentation, each page in English and in Japanese | yes |
 | `AGENTS.md` | Instructions for coding agents | yes |
+| `docs/architecture.md` | For developers: the packages, the processes, the trust boundaries and the code that keeps each design invariant; read it before changing what crosses a boundary | yes |
 | `docs/glossary.md` | Terms and their names in code | yes |
 | `docs/decisions.md` | Decisions (`D-NNN`) | yes |
 | `docs/backlog/` | Tasks (`T-NNN`), one file per Epic, listed in `INDEX.md` | no, maintainer-local |
