@@ -35,7 +35,7 @@ entries and commits are linked by IDs such as `T-012` and `D-003`.
 | `site/` | User documentation, each page in English and in Japanese | yes |
 | `AGENTS.md` | Instructions for coding agents | yes |
 | `docs/glossary.md` | Terms and their names in code | yes |
-| `docs/decisions.md` | Decisions (`D-NNN`) | no, maintainer-local |
+| `docs/decisions.md` | Decisions (`D-NNN`) | yes |
 | `docs/backlog/` | Tasks (`T-NNN`), one file per Epic, listed in `INDEX.md` | no, maintainer-local |
 
 - Keep operational documentation to these files. At the repository root, the
@@ -47,8 +47,13 @@ entries and commits are linked by IDs such as `T-012` and `D-003`.
 - Don't `@import` a ledger, since it would load in full every session.
   **Read the rules at the top of a ledger before editing it.** The backlog
   rules are in `docs/backlog/INDEX.md`.
-- Maintainer-local ledgers are ignored by git. When they are absent, skip the
-  ledger steps below and never invent IDs.
+- `site/` describes what users see and do. The developer documents in `docs/`
+  describe how kozo is built: its modules, persisted formats, transitions and
+  tests, in English only. A developer document links to the site page for a
+  concept instead of explaining it again, and a site page names no module,
+  schema or code path.
+- The backlog is maintainer-local and ignored by git. When it is absent, skip
+  the backlog steps below and never invent task IDs.
 
 ### Workflow
 
