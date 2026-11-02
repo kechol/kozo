@@ -82,6 +82,16 @@ jobs:
           git ls-files -z '*CHANGELOG.md' |
             xargs -0 bun run scripts/release-notes.ts --version "$VERSION" > release/NOTES.md
 
+      # The same sandbox as CI's test job: kozod refuses to start without it, and its tests need
+      # socat to reach this machine's ports.
+      - name: Set up the Linux sandbox
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap socat lsof
+          if sysctl -n kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          bun -e 'await (await import("./packages/verify/src/index.ts")).platformConfine()'
       - run: bun test
 
       - name: Cross-compile and package
