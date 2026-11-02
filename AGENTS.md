@@ -183,7 +183,8 @@ These invariants hold everywhere in the code.
 - Only kozod writes state. The CLI and the dashboard are stateless clients of
   the local API.
 - Decisions that can be made deterministically are code in kozod. Models only
-  classify, draft plans, implement and review.
+  classify, draft plans, implement, review, judge DONE_WHEN by driving the app,
+  and answer the owner's questions from the records.
 - Humans always merge. Nothing in kozo has a merge command, and the gh wrapper
   allows only listed subcommands.
 - Workers hold no GitHub credentials and write only inside their worktree.

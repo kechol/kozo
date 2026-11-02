@@ -19,8 +19,9 @@ back for you to read and merge. Your part is the policy, the inbox and the merge
 | Charter            | `.kozo/charter.yml` in each repository: what kozo may do there. Only humans change it.                                           |
 | Constraints        | `.kozo/constraints.yml` in each repository: the gates and the commands that check a change.                                      |
 
-Models only classify, draft plans, implement and review. Everything else, routing, limits,
-budgets and checks, is code in kozod.
+Models only classify, draft plans, implement, review, judge DONE_WHEN by driving the app and
+answer your questions from the records. Everything else, routing, limits, budgets and checks, is
+code in kozod.
 
 ## Items and tasks
 

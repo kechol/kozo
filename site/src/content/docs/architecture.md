@@ -23,8 +23,8 @@ they divide the work; it is not needed to use kozo, but it explains why kozo beh
 | `kozo`    | A stateless client of the local API, plus the setup and verification commands.                                                                                                                                                |
 | Dashboard | A stateless page that kozod serves, and another client of the same API.                                                                                                                                                       |
 
-Models classify, draft plans, implement and review; kozod decides everything else
-deterministically. So the same request under the same Charter is routed, limited and checked the
+Models classify, draft plans, implement, review, judge DONE_WHEN by driving the app and answer
+your questions from the records; kozod decides everything else deterministically. So the same request under the same Charter is routed, limited and checked the
 same way every time.
 
 ## Planes
