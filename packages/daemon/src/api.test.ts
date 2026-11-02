@@ -3,7 +3,8 @@ import { chmod, cp, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { kozoHome, message } from "@kozo/core";
 import { recordedLogs, type TempDirectory, tempDirectory } from "@kozo/testing";
-import { CommandError, type Commands, createApi } from "./api.ts";
+import { Hono } from "hono";
+import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
 import { DashboardSessions } from "./dashboard-session.ts";
 import { EventStore } from "./event-store.ts";
@@ -313,6 +314,17 @@ describe("the local API", () => {
     expect((await call("/api/report?view=nonsense")).status).toBe(400);
     expect((await call("/api/report?view=week")).status).toBe(400);
     expect((await call("/api/report?days=366")).status).toBe(400);
+  });
+});
+
+describe("serveApi", () => {
+  test("listens on 127.0.0.1 only", async () => {
+    const server = serveApi(new Hono(), 0);
+    try {
+      expect(server.hostname).toBe("127.0.0.1");
+    } finally {
+      await server.stop(true);
+    }
   });
 });
 

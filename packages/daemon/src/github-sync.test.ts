@@ -299,6 +299,9 @@ describe("GitHubSync", () => {
     }
     await Bun.write(join(env.home.root, "items", ref, "handoff-t1.md"), "# Report\n\nCloses #9.\n");
     await passedRun(env.store, ref, task);
+    // In Handoff with its run passed, the task is still not pushed until handoff.ready.
+    await env.sync.poll();
+    expect(env.github.calls.filter((call) => /^(push|createPull) /.test(call))).toEqual([]);
     await env.store.append({
       type: "handoff.ready",
       item: ref,

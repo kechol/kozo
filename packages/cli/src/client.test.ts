@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
 import { helloProof, kozoHome } from "@kozo/core";
 import { tempDirectory } from "@kozo/testing";
 import { connect, KozodUnavailable } from "./client.ts";
@@ -71,4 +73,35 @@ describe("connect", () => {
       "kozod answered 502 with something that is not JSON",
     );
   });
+});
+
+describe("the CLI and the dashboard as clients", () => {
+  // Only kozod writes state: neither client may reach the packages that write it, open the
+  // index or name a log, so whatever they change goes through the local API.
+  const packages = join(import.meta.dir, "..", "..");
+  test.each(["cli", "dashboard"])(
+    "%s depends on no writer of state and opens none of it",
+    async (name) => {
+      const manifest = await Bun.file(join(packages, name, "package.json")).json();
+      expect(Object.keys(manifest.dependencies ?? {})).not.toContainAnyValues([
+        "@kozo/daemon",
+        "@kozo/worker",
+      ]);
+      const sources = (await readdir(join(packages, name, "src"), { recursive: true })).filter(
+        (path) => /\.tsx?$/.test(path) && !/\.test\.tsx?$/.test(path),
+      );
+      for (const path of sources) {
+        const text = await Bun.file(join(packages, name, "src", path)).text();
+        expect({
+          path,
+          found: text.match(
+            /bun:sqlite|\beventsLog\b|\brunFiles\b|\bEventStore\b|\bIndexDb\b|\.db\b(?=[^\s.])/g,
+          ),
+        }).toEqual({
+          path,
+          found: null,
+        });
+      }
+    },
+  );
 });
