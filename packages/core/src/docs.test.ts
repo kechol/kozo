@@ -109,3 +109,10 @@ describe("docs/lifecycle.md", () => {
     expect(rows(page, "| Node").map(([node]) => unquote(node ?? ""))).toEqual([...blueprintNodes]);
   });
 });
+
+describe("docs/testing.md", () => {
+  test("builds its Linux image on the Bun version the repository pins", async () => {
+    const pinned = JSON.parse(await read("package.json")).packageManager.replace("bun@", "");
+    expect(await read("docs/testing.md")).toContain(`COPY --from=oven/bun:${pinned} `);
+  });
+});
