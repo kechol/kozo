@@ -2,5 +2,4 @@ node_modules/
 dist/
 .output/
 docs/backlog/
-docs/decisions.md
 docs/spec.md
