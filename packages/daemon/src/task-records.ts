@@ -6,10 +6,13 @@ import {
   type KozoHome,
   type RunReport,
   runFiles,
+  runReportSchema,
   type TaskState,
   type VerdictFile,
+  verdictFileSchema,
 } from "@kozo/core";
 import { isInside } from "@kozo/verify";
+import type { z } from "zod";
 import type { EventStore } from "./event-store.ts";
 import { costOf, nodeEvents } from "./queries.ts";
 
@@ -28,6 +31,14 @@ export interface RunRecord {
   decisions: string;
 }
 
+/** A JSON file as its schema reads it, or undefined when it is missing or does not match. */
+async function parsed<T>(path: string, schema: z.ZodType<T>): Promise<T | undefined> {
+  const json = await Bun.file(path)
+    .json()
+    .catch(() => undefined);
+  return schema.safeParse(json).data;
+}
+
 /** The records of every implement run of a task, oldest first, read at once. */
 export async function runRecords(
   home: KozoHome,
@@ -39,12 +50,8 @@ export async function runRecords(
     runs.map(async (run) => {
       const files = runFiles(home, run);
       const [report, verdict, decisions] = await Promise.all([
-        Bun.file(files.report)
-          .json()
-          .catch(() => null) as Promise<RunReport | null>,
-        Bun.file(files.verdict)
-          .json()
-          .catch(() => ({})) as Promise<Partial<VerdictFile>>,
+        parsed(files.report, runReportSchema).then((report) => report ?? null),
+        parsed(files.verdict, verdictFileSchema).then((verdict) => verdict ?? {}),
         Bun.file(files.decisions)
           .text()
           .then((text) => text.trim())
