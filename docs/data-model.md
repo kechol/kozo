@@ -139,8 +139,10 @@ The files under a run that carry no version are listed with the other gaps in
 
 ## Changing a format
 
-- **Change the schema in the file above and raise its version** whenever an old reader would
-  misread a new line or a new reader an old one. A version is a `z.literal`, so another version
+- **Change the schema in the file above and raise its version** whenever a new reader can no
+  longer read an old line, or an old reader would accept a new line and take it to mean
+  something else. A new event type, a new optional field or a new value of an enum needs no new
+  version: an older kozod refuses the line it does not know instead of misreading it. A version is a `z.literal`, so another version
   is refused on read; kozo never converts an old file.
 - **Event lines and item files outlive kozod.** Raising `eventVersion` means existing homes are
   refused: the commit's Impact and the changeset say so and what the user does. Recompute the

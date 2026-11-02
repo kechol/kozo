@@ -86,6 +86,10 @@ built is described in [docs/](docs/); start with
   `packages/core/src/state.ts`, a state test and a flow test,
   `docs/lifecycle.md` (*checked*), the site's concept page in English and
   Japanese, and the dashboard's words.
+- **A gh subcommand kozod runs:** `ghAllowed` in
+  `packages/daemon/src/github.ts`, which stays without a merge and without
+  arbitrary API calls (D-021), its test in `github.test.ts`, and the fake in
+  `testing/src/fake-github.ts`.
 - **A design invariant:** `AGENTS.md` and `docs/architecture.md` (*checked*).
 - **A new term:** `docs/glossary.md`, before the term is used.
 - **A runtime dependency:** a line in `docs/decisions.md` first, its license

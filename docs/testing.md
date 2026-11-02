@@ -62,8 +62,10 @@ sandbox too. The sandbox tests skip where there is none; `testConfine` runs the 
 
 ### Linux in a container
 
-To reproduce CI's Ubuntu runner on another machine, build an image with bubblewrap and the Bun
-version that `packageManager` in `package.json` pins:
+CI's test job is in `.github/workflows/ci.yml`, on `ubuntu-latest` (x86_64) and
+`macos-latest`. To reproduce the Ubuntu runner on another machine, build an image with bubblewrap and the Bun
+version that `packageManager` in `package.json` pins (`packages/core/src/docs.test.ts` fails
+when they differ):
 
 ```dockerfile
 FROM ubuntu:24.04
@@ -76,7 +78,8 @@ RUN apt-get update -qq \
 Run the suite as the unprivileged user, on a copy of the working tree without `node_modules`,
 since the host's builds may not run on Linux (for example
 `rsync -a --exclude node_modules ./ <copy>/`). `--privileged` lets
-bubblewrap create namespaces; mounting the host's Docker socket reproduces a runner where
+bubblewrap create namespaces, so the container needs no AppArmor change; on Apple silicon, add
+`--platform linux/amd64` to both commands to match the runner's architecture. Mounting the host's Docker socket reproduces a runner where
 `/var/run/docker.sock` exists behind the `/var/run` link.
 
 ```sh

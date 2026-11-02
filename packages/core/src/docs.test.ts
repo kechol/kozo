@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { blueprintNodes } from "./blueprint.ts";
 import { eventSchema } from "./event.ts";
@@ -114,5 +115,38 @@ describe("docs/testing.md", () => {
   test("builds its Linux image on the Bun version the repository pins", async () => {
     const pinned = JSON.parse(await read("package.json")).packageManager.replace("bun@", "");
     expect(await read("docs/testing.md")).toContain(`COPY --from=oven/bun:${pinned} `);
+  });
+});
+
+/** The anchor GitHub gives a heading: lowercase, punctuation dropped, spaces as hyphens. */
+const anchorOf = (heading: string) =>
+  heading
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N} _-]/gu, "")
+    .replace(/ /g, "-");
+
+describe("the developer documents' links", () => {
+  test.each([
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "docs/architecture.md",
+    "docs/data-model.md",
+    "docs/lifecycle.md",
+    "docs/testing.md",
+  ])("in %s lead to a file and a heading that exist", async (path) => {
+    const broken: string[] = [];
+    for (const [, target] of (await read(path)).matchAll(/\]\(([^)\s]+)\)/g)) {
+      if (!target || /^[a-z]+:/.test(target)) continue;
+      const [file = "", anchor] = target.split("#");
+      const resolved = file ? join(path, "..", file) : path;
+      if (!existsSync(join(root, resolved))) {
+        broken.push(target);
+        continue;
+      }
+      if (!anchor) continue;
+      const headings = [...(await read(resolved)).matchAll(/^#{1,6} (.+)$/gm)];
+      if (!headings.some(([, heading]) => anchorOf(heading ?? "") === anchor)) broken.push(target);
+    }
+    expect(broken).toEqual([]);
   });
 });

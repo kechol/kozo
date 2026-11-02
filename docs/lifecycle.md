@@ -17,6 +17,9 @@ blueprint node on this page differs from the code.
 
 ## Stages
 
+The stages are `stageSchema`, the holds `holdKindSchema` and the run states `runStateSchema`, in
+`packages/core/src/work-model.ts`.
+
 | Stage | Items | Tasks |
 | --- | --- | --- |
 | `intake` | A new item, until its start is approved or needs no approval | - |
@@ -99,8 +102,8 @@ flowchart LR
 | open → complete or cancelled | `ControlPlane.closeWork` | `close`, or the item closing | human |
 
 `applyEvent` counts as the task moves: every Reviewing → Building adds to `revisions`, which
-`afterReview` compares with `inner_retries`; every Handoff → Building by kozod adds to
-`handoffFixes`, which `backToBuilding` and the GitHub sync compare with `ci_fix_rounds`. A human
+`afterReview` in `packages/core/src/state.ts` compares with the Charter's `inner_retries`; every Handoff → Building by kozod adds to
+`handoffFixes`, which `backToBuilding` and the GitHub sync compare with the Charter's `ci_fix_rounds`. A human
 clearing an attention hold in Handoff sets `handoffFixes` back to 0.
 
 ## Holds
@@ -171,7 +174,7 @@ sequenceDiagram
 | `review` | A | kozod, as a child run | reviewing | back to Building for a revision within `inner_retries`; question when review escalates; attention otherwise |
 | `verify-app` | A | kozod, as a child run | reviewing | as review for a failure; question when blocked. Skipped for the low tier or without an app to verify |
 | `handoff` | D | kozod | reviewing, then handoff | - |
-| `final-verify` | D | kozod | handoff | back to Building within `ci_fix_rounds` when the rebase conflicts or the deep gates fail; attention after |
+| `final-verify` | D | kozod | handoff | `finalVerify` rebases on the default branch and runs the deep gates: back to Building within `ci_fix_rounds` when the rebase conflicts or the deep gates fail; attention after |
 
 Kind D is deterministic and A is an agent, as `node.enter` records it.
 
