@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { blueprintNodes } from "./blueprint.ts";
 import { eventSchema } from "./event.ts";
-import { recordOnlyTypes } from "./state.ts";
+import { holdTargets, itemEdges, recordOnlyTypes, taskEdges } from "./state.ts";
+import { holdKindSchema, runStateSchema, stageSchema } from "./work-model.ts";
 
 // The developer documents in docs/ describe how kozo is built; these tests fail when what they
 // list drifts from the code or from AGENTS.md.
@@ -66,5 +68,44 @@ describe("docs/data-model.md", () => {
     const schema = await read("packages/daemon/src/index-db.ts");
     const tables = [...schema.matchAll(/^create table (\w+)/gm)].map((match) => match[1] ?? "");
     expect(firstCells(page).map(unquote)).toEqual(tables);
+  });
+});
+
+describe("docs/lifecycle.md", () => {
+  test.each([
+    ["Stages", stageSchema.options],
+    ["Holds", holdKindSchema.options],
+    ["Run states", runStateSchema.options],
+  ])("lists every value of %s once", async (heading, values) => {
+    const page = section(await read("docs/lifecycle.md"), heading);
+    expect(firstCells(page).map(unquote)).toEqual([...values]);
+  });
+
+  test.each([
+    ["### Item stages", itemEdges],
+    ["### Task stages", taskEdges],
+  ])("draws the edges of %s with solid arrows", async (marker, edges) => {
+    const page = await read("docs/lifecycle.md");
+    const block = page.slice(page.indexOf(marker)).split("```mermaid")[1]?.split("```")[0] ?? "";
+    const drawn = [...block.matchAll(/^\s*(\w+) --> (\w+)$/gm)].map(
+      ([, from, to]) => `${from}>${to}`,
+    );
+    const coded = Object.entries(edges).flatMap(([from, tos]) =>
+      (tos ?? []).map((to) => `${from}>${to}`),
+    );
+    expect(drawn.sort()).toEqual(coded.sort());
+  });
+
+  test("gives each hold its targets", async () => {
+    const page = section(await read("docs/lifecycle.md"), "Holds");
+    const listed = rows(page).map(([hold, targets]) => [unquote(hold ?? ""), targets]);
+    expect(listed).toEqual(
+      Object.entries(holdTargets).map(([hold, targets]) => [hold, targets.join(", ")]),
+    );
+  });
+
+  test("lists the blueprint's nodes in their order", async () => {
+    const page = section(await read("docs/lifecycle.md"), "One task's run");
+    expect(rows(page, "| Node").map(([node]) => unquote(node ?? ""))).toEqual([...blueprintNodes]);
   });
 });

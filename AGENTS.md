@@ -36,6 +36,7 @@ entries and commits are linked by IDs such as `T-012` and `D-003`.
 | `AGENTS.md` | Instructions for coding agents | yes |
 | `docs/architecture.md` | For developers: the packages, the processes, the trust boundaries and the code that keeps each design invariant; read it before changing what crosses a boundary | yes |
 | `docs/data-model.md` | For developers: the event logs and what is built from them, each event type, the index and the versioned formats; read it before changing what kozo persists | yes |
+| `docs/lifecycle.md` | For developers: the stages, holds and run states, the code that moves each, and one task's run through the blueprint; read it before changing how work moves | yes |
 | `docs/glossary.md` | Terms and their names in code | yes |
 | `docs/decisions.md` | Decisions (`D-NNN`) | yes |
 | `docs/backlog/` | Tasks (`T-NNN`), one file per Epic, listed in `INDEX.md` | no, maintainer-local |

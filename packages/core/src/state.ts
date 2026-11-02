@@ -204,7 +204,7 @@ export function isClosed(stage: Stage): boolean {
 
 // Complete is reachable from every open stage because a human may close work that needed no
 // change; kozod itself completes a task only from Handoff.
-const itemEdges: Partial<Record<Stage, readonly Stage[]>> = {
+export const itemEdges: Partial<Record<Stage, readonly Stage[]>> = {
   intake: ["triage", "complete"],
   triage: ["planning", "complete"],
   // `kozo retry` sends an item held in Planning back to Triage.
@@ -214,7 +214,7 @@ const itemEdges: Partial<Record<Stage, readonly Stage[]>> = {
   building: ["planning", "triage", "complete"],
 };
 
-const taskEdges: Partial<Record<Stage, readonly Stage[]>> = {
+export const taskEdges: Partial<Record<Stage, readonly Stage[]>> = {
   building: ["reviewing", "complete"],
   reviewing: ["building", "handoff", "complete"],
   // A human's commit on the task branch sends the task back to Reviewing.
@@ -594,7 +594,7 @@ function applyChange(state: FactoryState, event: Event): void {
 
 // What each hold may hold: approval waits on an item's start or plan, and a task's work alone
 // waits for capacity or is taken.
-const holdTargets: Record<HoldKind, readonly ("item" | "task")[]> = {
+export const holdTargets: Record<HoldKind, readonly ("item" | "task")[]> = {
   approval: ["item"],
   question: ["item", "task"],
   attention: ["item", "task"],
