@@ -1,8 +1,11 @@
 import { rm } from "node:fs/promises";
 import { basename } from "node:path";
+import { z } from "zod";
 
 /** Where kozod keeps a worktree's ports: beside it, not in it, to keep it clean. */
 const portsFile = (worktree: string) => `${worktree}.ports`;
+
+const portsSchema = z.strictObject({ version: z.literal(1), ports: z.array(z.int().positive()) });
 
 /** The ports this kozod has handed to worktrees, which it hands to no other. */
 const handedOut = new Set<number>();
@@ -26,7 +29,7 @@ export async function takePorts(worktree: string, count: number): Promise<number
       handedOut.add(listener.port);
       ports.push(listener.port);
     }
-    await Bun.write(portsFile(worktree), `${JSON.stringify(ports)}\n`);
+    await Bun.write(portsFile(worktree), `${JSON.stringify({ version: 1, ports })}\n`);
   } finally {
     for (const listener of listeners) listener.stop(true);
   }
@@ -40,10 +43,11 @@ export async function releasePorts(worktree: string): Promise<void> {
 }
 
 async function readPorts(worktree: string): Promise<number[]> {
+  // A file of another version, or none, holds no ports; the worktree takes new ones.
   const kept = await Bun.file(portsFile(worktree))
     .json()
-    .catch(() => []);
-  return Array.isArray(kept) ? kept.filter((port) => Number.isInteger(port)) : [];
+    .catch(() => null);
+  return portsSchema.safeParse(kept).data?.ports ?? [];
 }
 
 /**

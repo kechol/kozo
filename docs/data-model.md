@@ -133,9 +133,11 @@ migrated. `packages/core/src/docs.test.ts` fails when this table and the schema 
 | Item file | `packages/daemon/src/item-file.ts` | `version` in the front matter |
 | Worker spec | `workerSpecSchema` in `packages/worker/src/session.ts` | `version` |
 | Instruction queue line | `queueLineSchema` in `packages/worker/src/session.ts` | `v` |
+| A worktree's ports | `portsSchema` in `packages/daemon/src/worktree-ports.ts` | `version` |
 
-The files under a run that carry no version are listed with the other gaps in
-[Architecture](architecture.md#design-invariants).
+Text kozod writes for people and prompts carries no version, since kozod reads it back only as
+text: a run's `brief.md` and `decisions.md`, the handoff report and a worktree's `.prepared`
+marker. Nor does a tool's raw output under `tool/`, which kozod stores as the session gave it.
 
 ## Changing a format
 

@@ -29,6 +29,17 @@ describe("takePorts", () => {
     expect(new Set(all).size).toBe(60);
   });
 
+  test("keeps its ports in a versioned file, and takes new ones over a file of another version", async () => {
+    await using dir = await tempDirectory();
+    const worktree = join(dir.path, "shop-K-2-t1");
+    const ports = await takePorts(worktree, 2);
+    expect(await Bun.file(`${worktree}.ports`).json()).toEqual({ version: 1, ports });
+    await Bun.write(`${worktree}.ports`, `${JSON.stringify(ports)}\n`);
+    expect(await worktreeEnvironment(worktree)).toEqual({ KOZO_TASK_ID: "shop-k-2-t1" });
+    const again = await takePorts(worktree, 2);
+    expect(await Bun.file(`${worktree}.ports`).json()).toEqual({ version: 1, ports: again });
+  });
+
   test("forgets a released worktree's ports", async () => {
     await using dir = await tempDirectory();
     const worktree = join(dir.path, "shop-K-1-t1");

@@ -2557,7 +2557,7 @@ test("one unit is still counted", () => {
     await env.settle();
     expect(env.store.state.tasks[`${ref}/t1`]).toMatchObject({ stage: "handoff", hold: null });
     const worktree = worktreePath(env.home, env.repo.path, `${ref}/t1`);
-    const ports = (await Bun.file(`${worktree}.ports`).json()) as number[];
+    const { ports } = (await Bun.file(`${worktree}.ports`).json()) as { ports: number[] };
     expect(ports).toHaveLength(2);
     const run = env.store.state.tasks[`${ref}/t1`]?.runs[0] ?? "";
     const spec = (await Bun.file(join(runFiles(env.home, run).dir, "worker.json")).json()) as {

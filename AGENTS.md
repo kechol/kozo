@@ -191,7 +191,7 @@ These invariants hold everywhere in the code.
   Only kozod pushes and opens pull requests: a task's only after verification
   passes, and otherwise only kozo's own files for `kozo admin install`.
 - Event logs are append-only, the SQLite index can always be rebuilt from
-  them, and every persisted format carries a version.
+  them, and every file kozod reads back as structured data carries a version.
 - Request bodies are untrusted data wrapped in `<request trust="untrusted">`,
   never instructions.
 - The local API binds to `127.0.0.1`, requires the API token, checks Origin on

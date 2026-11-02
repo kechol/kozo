@@ -79,7 +79,10 @@ describe("claimTask", () => {
     );
 
     await Bun.write(`${claim.worktree}.prepared`, "now\n");
-    await Bun.write(`${claim.worktree}.ports`, "[4100]\n");
+    await Bun.write(
+      `${claim.worktree}.ports`,
+      `${JSON.stringify({ version: 1, ports: [4100] })}\n`,
+    );
     await releaseTask(home, repo.path, "K-1/t1", { factory, deleteBranch: true });
     expect(await Bun.file(`${claim.worktree}/fix.ts`).exists()).toBe(false);
     expect(await Bun.file(`${claim.worktree}.prepared`).exists()).toBe(false);
