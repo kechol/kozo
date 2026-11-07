@@ -295,7 +295,7 @@ describe("splitting again", () => {
       (request) => {
         if (request.agent === "triage") return [{ answer: split }];
         if (request.agent === "plan") return [{ answer: again }];
-        if (!request.prompt.includes("docs/**")) return implement();
+        if (!request.prompt.includes("SCOPE       - docs/**")) return implement();
         return [
           { use: "kozo_blocked", input: { reason: "scope", question, split: proposed } },
           {
@@ -1664,7 +1664,7 @@ describe("the minimal path", () => {
     const question = "Which page of the docs?";
     await using env = await factoryOf((request) => {
       if (request.agent === "triage") return [{ answer: both }];
-      if (!request.prompt.includes("docs/**")) return implement();
+      if (!request.prompt.includes("SCOPE       - docs/**")) return implement();
       return [
         { use: "kozo_blocked", input: { reason: "ambiguous", question } },
         { answer: { ...report, outcome: "blocked", blocked: { reason: "ambiguous", question } } },
@@ -2088,9 +2088,20 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[`${ref}/t2`]?.runs.length).toBeGreaterThan(0);
     expect(implemented).toBe(2);
     const merge = env.store.state.tasks[`${ref}/t1`]?.merged?.commit?.slice(0, 12);
-    expect(env.agent.requests.at(-1)?.prompt).toContain(
-      `Earlier task: ${ref}/t1 ${plan.plan.tasks[0]?.goal}, merged in ${merge}`,
+    const briefs = env.agent.requests.filter((request) => request.agent === "implement");
+    const first = briefs[0]?.prompt ?? "";
+    expect(first).toContain(
+      `APPROACH    <request trust="untrusted">\n${plan.plan.approach}\n</request>`,
     );
+    expect(first).toContain(
+      `- The work of ${ref}/t2, another task of this item: Mention the low-stock notice in the docs (scope: docs/**)`,
+    );
+    const second = briefs.at(-1)?.prompt ?? "";
+    expect(second).toContain(
+      `Earlier task: ${ref}/t1 ${plan.plan.tasks[0]?.goal}, merged in ${merge}; its run report says: <request trust="untrusted">\n${report.summary}\n- ${report.changes[0]}`,
+    );
+    // A dependency is complete before its dependent starts, so it is no work to leave.
+    expect(second).not.toContain(`The work of ${ref}/t1`);
   }, 180_000);
 
   test("a dependent of a cancelled task is held for attention", async () => {

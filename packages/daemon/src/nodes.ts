@@ -3,6 +3,7 @@ import { join, relative } from "node:path";
 import {
   afterReview,
   type Brief,
+  isClosed,
   type Message,
   message,
   proseLanguage,
@@ -37,6 +38,7 @@ import { commitIdentity, taskSandbox } from "@kozo/worker";
 import { checkNotes } from "./instructions.ts";
 import { handoffReportPath, readItemFile, requestText } from "./item-file.ts";
 import { firstCodeChange, firstNonTestChange, layersFor, onlyDependencyFiles } from "./risk.ts";
+import { runRecords } from "./task-records.ts";
 import { type BlueprintRun, describe, type Node, type RunEnd, tail } from "./task-run.ts";
 import { externalWrite } from "./transitions.ts";
 import { takePorts } from "./worktree-ports.ts";
@@ -172,6 +174,30 @@ const brief: NodeStep = async (run, current) => {
         .map((line) => line.replace(/^- /, "")),
     );
   }
+  const { state } = runner.store;
+  const priorDiffs: string[] = [];
+  for (const ref of current.depends_on) {
+    const dependency = state.tasks[ref];
+    const commit = dependency?.merged?.commit;
+    const merged = commit ? `, merged in ${commit.slice(0, 12)}` : "";
+    // The run report was written by a session that read the request, so it stays data.
+    const records = dependency ? await runRecords(runner.home, state, dependency) : [];
+    const report = records.findLast((record) => record.report)?.report;
+    const did = report
+      ? `; its run report says: ${wrapRequest([report.summary, ...report.changes.map((change) => `- ${change}`)].join("\n"))}`
+      : "";
+    priorDiffs.push(`${ref} ${dependency?.goal ?? ""}${merged}${did}`);
+  }
+  // The item's other open tasks, so that this one leaves their work to them; a dependency is
+  // complete before this task starts and is not among them.
+  const others = item.tasks
+    .filter((ref) => ref !== run.task.ref && !current.depends_on.includes(ref))
+    .map((ref) => state.tasks[ref])
+    .filter((task): task is TaskState => task !== undefined && !isClosed(task.stage))
+    .map(
+      (task) =>
+        `The work of ${task.ref}, another task of this item: ${task.goal} (scope: ${task.scope.join(", ")})`,
+    );
   const written: Brief = {
     version: 1,
     goal: current.goal,
@@ -181,18 +207,15 @@ const brief: NodeStep = async (run, current) => {
       task: run.task.ref,
       position: item.tasks.indexOf(run.task.ref) + 1,
       of: item.tasks.length,
-      prior_diffs: current.depends_on.map((ref) => {
-        const dependency = runner.store.state.tasks[ref];
-        const commit = dependency?.merged?.commit;
-        const merged = commit ? `, merged in ${commit.slice(0, 12)}` : "";
-        return `${ref} ${dependency?.goal ?? ""}${merged}`;
-      }),
+      prior_diffs: priorDiffs,
     },
+    approach: run.plan.approach,
     blueprint: { class: run.plan.class, nodes: [...blueprint.nodes] },
     scope: current.scope as [string, ...string[]],
     do_not_act: [
       "Changes outside SCOPE, even ones worth making; list them in the run report instead",
       "Changes to existing tests",
+      ...others,
     ],
     context: {
       files: inScope,

@@ -20,13 +20,18 @@ export const briefSchema = z.strictObject({
       task: taskReferenceSchema,
       position: z.int().positive(),
       of: z.int().positive(),
-      /** Summaries of the diffs of the tasks this one depends on. */
+      /**
+       * Each task this one depends on: its goal, the commit that merged it and what its run
+       * report says it did, the report wrapped as untrusted data.
+       */
       prior_diffs: z.array(text),
     })
     .refine((item) => item.position <= item.of, "The position is past the number of tasks"),
+  /** How the plan makes the item's change; it was drafted from the request, so it is data. */
+  approach: text,
   blueprint: z.strictObject({ class: workClassSchema, nodes: list }),
   scope: list,
-  /** Changes outside the scope, including the scopes of later tasks, that the run must leave. */
+  /** Changes outside the scope, including the work of the item's other tasks, that the run must leave. */
   do_not_act: list,
   context: z.strictObject({
     files: z.array(text),
@@ -71,6 +76,7 @@ export function renderBrief(brief: Brief, { reportSchema }: { reportSchema: unkn
     `DONE_WHEN   ${bullets(brief.done_when)}`,
     `ITEM        ${item.goal}`,
     `            This is ${item.task}, task ${item.position} of ${item.of}.`,
+    `APPROACH    ${wrapRequest(brief.approach)}`,
     ...item.prior_diffs.map((diff) => `            Earlier task: ${diff}`),
     `BLUEPRINT   ${brief.blueprint.class}: ${brief.blueprint.nodes.join(" → ")}`,
     `SCOPE       ${bullets(brief.scope)}`,
