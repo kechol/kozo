@@ -241,6 +241,7 @@ export const en = {
   "api.rejected-twice": "rejected the plan of {ref} a second time; it waits for your attention",
   "api.rejected": "rejected the plan of {ref}; the plan agent drafts it again with your reason",
   "api.explorer-stopped": "kozod answers questions only while it runs",
+  "api.conflict": "that no longer fits what kozod has: {reason}",
   "api.explorer-busy": "kozod answers one question at a time; ask again once the last answer is in",
   "api.budget-spent": "the daily budget of {budget} USD is spent; ask tomorrow",
   "api.answered": "answered {ref}; work resumes",

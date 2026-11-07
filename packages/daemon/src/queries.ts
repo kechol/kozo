@@ -109,12 +109,28 @@ export const eventColumn: Record<Reference["kind"], "item" | "task" | "run_id"> 
   run: "run_id",
 };
 
-export function eventsAfter(db: Database, reference: Reference, ref: string, after: number) {
+export function eventsAfter(
+  db: Database,
+  reference: Reference,
+  ref: string,
+  after: number,
+  limit: number,
+) {
+  return db
+    .query<{ id: number; line: string }, [string, number, number]>(
+      `select id, line from events where ${eventColumn[reference.kind]} = ? and id > ? order by id limit ?`,
+    )
+    .all(ref, after, limit);
+}
+
+/** The last `count` events of an item, a task or a run, oldest first. */
+export function lastEvents(db: Database, reference: Reference, ref: string, count: number) {
   return db
     .query<{ id: number; line: string }, [string, number]>(
-      `select id, line from events where ${eventColumn[reference.kind]} = ? and id > ? order by id`,
+      `select id, line from events where ${eventColumn[reference.kind]} = ? order by id desc limit ?`,
     )
-    .all(ref, after);
+    .all(ref, count)
+    .reverse();
 }
 
 /** What the events of an item, a task or a run have cost. */

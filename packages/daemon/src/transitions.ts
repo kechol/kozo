@@ -127,17 +127,21 @@ export type AfterHold =
  * Clears the subject's hold, when it has one, and appends the steps `after` makes of the
  * subject in the same turn of the store's queue, so that nothing, the scheduler included, sees
  * the subject without a hold in between; a move to the stage the subject is in is left out.
- * Nothing happens when the subject is gone; resolves to whether anything was appended.
+ * Nothing happens when the subject is gone, or, with `kind`, when its hold is not of that kind;
+ * resolves to whether anything was appended.
  */
 export async function releaseHold(
   store: EventStore,
   subject: Subject,
   after: (current: ItemState | TaskState) => AfterHold[],
-  { by = "kozod", reason }: { by?: Actor; reason?: Message } = {},
+  { by = "kozod", reason, kind }: { by?: Actor; reason?: Message; kind?: HoldKind } = {},
 ): Promise<boolean> {
   const written = await store.appendAllIf((state) => {
     const current = stateOf(state, subject);
     if (!current) return null;
+    // A verb that clears one kind of hold does nothing once that hold is gone, as when the same
+    // approval arrives twice.
+    if (kind !== undefined && current.hold?.kind !== kind) return null;
     const target = targetOf(subject);
     const events: NewEvent[] = [];
     if (current.hold)

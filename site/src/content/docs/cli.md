@@ -123,10 +123,10 @@ Shows an item, a task or a run. For an item awaiting plan approval it prints the
 the work class, the risk tier, the approach and each task's goal, with any codemod a task would
 run.
 
-| Flag     | Meaning                                              |
-| -------- | ---------------------------------------------------- |
-| `-f`     | Keeps following the subject's events as they happen. |
-| `--diff` | Prints a task's diff against the default branch.     |
+| Flag     | Meaning                                                                                 |
+| -------- | --------------------------------------------------------------------------------------- |
+| `-f`     | Prints the subject's latest 400 events, then keeps following its events as they happen. |
+| `--diff` | Prints a task's diff against the default branch.                                        |
 
 ### `kozo report`
 

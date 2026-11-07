@@ -22,6 +22,7 @@ import {
   type Reference,
   render,
   type Stage,
+  StateError,
   secretMatches,
   type Verb,
   verbBodySchemas,
@@ -42,6 +43,7 @@ import {
   eventColumn,
   eventsAfter,
   inboxCount,
+  lastEvents,
   list,
 } from "./queries.ts";
 import { type ReportView, reportDays } from "./report.ts";
@@ -225,6 +227,10 @@ export function createApi({
 
   app.onError((thrown, c) => {
     if (thrown instanceof CommandError) return error(c, thrown.status, thrown.reason);
+    // A verb that raced another one, such as the same approval sent twice, conflicts with the
+    // state it found rather than failing kozod.
+    if (thrown instanceof StateError)
+      return error(c, 409, message("api.conflict", { reason: thrown.message }));
     if (thrown instanceof SyntaxError) return error(c, 400, message("api.not-json"));
     return error(c, 500, message("text", { text: thrown.message }));
   });
@@ -372,6 +378,8 @@ export function createApi({
     const [ref, parsedReference] = found;
     if (!exists(ref)) return error(c, 404, message("api.missing", { ref }));
     const after = Number(c.req.header("last-event-id") ?? c.req.query("after") ?? 0) || 0;
+    // As many events as a detail view keeps, and the size of each page a resumed stream reads.
+    const replayed = 400;
     const column = eventColumn[parsedReference.kind];
     const matches = (event: Event) => (column === "run_id" ? event.run_id : event[column]) === ref;
     return streamSSE(c, async (stream) => {
@@ -389,13 +397,23 @@ export function createApi({
         clearInterval(keepalive);
         wake?.();
       });
-      for (const row of eventsAfter(store.db, parsedReference, ref, after)) {
-        await stream.writeSSE({
-          id: String(row.id),
-          event: "event",
-          data: JSON.stringify(shown(JSON.parse(row.line), locale())),
-        });
-        last = row.id;
+      // A first connection gets the latest events, as many as a view keeps; one that resumes
+      // gets every event it missed, read a page at a time rather than all at once.
+      for (
+        let page = after === 0 ? lastEvents(store.db, parsedReference, ref, replayed) : null;
+        ;
+        page = null
+      ) {
+        const rows = page ?? eventsAfter(store.db, parsedReference, ref, last, replayed);
+        for (const row of rows) {
+          await stream.writeSSE({
+            id: String(row.id),
+            event: "event",
+            data: JSON.stringify(shown(JSON.parse(row.line), locale())),
+          });
+          last = row.id;
+        }
+        if (stream.aborted || rows.length < replayed) break;
       }
       while (!stream.aborted) {
         const next = pending.shift();

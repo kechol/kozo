@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { chmod, cp, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { kozoHome, message } from "@kozo/core";
+import { kozoHome, message, StateError } from "@kozo/core";
 import { recordedLogs, type TempDirectory, tempDirectory } from "@kozo/testing";
 import { Hono } from "hono";
 import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
@@ -264,6 +264,69 @@ describe("the local API", () => {
     const first = decoder.decode((await resumedReader?.read())?.value);
     expect(first).toContain("Late note.");
     await resumedReader?.cancel();
+  });
+
+  test("a first connection replays the latest 400 events, and one that resumes every event it missed", async () => {
+    const run = { item: "K-1", task: "K-1/t1", run_id: "r-0009" };
+    await store.append({
+      ...run,
+      type: "run.started",
+      data: {
+        agent: "review",
+        model: "claude-sonnet-5-5",
+        mode: "local",
+        charter_commit: "abc1234",
+        factory_commit: null,
+        kozo_version: "0.0.0",
+        runtime: "sdk",
+        request_sha: "0".repeat(64),
+      },
+    });
+    for (let index = 0; index < 449; index += 1)
+      await store.append({
+        ...run,
+        type: "agent.message",
+        data: { agent: "review", text: `m${index}` },
+      });
+    const all = store.db
+      .query<{ id: number }, []>("select id from events where run_id = 'r-0009' order by id")
+      .all()
+      .map((row) => row.id);
+    expect(all).toHaveLength(450);
+    const read = async (headers: Record<string, string>, until: number) => {
+      const response = await call("/api/refs/r-0009/events", { headers });
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("expected a stream");
+      let text = "";
+      const decoder = new TextDecoder();
+      while (!text.includes(`id: ${until}\n`)) text += decoder.decode((await reader.read()).value);
+      await reader.cancel();
+      return [...text.matchAll(/^id: (\d+)$/gm)].map((match) => Number(match[1]));
+    };
+    const last = all.at(-1) ?? 0;
+    expect(await read({ "last-event-id": "0" }, last)).toEqual(all.slice(-400));
+    expect(await read({ "last-event-id": String(all[9]) }, last)).toEqual(all.slice(10));
+  });
+
+  test("a verb that conflicts with the state is 409, not a failure of kozod", async () => {
+    const conflicting = createApi({
+      store,
+      token,
+      port,
+      mode: "local",
+      commands: {
+        ...commands,
+        act: async () => {
+          throw new StateError("cannot accept a plan in building");
+        },
+      },
+    });
+    const response = await conflicting.request(`http://127.0.0.1:${port}/api/refs/K-1/pause`, {
+      method: "POST",
+      body: "{}",
+      headers: { authorization: `Bearer ${token}`, host: `127.0.0.1:${port}` },
+    });
+    expect(response.status).toBe(409);
   });
 
   test("writes go to the commands, and a verb the reference does not take is 400", async () => {

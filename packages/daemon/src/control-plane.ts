@@ -6,6 +6,7 @@ import {
   type Automation,
   autonomyLevel,
   type Charter,
+  type HoldKind,
   type ItemState,
   isClosed,
   type KozoHome,
@@ -232,11 +233,13 @@ export class ControlPlane {
     ref: string,
     after: (current: ItemState | TaskState) => AfterHold[],
     reason?: Message,
-  ) {
+    held?: HoldKind,
+  ): Promise<boolean> {
     const { item, task } = this.subject(ref, kind);
-    await releaseHold(this.store, { item, task }, after, {
+    return await releaseHold(this.store, { item, task }, after, {
       by: "human",
       ...(reason ? { reason } : {}),
+      ...(held ? { kind: held } : {}),
     });
   }
 
@@ -270,12 +273,14 @@ export class ControlPlane {
       ? [{ note: "approval", text: message("text", { text: body.text }) }]
       : [];
     if (start) {
-      await this.release(
+      const approved = await this.release(
         "item",
         ref,
         () => [...approval, { move: "triage", reason: message("stage.approve") }],
         said(body.text),
+        "approval",
       );
+      if (!approved) return { message: message("api.no-approval", { ref }) };
       return { message: message("api.approved-start", { ref }) };
     }
     const plan = item.draft;
@@ -283,7 +288,7 @@ export class ControlPlane {
     if (!plan) throw new CommandError(409, message("api.no-plan", { ref }));
     // The note after the acceptance, so that the tasks' runs take it as said about their plan,
     // and in the same turn, so that none of them starts before it.
-    await this.release(
+    const accepted = await this.release(
       "item",
       ref,
       () => [
@@ -291,7 +296,9 @@ export class ControlPlane {
         ...approval,
       ],
       said(body.text),
+      "approval",
     );
+    if (!accepted) return { message: message("api.no-approval", { ref }) };
     return {
       message: message("api.approved-plan", { ref, count: plan.tasks.length }),
     };

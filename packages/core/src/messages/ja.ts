@@ -242,6 +242,7 @@ export const ja: { readonly [Code in keyof typeof en]: string } = {
   "api.rejected":
     "{ref} の計画を差し戻しました。plan エージェントが、あなたの理由をもとに下書きし直します",
   "api.explorer-stopped": "kozod が質問に答えられるのは、動いている間だけです",
+  "api.conflict": "kozod の今の状態には当てはまりません（{reason}）",
   "api.explorer-busy":
     "kozod が答えられる質問は一度に 1 つです。前の答えが出てから、もう一度尋ねてください",
   "api.budget-spent": "1 日の予算 {budget} USD を使い切りました。明日もう一度尋ねてください",

@@ -677,6 +677,28 @@ describe("the minimal path", () => {
     await expect(env.control.act(taskRef, task, "retry", {})).rejects.toThrow("is cancelled");
   }, 120_000);
 
+  test("the same plan approval sent twice at once is taken once", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: plan }] : [{ hang: true }],
+    );
+    const item = { kind: "item", item: { repo: null, number: 1 } } as const;
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.pauseFactory();
+    expect(env.store.state.items[ref]?.hold?.approval).toBe("plan");
+    const answers = await Promise.all([
+      env.control.act(ref, item, "approve", {}),
+      env.control.act(ref, item, "approve", {}),
+    ]);
+    expect(answers.map((answer) => said(answer)).sort()).toEqual(
+      [
+        render(message("api.approved-plan", { ref, count: 1 }), "en"),
+        render(message("api.no-approval", { ref }), "en"),
+      ].sort(),
+    );
+    expect(env.store.state.items[ref]?.tasks).toHaveLength(1);
+  }, 120_000);
+
   test("a spent daily budget holds new work for capacity until the next day", async () => {
     let now = new Date();
     await using env = await factoryOf(
