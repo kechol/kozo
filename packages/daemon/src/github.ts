@@ -187,15 +187,22 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
       return raw.comments.flatMap(commentOf);
     },
     async issue(repository, issue) {
-      return issueOf(
-        await json<RawIssue>([
-          "issue",
-          "view",
-          String(issue),
-          `--repo=${repository}`,
-          `--json=${issueFields}`,
-        ]),
-      );
+      try {
+        return issueOf(
+          await json<RawIssue>([
+            "issue",
+            "view",
+            String(issue),
+            `--repo=${repository}`,
+            `--json=${issueFields}`,
+          ]),
+        );
+      } catch (error) {
+        // GitHub's answer for a number that names no Issue, deleted or moved elsewhere.
+        if (error instanceof GhError && /could not resolve to an issue/i.test(error.message))
+          return null;
+        throw error;
+      }
     },
     async createIssue(repository, { title, body, labels }) {
       // gh looks the labels up before it opens the Issue, and prints the new Issue's URL, which
@@ -295,11 +302,17 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
       return raw.filter((pull) => !pull.isCrossRepository).map(pullOf);
     },
     async checks(repository, pull) {
-      // gh pr checks exits 8 while checks are pending; the output still lists them.
-      return await json<GitHubCheck[]>(
-        ["pr", "checks", String(pull), `--repo=${repository}`, "--json=name,bucket"],
-        [8],
-      );
+      const args = ["pr", "checks", String(pull), `--repo=${repository}`, "--json=name,bucket"];
+      if (!ghAllowed(args)) throw new GhRefused(`gh ${args.slice(0, 2).join(" ")} is not allowed`);
+      const result = await exec(args);
+      // gh pr checks exits 8 while checks are pending and may exit 1 once one has failed, still
+      // listing them; a pull request without any check exits 1 and says so.
+      if (result.code === 0 || result.code === 1 || result.code === 8) {
+        if (result.stdout.trim().startsWith("[")) return JSON.parse(result.stdout) as GitHubCheck[];
+        if (result.code === 1 && /no checks reported/i.test(result.stderr)) return [];
+        if (result.code === 0 && result.stdout.trim() === "") return [];
+      }
+      throw new GhError(`gh pr checks: ${result.stderr.trim()}`, result.code);
     },
     async permission(repository, login) {
       // A login outside GitHub's alphabet, such as a bot's `name[bot]`, has no permission to ask

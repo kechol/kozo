@@ -113,6 +113,9 @@ Edits and closes on GitHub carry over:
 - **An Issue closed as completed** by a writer completes the item. One closed as not planned or
   as a duplicate, by a writer or its author, cancels the item and its open tasks. Any other close
   holds the item for attention.
+- **An Issue deleted or moved to another repository** holds the item for your attention in place
+  of any approval or question it waited on; close it with `kozo close`, or add the request again
+  where the Issue went.
 
 ## Labels
 
@@ -151,13 +154,13 @@ task's goal, its body is the handoff report followed by `Part of #<n>`, and it i
 
 kozod then follows the pull request:
 
-| On GitHub                            | What kozod does                                                                                                                                                 |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| You merge it, by any merge method    | Runs the gates on the merged default branch and completes the task; once every task is complete, it completes the item and closes the Issue.                    |
-| A writer requests changes            | Sends the task back to Building with the review's text as an instruction.                                                                                       |
-| A check fails                        | Sends the task back to Building, up to the Charter's `limits.ci_fix_rounds` times; after that, holds it for your attention. `kozo retry` gives the rounds back. |
-| Someone pushes commits to the branch | Takes them and runs review and verify again on them.                                                                                                            |
-| You close it without merging         | Holds the task for your attention; `kozo retry` opens a new pull request.                                                                                       |
+| On GitHub                            | What kozod does                                                                                                                                                                        |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| You merge it, by any merge method    | Runs the gates on the merged default branch and completes the task; once every task is complete, it completes the item and closes the Issue.                                           |
+| A writer requests changes            | Sends the task back to Building with the review's text as an instruction. A later approval by the same reviewer, or the review's dismissal, withdraws the request; a comment does not. |
+| A check fails                        | Sends the task back to Building, up to the Charter's `limits.ci_fix_rounds` times; after that, holds it for your attention. `kozo retry` gives the rounds back.                        |
+| Someone pushes commits to the branch | Takes them and runs review and verify again on them.                                                                                                                                   |
+| You close it without merging         | Holds the task for your attention; `kozo retry` opens a new pull request.                                                                                                              |
 
 Merging the pull request does not close the Issue by itself. kozod closes it once the item is
 complete, after the gates pass on the merged default branch.

@@ -111,7 +111,8 @@ export function fakeGitHub(): FakeGitHub {
     },
     async issue(repository, issue) {
       calls.push(`issue ${repository} #${issue}`);
-      return copyOf(issueOf(repository, issue));
+      const found = repositoryOf(repository).issues.find((entry) => entry.number === issue);
+      return found ? copyOf(found) : null;
     },
     async createIssue(repository, { title, body, labels }) {
       calls.push(`createIssue ${repository} ${title}`);

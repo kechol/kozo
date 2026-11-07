@@ -15,6 +15,7 @@ import { ControlPlane } from "./control-plane.ts";
 import { EventStore } from "./event-store.ts";
 import { GitHubSync } from "./github-sync.ts";
 import { readItemFile } from "./item-file.ts";
+import { externalWrite } from "./transitions.ts";
 import { worktreePath } from "./worktrees.ts";
 
 // kozod keeps event times strictly increasing, so registration can be stamped a little after
@@ -133,6 +134,36 @@ describe("GitHubSync", () => {
     await expect(
       env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "issue", {}),
     ).rejects.toThrow("is cancelled");
+  });
+
+  test("kozo issue again after a failed close finishes with the Issue it opened", async () => {
+    await using env = await setup("kozo");
+    await env.sync.register();
+    env.control.moveToIssue = (ref) => env.sync.moveToIssue(ref);
+    const { ref } = await env.control.addItem({
+      title: "Show low stock",
+      body: "Say Only N left.",
+    });
+    const number = env.github.addIssue("me/shop", { title: "Show low stock", labels: ["kozo"] });
+    // What the first try recorded before its close failed.
+    await externalWrite(
+      env.store,
+      { item: ref, task: null },
+      "github",
+      "issue",
+      `me/shop#${number}`,
+    );
+    const moved = await env.control.act(
+      ref,
+      { kind: "item", item: { repo: null, number: 1 } },
+      "issue",
+      {},
+    );
+    expect(said(moved)).toBe(
+      `moved ${ref} to me/shop#${number}; kozod takes it up as shop#${number}`,
+    );
+    expect(env.github.calls.filter((call) => call.startsWith("createIssue"))).toEqual([]);
+    expect(env.store.state.items[ref]?.stage).toBe("cancelled");
   });
 
   test("trusts only a writer's Issue opened after registration, and skips bots", async () => {
@@ -507,6 +538,31 @@ describe("GitHubSync", () => {
     expect(env.store.state.items[`shop#${next}`]?.title).toBe("Next");
   });
 
+  test("an item whose Issue GitHub no longer has is held for attention once and not read again", async () => {
+    await using env = await setup("kozo");
+    await env.sync.register();
+    const gone = env.github.addIssue("me/shop", {
+      title: "Gone",
+      labels: ["kozo"],
+      createdAt: afterRegistration(),
+    });
+    await env.sync.poll();
+    const issues = env.github.repositories.get("me/shop")?.issues ?? [];
+    issues.splice(
+      issues.findIndex((issue) => issue.number === gone),
+      1,
+    );
+    await env.sync.poll();
+    await env.sync.poll();
+    // The start approval it waited on can no longer be given on the Issue.
+    expect(env.store.state.items[`shop#${gone}`]).toMatchObject({
+      stage: "intake",
+      hold: { kind: "attention", reason: { code: "hold.issue-gone" } },
+    });
+    expect(env.github.calls.filter((call) => call === `issue me/shop #${gone}`)).toHaveLength(1);
+    expect(env.reported.filter((line) => line.includes(`shop#${gone}`))).toEqual([]);
+  });
+
   test("an edit while a start waits takes kozo:accept off, so the new text needs its own", async () => {
     await using env = await setup();
     await env.sync.register();
@@ -743,6 +799,14 @@ describe("GitHubSync", () => {
 
     const second = await handOff("building");
     env.github.checksOf.set(second.pull?.number ?? 0, []);
+    // An approval after a change request withdraws it, and a comment after that changes nothing.
+    second.pull?.reviews.push(
+      { author: "owner", state: "CHANGES_REQUESTED", body: "Rename it", commit: second.head },
+      { author: "owner", state: "APPROVED", body: "", commit: second.head },
+      { author: "owner", state: "COMMENTED", body: "Nice", commit: second.head },
+    );
+    await env.sync.poll();
+    expect(env.store.state.tasks[task]?.stage).toBe("handoff");
     second.pull?.reviews.push(
       {
         author: "stranger",

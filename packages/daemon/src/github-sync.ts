@@ -5,6 +5,7 @@ import {
   type GitHubIssue,
   type GitHubPermission,
   type GitHubPull,
+  type GitHubReview,
   type HoldKind,
   type ItemState,
   isClosed,
@@ -34,7 +35,7 @@ import { enqueue } from "./instructions.ts";
 import { readItemFile, requestText, writeItemFile } from "./item-file.ts";
 import { costOf, externalWrites, heldBefore, lastHandoff, pullsOf } from "./queries.ts";
 import { readCharter } from "./repository.ts";
-import { externalWrite, hold, move, note } from "./transitions.ts";
+import { externalWrite, hold, move, note, releaseHold } from "./transitions.ts";
 import { detachedCheckout, removeCheckout, taskBranch, worktreePath } from "./worktrees.ts";
 
 /** The label a human adds to an Issue to approve its start. */
@@ -177,14 +178,18 @@ export class GitHubSync {
     if (!repository)
       throw new CommandError(409, message("api.no-github", { repository: item.repository }));
     const file = await readItemFile(this.home, ref);
-    // The label goes with the Issue, so a failure leaves no Issue that a retry would open again.
-    const number = await this.github.createIssue(repository.github, {
-      title: file.title,
-      body: file.body,
-      labels: repository.label ? [repository.label] : [],
-    });
+    // An Issue opened by an earlier try whose close failed is the one this try finishes with.
+    const opened = this.written(ref, null, "issue").at(-1);
+    const number = opened
+      ? Number(opened.slice(opened.lastIndexOf("#") + 1))
+      : // The label goes with the Issue, so a failure leaves no Issue that a retry would open again.
+        await this.github.createIssue(repository.github, {
+          title: file.title,
+          body: file.body,
+          labels: repository.label ? [repository.label] : [],
+        });
     const issue = `${repository.github}#${number}`;
-    await this.wrote(ref, null, "issue", issue);
+    if (!opened) await this.wrote(ref, null, "issue", issue);
     await this.control.closeWork(
       ref,
       "item",
@@ -297,8 +302,22 @@ export class GitHubSync {
       const reference = parseReference(item.ref);
       if (reference?.kind !== "item" || reference.item.repo !== name) continue;
       if (open.has(reference.item.number)) continue;
+      // An Issue GitHub no longer has is not asked for again while its item waits on a human.
+      if (item.hold?.reason.code === "hold.issue-gone") continue;
       await this.forIssue(item.ref, async () => {
         const issue = await this.github.issue(github, reference.item.number);
+        if (issue === null) {
+          // Whether to close the item or follow the Issue elsewhere is the owner's to decide. An
+          // approval or a question it waited on can no longer be answered on the Issue, so this
+          // hold takes its place.
+          await releaseHold(this.store, { item: item.ref, task: null }, () => [
+            {
+              hold: "attention",
+              reason: message("hold.issue-gone", { issue: `${github}#${reference.item.number}` }),
+            },
+          ]);
+          return;
+        }
         if (issue.state === "open") open.set(issue.number, issue);
         else closed.push(issue);
       });
@@ -488,7 +507,17 @@ export class GitHubSync {
       );
       return;
     }
-    const requested = pull.reviews.filter(
+    // A reviewer's last deciding review counts, as on GitHub: an approval or a dismissal after a
+    // change request withdraws it, and a comment leaves it standing.
+    const deciding = new Map<string, GitHubReview>();
+    for (const review of pull.reviews)
+      if (
+        review.state === "APPROVED" ||
+        review.state === "CHANGES_REQUESTED" ||
+        review.state === "DISMISSED"
+      )
+        deciding.set(review.author, review);
+    const requested = [...deciding.values()].filter(
       (review) => review.state === "CHANGES_REQUESTED" && review.commit === head,
     );
     for (const review of requested.reverse()) {

@@ -187,6 +187,37 @@ describe("ghAllowed", () => {
     const failed = recording(() => "", 1);
     await expect(ghGitHub(failed.exec).issues("me/app")).rejects.toThrow(GhError);
   });
+
+  test("failed checks and a pull request without checks are answers, other failures are not", async () => {
+    const answer =
+      (stdout: string, stderr: string, code: number): GhExec =>
+      async () => ({ stdout, stderr, code });
+    const failing = JSON.stringify([{ name: "ci", bucket: "fail" }]);
+    expect(await ghGitHub(answer(failing, "", 1)).checks("me/app", 3)).toEqual([
+      { name: "ci", bucket: "fail" },
+    ]);
+    expect(
+      await ghGitHub(answer("", "no checks reported on the 'kozo/x/3-t1' branch", 1)).checks(
+        "me/app",
+        3,
+      ),
+    ).toEqual([]);
+    await expect(
+      ghGitHub(answer("", "gh: API rate limit exceeded (HTTP 403)", 1)).checks("me/app", 3),
+    ).rejects.toThrow(GhError);
+  });
+
+  test("an Issue GitHub cannot resolve is null, and another failure throws", async () => {
+    const answer =
+      (stderr: string): GhExec =>
+      async () => ({ stdout: "", stderr, code: 1 });
+    const gone =
+      "GraphQL: Could not resolve to an issue or pull request with the number of 12. (repository.issue)";
+    expect(await ghGitHub(answer(gone)).issue("me/app", 12)).toBeNull();
+    await expect(
+      ghGitHub(answer("gh: API rate limit exceeded (HTTP 403)")).issue("me/app", 12),
+    ).rejects.toThrow(GhError);
+  });
 });
 
 describe("pushes and comments whose response is lost", () => {

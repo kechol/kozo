@@ -62,7 +62,9 @@ async function serve(out: Output): Promise<number> {
 async function issueBody(url: string): Promise<string> {
   const match = url.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/);
   if (!match?.[1]) throw new Error(`${url} is not a GitHub issue`);
-  return (await ghGitHub().issue(match[1], Number(match[2]))).body;
+  const issue = await ghGitHub().issue(match[1], Number(match[2]));
+  if (!issue) throw new Error(`${url} names no issue GitHub has`);
+  return issue.body;
 }
 
 /**

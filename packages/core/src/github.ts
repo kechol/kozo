@@ -58,8 +58,11 @@ export interface GitHub {
   /** Open Issues, optionally only those with every one of `labels`. */
   issues(repository: GitHubRepository, labels?: readonly string[]): Promise<GitHubIssue[]>;
   comments(repository: GitHubRepository, issue: number): Promise<GitHubComment[]>;
-  /** One Issue by its number, open or closed. */
-  issue(repository: GitHubRepository, issue: number): Promise<GitHubIssue>;
+  /**
+   * One Issue by its number, open or closed, or null when GitHub resolves none by that number,
+   * as for an Issue deleted or moved to another repository.
+   */
+  issue(repository: GitHubRepository, issue: number): Promise<GitHubIssue | null>;
   /** Opens an Issue with `title`, `body` and `labels` and returns its number. */
   createIssue(
     repository: GitHubRepository,

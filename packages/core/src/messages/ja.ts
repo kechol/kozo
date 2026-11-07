@@ -22,6 +22,8 @@ export const ja: { readonly [Code in keyof typeof en]: string } = {
     "{cancelled} が取り消されたので、{task} を始められません。閉じるか、計画し直してください",
   "hold.branch-exists": "{branch} が {repository} にすでにあります",
   "hold.branch-deleted": "{branch} がマージされずに消されました",
+  "hold.issue-gone":
+    "GitHub に Issue {issue} がありません。削除されたか、別のリポジトリへ移されています。item を閉じるか、移った先で続けてください",
   "hold.no-progress": "{attempts} 回試しても進みませんでした（{failure}）",
   "hold.prepare-failed": "prepare が失敗しました。{command} が {code} で終わりました",
   "hold.refs-moved": "run がタスクのブランチの外の ref を動かしました（{refs}）",

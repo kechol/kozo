@@ -22,6 +22,8 @@ export const en = {
     "{cancelled} was cancelled, so {task} cannot start; close it or plan it again",
   "hold.branch-exists": "{branch} already exists in {repository}",
   "hold.branch-deleted": "{branch} was deleted without a merge",
+  "hold.issue-gone":
+    "GitHub no longer has the Issue {issue}: it was deleted or moved to another repository; close the item or follow it where it went",
   "hold.no-progress": "no progress after {attempts} attempts: {failure}",
   "hold.prepare-failed": "prepare failed: {command} exited with {code}",
   "hold.refs-moved": "the run changed refs outside its branch: {refs}",
