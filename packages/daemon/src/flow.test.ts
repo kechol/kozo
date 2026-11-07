@@ -1601,6 +1601,46 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[task]?.defectAt).not.toBeNull();
   }, 180_000);
 
+  test("MISCONFIGURED gates after the merge hold the task for attention and are no defect", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: plan }] : implement(),
+    );
+    const { ref, task } = await toHandoff(env);
+    await env.repo.git(
+      "merge",
+      "--no-ff",
+      "--quiet",
+      "-m",
+      "merge",
+      `kozo/${env.store.factoryId}/K-1-t1`,
+    );
+    const constraints = suiteBase[".kozo/constraints.yml"] ?? "";
+    await env.repo.commit(
+      { ".kozo/constraints.yml": constraints.replace("  full: [lint, test]\n", "") },
+      "drop the full gates",
+    );
+    await env.reconciler.reconcile();
+    await env.scheduler.idle();
+    expect(env.store.state.tasks[task]).toMatchObject({
+      stage: "handoff",
+      defectAt: null,
+      hold: { kind: "attention", reason: { code: "hold.gates-misconfigured" } },
+    });
+    expect(env.store.state.items[ref]?.stage).toBe("building");
+
+    await env.repo.commit({ ".kozo/constraints.yml": constraints }, "restore the full gates");
+    await env.control.act(
+      task,
+      { kind: "task", item: { repo: null, number: 1 }, task: 1 },
+      "retry",
+      {},
+    );
+    await env.reconciler.reconcile();
+    await env.scheduler.idle();
+    expect(env.store.state.tasks[task]?.stage).toBe("complete");
+    expect(env.store.state.items[ref]?.stage).toBe("complete");
+  }, 180_000);
+
   test("an item whose other task was cancelled completes once its last task merges", async () => {
     const docs = "The docs mention the low-stock notice";
     const both = {

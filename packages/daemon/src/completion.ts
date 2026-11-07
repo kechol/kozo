@@ -50,6 +50,17 @@ export async function completeTask(
   // A human who closes or takes the task stops the check, which their verb settles.
   if (!checked) return;
   const { result, output } = checked;
+  // Gates that cannot run say nothing of the merged code, so this is no defect: a human fixes
+  // the constraints, and retry runs the check again.
+  if (result.status === "MISCONFIGURED") {
+    await runner.hold(
+      item.ref,
+      taskRef,
+      "attention",
+      message("hold.gates-misconfigured", { level, reason: result.reason }),
+    );
+    return;
+  }
   const defect = message("defect.gates", { level, branch: repository.branch });
   const checkNote = message("note.check-failed", {
     level,

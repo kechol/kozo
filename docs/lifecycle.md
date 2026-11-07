@@ -196,6 +196,8 @@ one turn of the store's queue, so no hold comes between them:
   task, so its dependents wait.
 - **They fail on the last task:** the task completes with `task.defect`, and the item goes back to
   Triage, whose new tasks are numbered after the old ones.
+- **They are MISCONFIGURED:** no defect; an attention hold on the task until a human fixes the
+  constraints, and `retry` runs the check again.
 
 Defects also count toward a class's demotion (`Reconciler.demote`).
 
