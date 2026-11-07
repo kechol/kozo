@@ -355,6 +355,49 @@ describe("splitting again", () => {
   }, 120_000);
 });
 
+test("a task stopped for its scope while its item is held waits for the hold to split", async () => {
+  const question = "The wording is documented in README.md, outside src/**";
+  const proposed = [
+    { goal: "Document it", done_when: ["README.md says so"], scope: ["README.md"] },
+  ];
+  const blocked = [
+    { use: "kozo_blocked", input: { reason: "scope", question, split: proposed } },
+    {
+      answer: {
+        ...report,
+        outcome: "blocked",
+        blocked: { reason: "scope", question, split: proposed },
+      },
+    },
+  ] as FakeStep[];
+  let sessions = 0;
+  await using env = await factoryOf((request) => {
+    if (request.agent === "triage") return [{ answer: plan }];
+    if (request.agent === "plan")
+      return [{ answer: { outcome: "question", question: "Which file?" } }];
+    sessions += 1;
+    return sessions === 1 ? [{ awaitInstruction: true }, ...blocked] : blocked;
+  });
+  const item = { kind: "item", item: { repo: null, number: 1 } } as const;
+  const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+  await env.settle();
+  await env.control.act(ref, item, "approve", {});
+  env.scheduler.tick();
+  await eventually(() => sessions >= 1, "the implement session to start");
+  const task = `${ref}/t1`;
+  await env.control.act(ref, item, "pause", {});
+  await env.control.act(task, { ...item, kind: "task", task: 1 }, "say", { text: "Go on." });
+  await env.scheduler.idle();
+  expect(env.store.state.tasks[task]).toMatchObject({ stage: "building", hold: null });
+  expect(env.store.state.items[ref]).toMatchObject({ stage: "building", hold: { kind: "paused" } });
+
+  await env.control.act(ref, item, "resume", {});
+  await env.settle();
+  expect(sessions).toBe(2);
+  expect(env.store.state.tasks[task]?.stage).toBe("cancelled");
+  expect(env.store.state.items[ref]?.stage).toBe("planning");
+}, 120_000);
+
 describe("the minimal path", () => {
   test("an item goes from Intake through approvals, Triage and the blueprint to Handoff", async () => {
     await using env = await factoryOf((request) =>
@@ -1239,6 +1282,36 @@ describe("the minimal path", () => {
     const check = events("gates.result").at(-1);
     expect(check).toMatchObject({ node: "complete", data: { head: mergeCommit } });
     expect(await Bun.file(join(env.home.root, check?.data.output_path)).exists()).toBe(true);
+  }, 180_000);
+
+  test("the last task merged while its item is held completes the item once the hold clears", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: plan }] : implement(),
+    );
+    const { ref, task } = await toHandoff(env);
+    const item = { kind: "item", item: { repo: null, number: 1 } } as const;
+    await env.control.act(ref, item, "pause", {});
+    await env.repo.git(
+      "merge",
+      "--no-ff",
+      "--quiet",
+      "-m",
+      "merge",
+      `kozo/${env.store.factoryId}/K-1-t1`,
+    );
+    await env.reconciler.reconcile();
+    await env.scheduler.idle();
+    expect(env.store.state.tasks[task]?.stage).toBe("handoff");
+    expect(env.store.state.items[ref]).toMatchObject({
+      stage: "building",
+      hold: { kind: "paused" },
+    });
+
+    await env.control.act(ref, item, "resume", {});
+    await env.reconciler.reconcile();
+    await env.scheduler.idle();
+    expect(env.store.state.tasks[task]?.stage).toBe("complete");
+    expect(env.store.state.items[ref]?.stage).toBe("complete");
   }, 180_000);
 
   test("a merged task's check takes the next free slot before new work", async () => {

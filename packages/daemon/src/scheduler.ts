@@ -221,8 +221,9 @@ export class Scheduler {
     const ordered = inOrder(this.store.state);
     for (const task of ordered.tasks) {
       if (this.active.size >= this.factory().concurrency) return;
-      if (!task.merged || task.stage !== "handoff" || task.hold || this.active.has(task.ref))
-        continue;
+      // A held item changes no stage, so the check of its task waits for the hold to clear.
+      const held = task.hold || this.store.state.items[task.item]?.hold;
+      if (!task.merged || task.stage !== "handoff" || held || this.active.has(task.ref)) continue;
       // The check runs the gates and no session.
       this.start(task.ref, "task", () => this.runner.complete(task.ref), 0);
     }

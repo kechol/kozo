@@ -5,7 +5,7 @@ import { itemDirectory } from "./item-file.ts";
 import { layersFor } from "./risk.ts";
 import type { Runner } from "./runner.ts";
 import { tail } from "./task-run.ts";
-import { move, note } from "./transitions.ts";
+import { completeMerged, note } from "./transitions.ts";
 import { releaseTask, worktreePath } from "./worktrees.ts";
 
 /**
@@ -20,7 +20,9 @@ export async function completeTask(
 ): Promise<void> {
   const task = runner.store.state.tasks[taskRef];
   const item = task ? runner.store.state.items[task.item] : undefined;
-  if (!task || !item?.plan || task.stage !== "handoff" || task.hold) return;
+  // A held item changes no stage, so its task waits for the hold; the scheduler starts the
+  // check once it clears.
+  if (!task || !item?.plan || task.stage !== "handoff" || task.hold || item.hold) return;
   const repository = await runner.repository(item.repository);
   const worktree = worktreePath(runner.home, repository.path, taskRef);
   const level = layersFor[task.risk].gates;
@@ -49,54 +51,46 @@ export async function completeTask(
   if (!checked) return;
   const { result, output } = checked;
   const defect = message("defect.gates", { level, branch: repository.branch });
-  const recordDefect = async () => {
-    await note(
-      runner.store,
-      { item: item.ref, task: taskRef },
-      "check",
-      message("note.check-failed", { level, branch: repository.branch, output: tail(output) }),
-    );
-    await runner.store.append({
-      type: "task.defect",
-      item: item.ref,
-      task: taskRef,
-      data: { reason: defect },
-    });
-  };
+  const checkNote = message("note.check-failed", {
+    level,
+    branch: repository.branch,
+    output: tail(output),
+  });
   // A task cancelled when the item was split again, or by a human, waits for nothing.
   const closed = (ref: string) => isClosed(runner.store.state.tasks[ref]?.stage ?? "cancelled");
   const last = item.tasks.every((ref) => ref === taskRef || closed(ref));
   // Before the item's last task the item cannot go back to Triage, so the task waits, and
   // with it every task that depends on it, until a human retries the check or closes it.
   if (result.status !== "pass" && !last) {
-    await recordDefect();
+    await note(runner.store, { item: item.ref, task: taskRef }, "check", checkNote);
+    await runner.store.append({
+      type: "task.defect",
+      item: item.ref,
+      task: taskRef,
+      data: { reason: defect },
+    });
     await runner.hold(item.ref, taskRef, "attention", message("hold.defect", { defect }));
     return;
   }
-  await runner.moveTask(
-    task,
-    "complete",
-    null,
+  const completed = await completeMerged(
+    runner.store,
+    { item: item.ref, task: taskRef },
     message(result.status === "pass" ? "stage.merged" : "stage.merged-failed", {
       branch: repository.branch,
       level,
     }),
+    {
+      complete: message("stage.complete"),
+      defect:
+        result.status === "pass"
+          ? null
+          : { reason: defect, note: checkNote, back: message("stage.defect") },
+    },
   );
+  // Held, taken or closed during the check: the next pass, or the human's verb, settles it.
+  if (!completed) return;
   await releaseTask(runner.home, repository.path, taskRef, {
     factory: runner.store.factoryId,
     deleteBranch: false,
   });
-  const owner = runner.store.state.items[item.ref];
-  if (!owner?.tasks.every(closed)) return;
-  // A defect sends the item straight back to Triage, so it never looks complete, and its
-  // Issue is never closed, in between.
-  const defective = result.status !== "pass";
-  if (defective) await recordDefect();
-  await move(
-    runner.store,
-    { item: item.ref, task: null },
-    defective ? "triage" : "complete",
-    defective ? message("stage.defect") : message("stage.complete"),
-    { from: owner.stage },
-  );
 }

@@ -39,7 +39,7 @@ import {
   type RunEnd,
   type RunnerOps,
 } from "./task-run.ts";
-import { clearHold, hold, move } from "./transitions.ts";
+import { hold, move, splitTasks } from "./transitions.ts";
 import { releaseTask } from "./worktrees.ts";
 
 export interface RunnerDeps {
@@ -402,22 +402,11 @@ export class Runner implements RunnerOps {
       }
     }
     const reason = message("stage.split-again", { task: taskRef, question });
-    for (const ref of stopped) {
-      const task = this.store.state.tasks[ref];
-      if (!task) continue;
-      await clearHold(this.store, { item: item.ref, task: ref });
-      await this.moveTask(task, "cancelled", null, reason);
+    for (const ref of await splitTasks(this.store, item.ref, [...stopped], reason)) {
       // As a close does: the run stops for the cancel, and the worktree goes once it has ended.
       if (ref !== taskRef) await this.stopWork(ref);
       await this.release(ref, true);
     }
-    // A second block while the item is already back in Planning only cancels its own tasks;
-    // the plan agent sees them among the tasks so far.
-    if (this.store.state.items[item.ref]?.stage !== "building") return;
-    await this.store.append({ type: "plan.proposed", item: item.ref, data: { plan: item.plan } });
-    await move(this.store, { item: item.ref, task: null }, "planning", reason, {
-      from: "building",
-    });
   }
 
   /** Removes a closed task's worktree, and its branch when `deleteBranch`. */

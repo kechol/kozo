@@ -197,6 +197,18 @@ export class EventStore {
     });
   }
 
+  /**
+   * Appends, in order, the events `decide` makes of the state, or nothing when it makes none,
+   * inside one turn of the store's queue, so that no other event comes between any of them.
+   */
+  appendAllIf(decide: (state: Readonly<FactoryState>) => NewEvent[] | null): Promise<Event[]> {
+    return this.serial(async () => {
+      const written: Event[] = [];
+      for (const event of decide(this.current) ?? []) written.push(await this.commit(event));
+      return written;
+    });
+  }
+
   /** Writes one event, and then the seal of its run's log when it ends the run. */
   private async commit(event: NewEvent): Promise<Event> {
     const line = await this.write(event);

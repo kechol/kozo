@@ -66,7 +66,7 @@ flowchart LR
 | triage → planning | `afterTriage` in `packages/daemon/src/drafting.ts` | A draft whose plan needs approval (`planNeeded`) | kozod |
 | triage or planning → building | `plan.accepted` from `afterTriage`, or from `approve` on a plan approval | A plan that needs no approval, or its approval | kozod or human |
 | planning → triage | `ControlPlane.retry` | `retry` on an item held in Planning | human |
-| building → planning | `Runner.splitAgain` in `packages/daemon/src/runner.ts` | A task blocked on its scope | kozod |
+| building → planning | `Runner.splitAgain` in `packages/daemon/src/runner.ts` | A task blocked on its scope, while the item has no hold; a held item's task tries again once the hold clears | kozod |
 | building → triage | `completeTask` in `packages/daemon/src/completion.ts` | The check after the last task's merge failed | kozod |
 | building → complete | `completeTask` | Every task closed and the check passed | kozod |
 | open → complete or cancelled | `ControlPlane.closeWork` | `close`, or the Issue closed on GitHub | human |
@@ -184,7 +184,9 @@ Kind D is deterministic and A is an agent, as `node.enter` records it.
 Handoff whose final verification passed. Once its branch is in the default branch, by ancestry,
 patch ID or the pull request's merge commit, it appends `branch.merged` and starts
 `completeTask` in `packages/daemon/src/completion.ts`, which runs the gates of the task's risk
-tier on the default branch:
+tier on the default branch once neither the task nor its item is held. `completeMerged` in
+`packages/daemon/src/transitions.ts` then appends the task's completion and the item's move in
+one turn of the store's queue, so no hold comes between them:
 
 - **They pass:** the task completes, and the item once all its tasks are closed.
 - **They fail on a task that is not the item's last:** `task.defect` and an attention hold on the
