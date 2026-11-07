@@ -85,6 +85,10 @@ export class Scheduler {
     work: () => Promise<void>,
     reserveUsd: number,
   ) {
+    // Checked again here, with nothing awaited before the start, since startWork may have
+    // taken a slot while the look that chose this work waited on git.
+    if (this.stopped || this.active.has(ref) || this.active.size >= this.factory().concurrency)
+      return;
     const release = this.runner.reserve(reserveUsd);
     const promise = work()
       .catch(async (error: unknown) => {

@@ -119,6 +119,7 @@ export async function askExplorer(
   itemRef: string,
   taskRef: string | null,
   question: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const item = runner.store.state.items[itemRef];
   if (!item) throw new RunnerError(`${itemRef} does not exist`);
@@ -138,6 +139,7 @@ export async function askExplorer(
       schema: explorerAnswerJsonSchema,
       model: modelFor(definition, "explorer"),
       maxCostUsd,
+      ...(signal ? { signal } : {}),
     });
     const parsed = explorerAnswerSchema.safeParse(answer.output);
     if (!parsed.success) {
@@ -152,7 +154,7 @@ export async function askExplorer(
       error instanceof SessionError
         ? error.reason
         : message("text", { text: String((error as Error).message) });
-    await runner.endRun(run, "failed", reason, spent);
+    await runner.endRun(run, signal?.aborted ? "stopped" : "failed", reason, spent);
     throw error;
   } finally {
     release();

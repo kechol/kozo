@@ -339,6 +339,8 @@ export class Daemon {
     const stopped = this.scheduler.stop();
     await this.reconciling();
     await stopped;
+    // An explorer session runs outside the scheduler and still writes its run's end.
+    await this.runner.asked();
     this.egress.stop();
     this.store.close();
     await rm(this.home.pidFile, { force: true });

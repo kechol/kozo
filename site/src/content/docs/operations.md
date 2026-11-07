@@ -68,12 +68,14 @@ in kozod's environment to turn them off.
 midnight across every session.
 
 - **Reaching it stops only new starts.** Running sessions finish, and tasks that would start wait
-  with a capacity hold that kozod clears the next day.
+  with a capacity hold that kozod clears the next day. A task's next attempt after a failed check
+  is a new session, so it waits the same way and starts from that failure once there is room.
 - **Running work counts in advance.** Each piece of running work reserves its repository's
   `limits.max_cost_usd`, so kozod starts nothing that could take the day past the budget.
 - **One session is capped too.** The Charter's `limits.max_cost_usd` caps each agent session,
   review and verify included.
-- **The explorer is refused** (`kozo say --ask`) once the day's budget is spent.
+- **The explorer is refused** (`kozo say --ask`) once the day's spending and what running work
+  holds back reach the budget. It answers one question at a time.
 
 `kozo report --cost` lists each day's cost against the budget. `kozo status --line` prints one
 line for a status bar, with today's cost:

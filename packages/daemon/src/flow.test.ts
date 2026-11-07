@@ -698,6 +698,47 @@ describe("the minimal path", () => {
     expect(env.store.state.tasks[taskRef]).toMatchObject({ stage: "handoff", hold: null });
   }, 120_000);
 
+  test("a spent daily budget stops the next attempt, which starts from its failure once there is room", async () => {
+    let attempts = 0;
+    await using env = await factoryOf(
+      (request) => {
+        if (request.agent === "triage") return [{ answer: plan }];
+        attempts += 1;
+        if (attempts > 1) return implement();
+        // The fix without its test, which prove refuses, in a session past the day's budget.
+        return [
+          { spend: 0.5 },
+          { write: { "src/stock.ts": goodChange["src/stock.ts"] ?? "" } },
+          { commit: "fix: low stock" },
+          { use: "kozo_gates", input: { level: "full" } },
+          { use: "kozo_note", input: { choice: "a", reason: "b" } },
+          { answer: report },
+        ];
+      },
+      judgeWith("accept"),
+      { factory: "budget: { daily_usd: 0.4 }\n" },
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    const taskRef = `${ref}/t1`;
+    expect(attempts).toBe(1);
+    expect(env.store.state.tasks[taskRef]?.hold).toMatchObject({
+      kind: "capacity",
+      reason: { code: "hold.capacity.budget-spent" },
+    });
+    // The runner and the scheduler read the same clock, so the room comes from a larger budget.
+    const { current } = env.definition;
+    env.definition.current = {
+      ...current,
+      factory: { ...current.factory, budget: { daily_usd: 10 } },
+    };
+    await env.settle();
+    expect(attempts).toBe(2);
+    expect(env.agent.requests.at(-1)?.prompt).toContain("The previous attempt did not pass");
+  }, 120_000);
+
   // bun test runs in UTC, where a local date and a UTC one agree, and a zone set while it runs
   // does not reliably apply, so the report runs in a process that starts in Tokyo.
   test("kozo report --cost names each day by its local calendar date, east of UTC too", () => {
@@ -2641,6 +2682,31 @@ test("one unit is still counted", () => {
     expect(env.store.state.runs[resumed]?.state).toBe("stopped");
     expect(env.store.state.tasks[task]?.checkpoint?.node).toBe("verify-deterministic");
   }, 120_000);
+
+  test("kozo say --ask answers one question at a time, and stopping kozod stops the one it answers", async () => {
+    let asked = 0;
+    const judge: Judge = {
+      async judge(request) {
+        asked += 1;
+        await new Promise((resolve) => request.signal?.addEventListener("abort", resolve));
+        throw new SessionError(message("session.no-result"), 0.01);
+      },
+    };
+    await using env = await factoryOf(() => [], judge);
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    const item = { kind: "item", item: { repo: null, number: 1 } } as const;
+    const first = env.control.act(ref, item, "say", { text: "Why?", ask: true });
+    await eventually(() => asked === 1, "the first answer to start");
+    await expect(env.control.act(ref, item, "say", { text: "And?", ask: true })).rejects.toThrow(
+      "one question at a time",
+    );
+    env.runner.stop();
+    await env.runner.asked();
+    await expect(first).rejects.toThrow();
+    const explorer = Object.values(env.store.state.runs).find((run) => run.agent === "explorer");
+    expect(explorer?.state).toBe("stopped");
+    expect(asked).toBe(1);
+  }, 60_000);
 
   test("kozo say --ask answers from the records in an explorer run and leaves the task as it was", async () => {
     const prompts: string[] = [];

@@ -324,10 +324,13 @@ export class ControlPlane {
     const { subject, item, task } = this.subject(ref, kind);
     if (body.ask) {
       if (!this.runner) throw new CommandError(409, message("api.explorer-stopped"));
+      // The explorer is new work like any other: the running work's reservations count too.
       const budget = this.definition.current.factory.budget.daily_usd;
-      if (costToday(this.store.db, new Date()) >= budget)
+      if (costToday(this.store.db, new Date()) + this.runner.reservedUsd >= budget)
         throw new CommandError(409, message("api.budget-spent", { budget }));
-      return { message: message("text", { text: await this.runner.ask(item, task, body.text) }) };
+      const answer = await this.runner.ask(item, task, body.text);
+      if (answer === null) throw new CommandError(409, message("api.explorer-busy"));
+      return { message: message("text", { text: answer }) };
     }
     if (subject.hold?.kind === "question") {
       await this.note(item, ref, "answer", body.text);

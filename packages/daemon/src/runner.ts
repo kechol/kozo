@@ -31,6 +31,7 @@ import { askExplorer } from "./explorer.ts";
 import { writeHandoffReport } from "./handoff-report.ts";
 import type { Launcher } from "./launcher.ts";
 import { nodeSteps, startServices } from "./nodes.ts";
+import { costToday } from "./queries.ts";
 import { RunRecords } from "./run-records.ts";
 import {
   BlueprintRun,
@@ -110,6 +111,7 @@ export class Runner implements RunnerOps {
 
   stop() {
     this.records.stop();
+    this.asking?.stop.abort();
   }
 
   stopWork(ref: string) {
@@ -238,9 +240,29 @@ export class Runner implements RunnerOps {
         );
         return;
       }
+      // A new attempt is a new session, so it starts only as new work would. Otherwise the task
+      // waits: the scheduler holds it for capacity and starts it again from this failure.
+      if (await this.noRoomForAttempt(taskRef)) return;
       from = "brief";
       previous = outcome.failure;
     }
+  }
+
+  /**
+   * Whether the factory is paused, or the day's spending with what the other running work holds
+   * back leaves no room in the budget for one more session of this task.
+   */
+  private async noRoomForAttempt(taskRef: string): Promise<boolean> {
+    const state = this.store.state;
+    if (state.paused) return true;
+    const item = state.items[state.tasks[taskRef]?.item ?? ""];
+    if (!item) return true;
+    const { charter } = await this.repository(item.repository);
+    const budget = this.deps.definition.current.factory.budget.daily_usd;
+    const spent = costToday(this.store.db, new Date());
+    // This task's own reservation is the session about to start, as for any new work.
+    const others = this.records.reservedUsd - charter.limits.max_cost_usd;
+    return spent + Math.max(0, others) >= budget;
   }
 
   private async runNodes(
@@ -374,8 +396,34 @@ export class Runner implements RunnerOps {
     await this.records.track(taskRef, (signal) => completeTask(this, taskRef, signal));
   }
 
-  async ask(itemRef: string, taskRef: string | null, question: string): Promise<string> {
-    return await askExplorer(this, itemRef, taskRef, question);
+  /**
+   * Answers a human's question in an explorer session, one at a time, which kozod's shutdown
+   * stops and waits for; resolves to null while another question is being answered.
+   */
+  async ask(itemRef: string, taskRef: string | null, question: string): Promise<string | null> {
+    if (this.asking || this.records.stopping) return null;
+    const stop = new AbortController();
+    const asked = askExplorer(this, itemRef, taskRef, question, stop.signal);
+    this.asking = {
+      stop,
+      done: asked.then(
+        () => {},
+        () => {},
+      ),
+    };
+    try {
+      return await asked;
+    } finally {
+      this.asking = null;
+    }
+  }
+
+  /** The explorer session answering now, if any. */
+  private asking: { stop: AbortController; done: Promise<void> } | null = null;
+
+  /** Resolves once the explorer session running now, if any, has ended. */
+  async asked(): Promise<void> {
+    await this.asking?.done;
   }
 
   /**
