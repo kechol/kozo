@@ -28,7 +28,6 @@ import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
 import { enqueue } from "./instructions.ts";
 import { type ItemFile, itemPath, writeItemFile } from "./item-file.ts";
-import { costToday } from "./queries.ts";
 import { readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
 import { type AfterHold, clearHold, hold, move, note, releaseHold } from "./transitions.ts";
@@ -333,7 +332,7 @@ export class ControlPlane {
       if (!this.runner) throw new CommandError(409, message("api.explorer-stopped"));
       // The explorer is new work like any other: the running work's reservations count too.
       const budget = this.definition.current.factory.budget.daily_usd;
-      if (costToday(this.store.db, new Date()) + this.runner.reservedUsd >= budget)
+      if (this.store.costToday(new Date()) + this.runner.reservedUsd >= budget)
         throw new CommandError(409, message("api.budget-spent", { budget }));
       const answer = await this.runner.ask(item, task, body.text);
       if (answer === null) throw new CommandError(409, message("api.explorer-busy"));

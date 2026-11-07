@@ -15,7 +15,7 @@ import {
 } from "@kozo/core";
 import type { DefinitionInUse } from "./definition.ts";
 import type { EventStore } from "./event-store.ts";
-import { costToday, lastFailure } from "./queries.ts";
+import { lastFailure } from "./queries.ts";
 import { type CharterResult, readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
 import type { Node } from "./task-run.ts";
@@ -122,7 +122,7 @@ export class Scheduler {
     if (!result.ok) return message("hold.capacity.charter", { reason: result.reason });
     const { charter } = result;
     const budget = this.factory().budget.daily_usd;
-    const spent = costToday(this.store.db, this.now());
+    const spent = this.store.costToday(this.now());
     if (spent >= budget) return message("hold.capacity.budget-spent", { budget });
     if (spent + this.runner.reservedUsd >= budget)
       return message("hold.capacity.budget-held", { budget });

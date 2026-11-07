@@ -38,7 +38,6 @@ import { DashboardSessions } from "./dashboard-session.ts";
 import type { EventStore } from "./event-store.ts";
 import {
   activeRuns,
-  costToday,
   detail,
   eventColumn,
   eventsAfter,
@@ -245,7 +244,7 @@ export function createApi({
       locale: locale(),
       activeRuns: activeRuns(store.db),
       waiting: inboxCount(store.db),
-      costTodayUsd: costToday(store.db, now()),
+      costTodayUsd: store.costToday(now()),
       reservedUsd: reservedUsd(),
       repositories: repositories(),
     });

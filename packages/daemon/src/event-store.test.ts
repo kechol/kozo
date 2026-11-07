@@ -5,7 +5,7 @@ import { kozoHome, message, runFiles, StateError, sha256 } from "@kozo/core";
 import { recordedLogs, tempDirectory } from "@kozo/testing";
 import { EventLogError, EventStore } from "./event-store.ts";
 import { IndexDb } from "./index-db.ts";
-import { lastFailure, lastHandoff, pullsOf } from "./queries.ts";
+import { costToday, lastFailure, lastHandoff, pullsOf } from "./queries.ts";
 
 const created = {
   type: "item.created",
@@ -109,6 +109,26 @@ describe("EventStore", () => {
     await expect(store.rebuildIndex()).rejects.toThrow(EventLogError);
     create.mockRestore();
     await expect(store.append({ ...created, item: "K-2" })).rejects.toThrow(EventLogError);
+  });
+
+  test("the day's cost is kept as events come and counted again on a new day", async () => {
+    await using dir = await tempDirectory();
+    const store = await EventStore.open(kozoHome(dir.path));
+    await store.append(created);
+    const now = new Date();
+    expect(store.costToday(now)).toBe(0);
+    for (const usd of [0.25, 0.5])
+      await store.append({
+        type: "note.added",
+        item: "K-1",
+        cost: { usd, in: 1, out: 1, cache_read: 0 },
+        data: { kind: "instruction", text: message("text", { text: "go on" }) },
+      });
+    expect(store.costToday(now)).toBe(0.75);
+    expect(store.costToday(now)).toBe(costToday(store.db, now));
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    expect(store.costToday(tomorrow)).toBe(0);
+    store.close();
   });
 
   test("an event the state refuses is neither written nor applied", async () => {

@@ -8,7 +8,7 @@ import {
   render,
 } from "@kozo/core";
 import type { EventStore } from "./event-store.ts";
-import { costToday, midnightOf } from "./queries.ts";
+import { midnightOf } from "./queries.ts";
 
 /** The notification for a factory definition kozod refused. */
 export function refusalNotice(issues: readonly string[], locale: Locale): string {
@@ -82,7 +82,7 @@ export class Notifier {
 
   /** Starts following new events; spending before now counts as told. */
   start() {
-    const spent = costToday(this.store.db, this.now());
+    const spent = this.store.costToday(this.now());
     this.budget = {
       since: midnightOf(this.now()).getTime(),
       spent,

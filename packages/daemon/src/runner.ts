@@ -31,7 +31,6 @@ import { askExplorer } from "./explorer.ts";
 import { writeHandoffReport } from "./handoff-report.ts";
 import type { Launcher } from "./launcher.ts";
 import { nodeSteps, startServices } from "./nodes.ts";
-import { costToday } from "./queries.ts";
 import { RunRecords } from "./run-records.ts";
 import {
   BlueprintRun,
@@ -259,7 +258,7 @@ export class Runner implements RunnerOps {
     if (!item) return true;
     const { charter } = await this.repository(item.repository);
     const budget = this.deps.definition.current.factory.budget.daily_usd;
-    const spent = costToday(this.store.db, new Date());
+    const spent = this.store.costToday(new Date());
     // This task's own reservation is the session about to start, as for any new work.
     const others = this.records.reservedUsd - charter.limits.max_cost_usd;
     return spent + Math.max(0, others) >= budget;

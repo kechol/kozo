@@ -23,6 +23,7 @@ import {
   withoutTornLine,
 } from "@kozo/core";
 import { IndexDb } from "./index-db.ts";
+import { costToday, midnightOf } from "./queries.ts";
 
 type Data<T extends EventType> = Extract<Event, { type: T }>["data"];
 
@@ -326,8 +327,24 @@ export class EventStore {
       // rebuilds from the logs.
       throw this.break(error);
     }
+    if (this.spent && Date.parse(line.ts) >= this.spent.since) this.spent.usd += line.cost.usd;
     for (const listener of this.listeners) listener(line, id);
     return line;
+  }
+
+  /**
+   * What the day from `since`, a local midnight, has cost: counted from the index once a day
+   * and kept up to date by every event after, so that the scheduler's every tick reads no logs.
+   */
+  private spent: { since: number; usd: number } | null = null;
+
+  /** What the day's events have added to the cost, from local midnight at `now`. */
+  costToday(now: Date): number {
+    const since = midnightOf(now).getTime();
+    if (this.spent?.since === since) return this.spent.usd;
+    const usd = costToday(this.db, now);
+    this.spent = { since, usd };
+    return usd;
   }
 
   /** Set once the state may be ahead of the logs; kozod must start again to replay them. */
