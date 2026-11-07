@@ -179,9 +179,15 @@ export class EventStore {
   async rebuildIndex(): Promise<void> {
     await this.serial(async () => {
       const events = mergeLogs((await readLogs(this.home)).map((log) => log.events));
-      this.index.close();
-      this.index = IndexDb.create(this.home.db);
-      fill(this.index, events);
+      // Once the old index is closed, an index that fails to build leaves none to record in, so
+      // the store takes no more events and the next start builds it again.
+      try {
+        this.index.close();
+        this.index = IndexDb.create(this.home.db);
+        fill(this.index, events);
+      } catch (error) {
+        throw this.break(error);
+      }
     });
   }
 
@@ -312,7 +318,14 @@ export class EventStore {
     }
     if (line.type === "run.started" && line.run_id) this.count(line.run_id);
     if (line.type === "item.created" && line.item) this.count(line.item);
-    const id = this.index.record(line, this.current, text);
+    let id: number;
+    try {
+      id = this.index.record(line, this.current, text);
+    } catch (error) {
+      // The event is in the log and the state but not in the index, which the next start
+      // rebuilds from the logs.
+      throw this.break(error);
+    }
     for (const listener of this.listeners) listener(line, id);
     return line;
   }

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { kozoHome, message, runFiles, StateError, sha256 } from "@kozo/core";
 import { recordedLogs, tempDirectory } from "@kozo/testing";
 import { EventLogError, EventStore } from "./event-store.ts";
+import { IndexDb } from "./index-db.ts";
 import { lastFailure, lastHandoff, pullsOf } from "./queries.ts";
 
 const created = {
@@ -83,6 +84,31 @@ describe("EventStore", () => {
     await rm(home.eventsLog, { recursive: true });
     await expect(store.append({ ...created, item: "K-3" })).rejects.toThrow(EventLogError);
     store.close();
+  });
+
+  test("an index that cannot record an event stops the store taking events", async () => {
+    await using dir = await tempDirectory();
+    const store = await EventStore.open(kozoHome(dir.path));
+    const record = spyOn(IndexDb.prototype, "record").mockImplementationOnce(() => {
+      throw new Error("database or disk is full");
+    });
+    await expect(store.append(created)).rejects.toThrow(EventLogError);
+    record.mockRestore();
+    expect((await store.failure).message).toContain("database or disk is full");
+    await expect(store.append({ ...created, item: "K-2" })).rejects.toThrow(EventLogError);
+    store.close();
+  });
+
+  test("an index that fails to rebuild stops the store rather than leave it closed", async () => {
+    await using dir = await tempDirectory();
+    const store = await EventStore.open(kozoHome(dir.path));
+    await store.append(created);
+    const create = spyOn(IndexDb, "create").mockImplementationOnce(() => {
+      throw new Error("unable to open database file");
+    });
+    await expect(store.rebuildIndex()).rejects.toThrow(EventLogError);
+    create.mockRestore();
+    await expect(store.append({ ...created, item: "K-2" })).rejects.toThrow(EventLogError);
   });
 
   test("an event the state refuses is neither written nor applied", async () => {
