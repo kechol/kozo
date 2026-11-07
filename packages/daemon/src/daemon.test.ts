@@ -13,7 +13,7 @@ import {
   tempDirectory,
   testConfine,
 } from "@kozo/testing";
-import { Daemon, serialJobs } from "./daemon.ts";
+import { claimHome, Daemon, serialJobs } from "./daemon.ts";
 import { inProcessLauncher } from "./launcher.ts";
 
 const silent = async () => {};
@@ -25,10 +25,16 @@ describe("Daemon", () => {
     const daemon = await Daemon.start({ home, port: 0, confine: testConfine, notify: silent });
     try {
       expect(await Bun.file(home.pidFile).text()).toBe(`${process.pid}\n`);
-      await Bun.write(home.pidFile, "1\n");
-      await expect(
-        Daemon.start({ home, port: 0, confine: testConfine, notify: silent }),
-      ).rejects.toThrow("already running as pid 1");
+      // Another kozod, as development runs one: through bun.
+      const other = Bun.spawn([process.execPath, "-e", "setTimeout(() => {}, 30_000)"]);
+      try {
+        await Bun.write(home.pidFile, `${other.pid}\n`);
+        await expect(
+          Daemon.start({ home, port: 0, confine: testConfine, notify: silent }),
+        ).rejects.toThrow(`already running as pid ${other.pid}`);
+      } finally {
+        other.kill();
+      }
     } finally {
       await daemon.stop();
     }
@@ -234,6 +240,44 @@ describe("Daemon", () => {
       await second.stop();
     }
   }, 120_000);
+});
+
+describe("claimHome", () => {
+  test("takes over a pid file that names a live program other than kozod", async () => {
+    await using dir = await tempDirectory();
+    const home = kozoHome(dir.path);
+    const sleeper = Bun.spawn(["sleep", "30"]);
+    try {
+      await Bun.write(home.pidFile, `${sleeper.pid}\n`);
+      await claimHome(home);
+      expect(await Bun.file(home.pidFile).text()).toBe(`${process.pid}\n`);
+    } finally {
+      sleeper.kill();
+    }
+  });
+
+  test("lets only one of two starts at once claim the home", async () => {
+    await using dir = await tempDirectory();
+    const daemonPath = join(import.meta.dir, "daemon.ts");
+    const script = `
+      const { claimHome } = await import(${JSON.stringify(daemonPath)});
+      const { kozoHome } = await import("@kozo/core");
+      try {
+        await claimHome(kozoHome(${JSON.stringify(dir.path)}));
+        console.log("claimed");
+        await Bun.sleep(2_000);
+      } catch (error) {
+        console.log(error.message.includes("already running") ? "refused" : error.message);
+      }
+    `;
+    const starts = [0, 1].map(() =>
+      Bun.spawn([process.execPath, "-e", script], { cwd: import.meta.dir, stdout: "pipe" }),
+    );
+    const answers = await Promise.all(
+      starts.map(async (start) => (await new Response(start.stdout).text()).trim()),
+    );
+    expect(answers.sort()).toEqual(["claimed", "refused"]);
+  });
 });
 
 describe("serialJobs", () => {

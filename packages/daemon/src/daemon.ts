@@ -1,5 +1,5 @@
-import { mkdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { apiPort, itemLevel, type KozoHome, kozoHome, message } from "@kozo/core";
 import dashboard from "@kozo/dashboard/index.html";
 import { baseOf, type Confine, claudeJudge, claudeVerifier, platformConfine } from "@kozo/verify";
@@ -61,16 +61,47 @@ function alive(pid: number): boolean {
   }
 }
 
-/** Claims the home for this process, refusing when another live kozod holds it. */
-async function claimHome(home: KozoHome) {
-  const file = Bun.file(home.pidFile);
-  if (await file.exists()) {
-    const pid = Number((await file.text()).trim());
-    if (Number.isInteger(pid) && pid !== process.pid && alive(pid)) {
+/** Whether `pid` is a live kozod: the compiled one, or one run through bun as in development. */
+function liveKozod(pid: number): boolean {
+  if (!alive(pid)) return false;
+  const ps = Bun.spawnSync(["ps", "-o", "comm=", "-p", String(pid)]);
+  const name = basename(ps.stdout.toString().trim());
+  // A process ps cannot name counts as a kozod, so that a doubt never starts a second one.
+  return name === "" || name === "kozod" || name === "bun";
+}
+
+/**
+ * Makes this process the home's one kozod. The pid file is created only where none exists, so
+ * two starts at once cannot both claim the home; a file that names no live kozod, left by one
+ * that crashed or by a pid now another program's, is moved aside and the claim tried again.
+ */
+export async function claimHome(home: KozoHome) {
+  for (let tries = 0; tries < 5; tries += 1) {
+    try {
+      await writeFile(home.pidFile, `${process.pid}\n`, { flag: "wx" });
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    const pid = Number((await readFile(home.pidFile, "utf8").catch(() => "")).trim());
+    if (pid === process.pid) return;
+    if (Number.isInteger(pid) && pid > 0 && liveKozod(pid)) {
       throw new Error(`kozod is already running as pid ${pid} for ${home.root}`);
     }
+    const aside = `${home.pidFile}.${process.pid}`;
+    try {
+      await rename(home.pidFile, aside);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
+    // Another start may have claimed the home since the look above: its file goes back, never
+    // over one that is there by now.
+    const moved = Number((await readFile(aside, "utf8").catch(() => "")).trim());
+    if (moved !== pid) await link(aside, home.pidFile).catch(() => {});
+    await rm(aside, { force: true });
   }
-  await Bun.write(home.pidFile, `${process.pid}\n`);
+  throw new Error(`kozod could not claim ${home.root}: its pid file keeps changing`);
 }
 
 /**
