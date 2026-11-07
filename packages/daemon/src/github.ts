@@ -128,14 +128,15 @@ export const spawnGh: GhExec = async (args, stdin) => {
 };
 
 /** git with gh as its only credential helper, so that pushes use gh's sign-in. */
+// A fetch or a push that the network holds up would otherwise stop every job queued behind it.
+const networkTimeoutMs = 300_000;
+
 const gitWithGh = (clone: string, args: readonly string[]) =>
-  git(clone, [
-    "-c",
-    "credential.helper=",
-    "-c",
-    "credential.helper=!gh auth git-credential",
-    ...args,
-  ]);
+  git(
+    clone,
+    ["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential", ...args],
+    { timeoutMs: networkTimeoutMs },
+  );
 
 /** The `GitHub` of gh, refusing any command line outside the list. */
 export function ghGitHub(exec: GhExec = spawnGh): GitHub {

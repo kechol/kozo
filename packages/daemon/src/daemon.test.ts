@@ -254,4 +254,31 @@ describe("serialJobs", () => {
       "kozod: reading the factory definition failed: Error: factory.yml does not parse",
     ]);
   });
+
+  test("queues a job once while it waits, and a job of another key all the same", async () => {
+    const ran: string[] = [];
+    const jobs = serialJobs(() => {});
+    const { promise: held, resolve: release } = Promise.withResolvers<void>();
+    jobs.add("fetching", () => held);
+    for (let tick = 0; tick < 3; tick += 1) {
+      jobs.add("polling GitHub", async () => {
+        ran.push("poll");
+      });
+      jobs.add(
+        "running automations",
+        async () => {
+          ran.push(`automations ${tick < 2 ? "03:00" : "03:01"}`);
+        },
+        tick < 2 ? "03:00" : "03:01",
+      );
+    }
+    release();
+    await jobs.idle();
+    expect(ran).toEqual(["poll", "automations 03:00", "automations 03:01"]);
+    jobs.add("polling GitHub", async () => {
+      ran.push("poll");
+    });
+    await jobs.idle();
+    expect(ran.filter((job) => job === "poll")).toHaveLength(2);
+  });
 });

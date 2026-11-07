@@ -2,8 +2,15 @@ import type { Factory } from "@kozo/core";
 
 export class GitError extends Error {}
 
-/** Runs git in `cwd` and returns its stdout; a non-zero exit throws a GitError carrying stderr. */
-export async function git(cwd: string, args: readonly string[]): Promise<string> {
+/**
+ * Runs git in `cwd` and returns its stdout; a non-zero exit throws a GitError carrying stderr.
+ * With `timeoutMs`, git is killed once that time has passed and the call throws a GitError.
+ */
+export async function git(
+  cwd: string,
+  args: readonly string[],
+  { timeoutMs }: { timeoutMs?: number } = {},
+): Promise<string> {
   // A developer's core.fsmonitor starts a daemon per repository, which costs each new worktree
   // a few hundred milliseconds and adds nothing to one-off reads.
   const child = Bun.spawn(["git", "-c", "core.fsmonitor=false", ...args], {
@@ -12,13 +19,23 @@ export async function git(cwd: string, args: readonly string[]): Promise<string>
     stdout: "pipe",
     stderr: "pipe",
   });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  if (exitCode !== 0) throw new GitError(`git ${args.join(" ")}: ${stderr.trim()}`);
-  return stdout;
+  const stdout = new Response(child.stdout).text();
+  const stderr = new Response(child.stderr).text();
+  let timedOut = false;
+  const timer =
+    timeoutMs === undefined
+      ? undefined
+      : setTimeout(() => {
+          timedOut = true;
+          child.kill("SIGKILL");
+        }, timeoutMs);
+  const exitCode = await child.exited;
+  clearTimeout(timer);
+  // A helper git started, such as ssh or a credential helper, may outlive git and hold its
+  // output open, so a git that ran out of time is not waited for any further.
+  if (timedOut) throw new GitError(`git ${args.join(" ")}: ran out of time after ${timeoutMs} ms`);
+  if (exitCode !== 0) throw new GitError(`git ${args.join(" ")}: ${(await stderr).trim()}`);
+  return await stdout;
 }
 
 /** Reads a file at a commit, or returns null when the commit does not contain it. */

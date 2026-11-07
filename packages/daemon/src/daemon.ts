@@ -302,7 +302,8 @@ export class Daemon {
       }
       if (every(3_600_000)) remind();
       // An item an automation adds is started by the next tick.
-      jobs.add("running automations", () => automations.run(now));
+      // One run per minute, which a queue held up behind a slow job keeps until its turn.
+      jobs.add("running automations", () => automations.run(now), now.toISOString().slice(0, 16));
       scheduler.tick();
     }, tickMs);
     scheduler.tick();
@@ -351,12 +352,22 @@ export class Daemon {
  */
 export function serialJobs(report: (line: string) => void) {
   let last: Promise<void> = Promise.resolve();
+  // A job waits in the queue at most once by its key, so that a job held up stops the queue
+  // from growing with every tick.
+  const waiting = new Set<string>();
   return {
-    add(what: string, job: () => Promise<unknown>) {
-      last = last.then(job).then(
-        () => {},
-        (error: unknown) => report(`kozod: ${what} failed: ${error}`),
-      );
+    add(what: string, job: () => Promise<unknown>, key: string = what) {
+      if (waiting.has(key)) return;
+      waiting.add(key);
+      last = last
+        .then(() => {
+          waiting.delete(key);
+          return job();
+        })
+        .then(
+          () => {},
+          (error: unknown) => report(`kozod: ${what} failed: ${error}`),
+        );
     },
     /** Resolves once every job added so far has run. */
     idle(): Promise<void> {
