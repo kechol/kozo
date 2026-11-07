@@ -114,7 +114,7 @@ What to change and why.
 
 本文は `# <title>` で始め、残りが依頼になります。automation の item は、いつも開始と計画の承認を待ちます。同じタイトルの item が開いている間は、新しく追加しません。
 
-`kozo admin init` は、`nightly-habit.md` という automation を 1 つ入れてコミットします。これは毎晩 03:00 に、握りつぶされたエラーを 1 か所直す依頼を追加します。止めるには、ファイルを消してコミットします。
+`kozo admin init` は、2 つの automation を入れてコミットします。`nightly-habit.md` は毎晩 03:00 に、握りつぶされたエラーを 1 か所直す依頼を追加します。`weekly-boundaries.md` は毎週月曜の 04:00 に、リポジトリの AGENTS.md の Structure and boundaries の節に反する箇所を 1 つ直す依頼を追加します。止めるには、そのファイルを消してコミットします。
 
 ## eval のケース
 

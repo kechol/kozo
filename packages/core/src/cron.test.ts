@@ -63,6 +63,20 @@ describe("parseAutomation", () => {
     expect(nightly.schedule.matches(at("2026-10-23T03:00:00"))).toBe(true);
   });
 
+  test("the template's weekly boundaries automation parses and runs on Mondays", () => {
+    const weekly = parseAutomation(
+      "weekly-boundaries",
+      factoryTemplate["automations/weekly-boundaries.md"],
+    );
+    expect(weekly).toMatchObject({
+      class: "refactor",
+      title: "Fix one place that breaks the repository's boundaries",
+    });
+    // 2026-10-26 is a Monday, and the day after is not.
+    expect(weekly.schedule.matches(at("2026-10-26T04:00:00"))).toBe(true);
+    expect(weekly.schedule.matches(at("2026-10-27T04:00:00"))).toBe(false);
+  });
+
   test("refuses a bad schedule and a request without a title", () => {
     expect(() =>
       parseAutomation("x", "---\nversion: 1\nschedule: nightly\n---\n# Do it\n"),

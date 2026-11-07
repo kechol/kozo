@@ -11,6 +11,9 @@ import verifyAgent from "../../../templates/factory/agents/verify/agent.md" with
 import nightlyHabit from "../../../templates/factory/automations/nightly-habit.md" with {
   type: "text",
 };
+import weeklyBoundaries from "../../../templates/factory/automations/weekly-boundaries.md" with {
+  type: "text",
+};
 import bugfixBlueprint from "../../../templates/factory/blueprints/bugfix.yml" with {
   type: "text",
 };
@@ -52,4 +55,5 @@ export const factoryTemplate = {
   "blueprints/migration.yml": migrationBlueprint,
   "blueprints/feature.yml": featureBlueprint,
   "automations/nightly-habit.md": nightlyHabit,
+  "automations/weekly-boundaries.md": weeklyBoundaries,
 } as const;

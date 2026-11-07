@@ -128,8 +128,10 @@ What to change and why.
 The body starts with `# <title>`; the rest is the request. An automation's item always waits for
 your start and plan approvals, and none is added while an open item has the same title.
 
-`kozo admin init` installs and commits one automation, `nightly-habit.md`, which asks every night
-at 03:00 for one swallowed error to be fixed. Delete the file and commit to stop it.
+`kozo admin init` installs and commits two automations: `nightly-habit.md`, which asks every
+night at 03:00 for one swallowed error to be fixed, and `weekly-boundaries.md`, which asks every
+Monday at 04:00 for one place that breaks the Structure and boundaries section of the
+repository's AGENTS.md to be fixed. Delete a file and commit to stop it.
 
 ## Eval cases
 
