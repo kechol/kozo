@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
 import { type Message, message, render } from "@kozo/core";
 import type { z } from "zod";
-import { pickEnvironment } from "./command.ts";
+import { CommandStopped, pickEnvironment } from "./command.ts";
 import { deniedCredentials } from "./sandbox.ts";
 
 export interface SessionRequest {
@@ -14,6 +14,8 @@ export interface SessionRequest {
   schema: Record<string, unknown>;
   model: string;
   maxCostUsd: number;
+  /** Ends the session early, as a human's stop or kozod's shutdown does. */
+  signal?: AbortSignal;
 }
 
 export interface SessionAnswer {
@@ -40,6 +42,16 @@ export class SessionError extends Error {
     readonly costUsd = 0,
   ) {
     super(render(reason, "en"));
+  }
+}
+
+/** A judging session that a stop ended before its answer, with what it spent until then. */
+export class SessionStopped extends CommandStopped {
+  constructor(
+    name: string,
+    readonly costUsd: number,
+  ) {
+    super(name);
   }
 }
 
@@ -210,6 +222,9 @@ async function runSession(
   },
 ): Promise<SessionAnswer> {
   const env = { ...sessionEnvironmentFrom(process.env), ...extra };
+  const abort = new AbortController();
+  if (request.signal?.aborted) abort.abort();
+  request.signal?.addEventListener("abort", () => abort.abort(), { once: true });
   try {
     let answer: SessionAnswer | undefined;
     for await (const result of query({
@@ -217,6 +232,7 @@ async function runSession(
       options: {
         ...session,
         pathToClaudeCodeExecutable: executable,
+        abortController: abort,
         env,
         model: request.model,
         systemPrompt: request.instructions,

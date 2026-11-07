@@ -17,6 +17,7 @@ import {
   ownerNotesSection,
   parseAnswer,
   SessionError,
+  SessionStopped,
   type Spend,
   spending,
 } from "./judge.ts";
@@ -38,6 +39,8 @@ export interface ReviewOptions {
   /** The review agent's instructions; kozod passes its factory definition's. */
   instructions?: string;
   maxCostUsd: number;
+  /** Stops the session; a stop before the verdict throws SessionStopped. */
+  signal?: AbortSignal;
   log(text: string): void;
 }
 
@@ -52,6 +55,8 @@ export async function runReview(options: ReviewOptions): Promise<ReviewResult> {
     status: "reviewed" as const,
     record: await review(options, spend),
   }));
+  if (result.status === "error" && options.signal?.aborted)
+    throw new SessionStopped("review", spend.usd);
   return result.status === "error" ? { ...result, costUsd: spend.usd } : result;
 }
 
@@ -77,6 +82,7 @@ async function review(options: ReviewOptions, spend: Spend): Promise<ReviewRecor
       schema: reviewJudgmentJsonSchema,
       model,
       maxCostUsd: options.maxCostUsd,
+      ...(options.signal ? { signal: options.signal } : {}),
     }),
   );
   const judgment = parseAnswer(reviewJudgmentSchema, "review", answer.output);

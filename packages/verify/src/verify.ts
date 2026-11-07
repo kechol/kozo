@@ -28,6 +28,7 @@ import {
   parseAnswer,
   type SessionAnswer,
   SessionError,
+  SessionStopped,
   type Spend,
   spending,
   type Verifier,
@@ -57,6 +58,8 @@ export interface VerifyOptions {
   /** The verify agent's instructions with the verify-app skill; kozod passes its definition's. */
   instructions?: string;
   maxCostUsd: number;
+  /** Stops the session; a stop before the answer throws SessionStopped. */
+  signal?: AbortSignal;
   log(text: string): void;
 }
 
@@ -74,6 +77,8 @@ export async function runVerify(options: VerifyOptions): Promise<VerifyResult> {
   const result = await guarded(options.log, [GitError, SessionError, ProcessError], () =>
     verify(options, spend),
   );
+  if (result.status === "error" && options.signal?.aborted)
+    throw new SessionStopped("verify", spend.usd);
   return result.status === "error" ? { ...result, costUsd: spend.usd } : result;
 }
 
@@ -104,6 +109,7 @@ async function verify(options: VerifyOptions, spend: Spend): Promise<VerifyResul
         schema: verifyJudgmentJsonSchema,
         model: options.model,
         maxCostUsd: options.maxCostUsd,
+        ...(options.signal ? { signal: options.signal } : {}),
       }),
     );
   } finally {

@@ -27,6 +27,7 @@ import {
   runProve,
   runReview,
   runVerify,
+  SessionStopped,
   stopProcessesIn,
   verifyInstructions,
   writeReviewVerdict,
@@ -532,7 +533,14 @@ const review: NodeStep = async (run, current) => {
     model: modelFor(definition, "review"),
     instructions: definition.agents.review.instructions,
     maxCostUsd: charter.limits.max_cost_usd,
+    signal: run.signal,
     log: (text) => void run.log(text),
+  }).catch(async (error: unknown) => {
+    // The stop ends the child run here; the task's run checkpoints at review and resumes there.
+    if (error instanceof SessionStopped)
+      // The task run that stops with it records why.
+      await runner.endRun(child, "stopped", undefined, error.costUsd);
+    throw error;
   });
   if (reviewed.status !== "reviewed") {
     await runner.endRun(child, "failed", errorOf(reviewed), reviewed.costUsd);
@@ -613,6 +621,7 @@ const verifyApp: NodeStep = async (run, current) => {
       repository.tip,
       definition,
     );
+    const session = child;
     verify = await runVerify({
       cwd: worktree,
       base: repository.base,
@@ -624,7 +633,15 @@ const verifyApp: NodeStep = async (run, current) => {
       model: modelFor(definition, "verify"),
       instructions: verifyInstructions(definition.agents.verify, definition.verifyApp),
       maxCostUsd: charter.limits.max_cost_usd,
+      signal: run.signal,
       log: (text) => void run.log(text),
+    }).catch(async (error: unknown) => {
+      if (error instanceof SessionStopped) {
+        // The run resumes at verify-app, whose next session needs the worktree back at HEAD.
+        await discardChanges(worktree);
+        await runner.endRun(session, "stopped", undefined, error.costUsd);
+      }
+      throw error;
     });
     if (verify.status !== "error") break;
   }

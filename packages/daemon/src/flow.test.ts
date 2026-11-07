@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   autonomyLevel,
   kozoHome,
+  message,
   parseAutomation,
   parseEvalCase,
   render,
@@ -29,8 +30,14 @@ import {
   tempDirectory,
   testConfine,
 } from "@kozo/testing";
-import type { Judge, Verifier } from "@kozo/verify";
-import { type Definition, git, readDefinition } from "@kozo/verify";
+import {
+  type Definition,
+  git,
+  type Judge,
+  readDefinition,
+  SessionError,
+  type Verifier,
+} from "@kozo/verify";
 import type { AgentRequest } from "@kozo/worker";
 import { Automations } from "./automations.ts";
 import { ControlPlane } from "./control-plane.ts";
@@ -778,6 +785,97 @@ describe("the minimal path", () => {
       )
       .get();
     expect(exit?.summary).toContain("src/probe.ts");
+  }, 120_000);
+
+  test("a take during review stops its session at once, and the run resumes at review", async () => {
+    let reviews = 0;
+    const judge: Judge = {
+      async judge(request) {
+        reviews += 1;
+        if (reviews === 1) {
+          await new Promise((resolve) => request.signal?.addEventListener("abort", resolve));
+          throw new SessionError(message("session.no-result"), 0.02);
+        }
+        return await judgeWith("accept").judge(request);
+      },
+    };
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+      judge,
+    );
+    const item = { kind: "item", item: { repo: null, number: 1 } } as const;
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, item, "approve", {});
+    env.scheduler.tick();
+    await eventually(() => reviews === 1, "review to start");
+    const task = `${ref}/t1`;
+    const reference = { ...item, kind: "task", task: 1 } as const;
+    await env.control.act(task, reference, "take", {});
+    expect(env.store.state.tasks[task]?.checkpoint?.node).toBe("review");
+    const review = Object.values(env.store.state.runs).find((run) => run.agent === "review");
+    expect(review?.state).toBe("stopped");
+
+    await env.control.act(task, reference, "return", { text: "Looked, changed nothing" });
+    await env.settle();
+    expect(reviews).toBe(2);
+    expect(env.store.state.tasks[task]).toMatchObject({ stage: "handoff", hold: null });
+  }, 120_000);
+
+  test("a pause now during verify-app stops its session and puts the worktree back", async () => {
+    const doneWhen = plan.plan.tasks[0]?.done_when ?? [];
+    let sessions = 0;
+    const verifier: Verifier = {
+      async verify(request) {
+        sessions += 1;
+        if (sessions === 1) {
+          await Bun.write(join(request.cwd, "src", "probe.ts"), "export {};\n");
+          await new Promise((resolve) => request.signal?.addEventListener("abort", resolve));
+          throw new SessionError(message("session.no-result"));
+        }
+        await Bun.write(join(request.cwd, ".output", "verify", "01-label.txt"), "Only 3 left\n");
+        const output = {
+          result: "pass",
+          summary: "The label shows.",
+          conditions: doneWhen.map((condition) => ({
+            condition,
+            met: true,
+            observation: "The page says Only 3 left.",
+            evidence: [".output/verify/01-label.txt"],
+          })),
+          cleanedUp: true,
+        };
+        return { output, model: request.model, costUsd: 0.01 };
+      },
+    };
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: plan }] : implement()),
+      judgeWith("accept"),
+      { verifier },
+    );
+    await env.repo.commit({ ".kozo/verify-app.md": "# Verify the app\n\nRun it.\n" }, "verify");
+    const item = { kind: "item", item: { repo: null, number: 1 } } as const;
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, item, "approve", {});
+    env.scheduler.tick();
+    await eventually(() => sessions === 1, "verify-app to start");
+    const task = `${ref}/t1`;
+    const reference = { ...item, kind: "task", task: 1 } as const;
+    await env.control.act(task, reference, "pause", { now: true });
+    await env.scheduler.idle();
+    expect(env.store.state.tasks[task]?.checkpoint?.node).toBe("verify-app");
+    const worktree = worktreePath(env.home, env.repo.path, task);
+    expect((await git(worktree, ["status", "--porcelain", "--untracked-files=all"])).trim()).toBe(
+      "",
+    );
+    const verify = Object.values(env.store.state.runs).find((run) => run.agent === "verify");
+    expect(verify?.state).toBe("stopped");
+
+    await env.control.act(task, reference, "resume", {});
+    await env.settle();
+    expect(sessions).toBe(2);
+    expect(env.store.state.tasks[task]).toMatchObject({ stage: "handoff", hold: null });
   }, 120_000);
 
   test("closing a task as done removes its worktree and markers and keeps its branch", async () => {
