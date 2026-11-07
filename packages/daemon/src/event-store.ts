@@ -27,6 +27,13 @@ import { IndexDb } from "./index-db.ts";
 type Data<T extends EventType> = Extract<Event, { type: T }>["data"];
 
 /** An event as kozod hands it to the store, which adds `v`, `ts`, `seq` and the defaults. */
+/** A line made and applied to the state, not yet written. */
+interface Staged {
+  line: Event;
+  path: string;
+  text: string;
+}
+
 export type NewEvent = {
   [T in EventType]: {
     type: T;
@@ -199,12 +206,27 @@ export class EventStore {
 
   /**
    * Appends, in order, the events `decide` makes of the state, or nothing when it makes none,
-   * inside one turn of the store's queue, so that no other event comes between any of them.
+   * inside one turn of the store's queue, so that no other event comes between any of them. The
+   * state takes all of them at once, before any is written, so that no reader of it, such as the
+   * scheduler, sees some of them without the rest.
    */
   appendAllIf(decide: (state: Readonly<FactoryState>) => NewEvent[] | null): Promise<Event[]> {
     return this.serial(async () => {
+      const staged: Staged[] = [];
+      for (const event of decide(this.current) ?? []) {
+        try {
+          staged.push(this.stage(event));
+        } catch (error) {
+          // The events staged before this one are in the state but not in the logs.
+          if (staged.length > 0) throw this.break(error);
+          throw error;
+        }
+      }
       const written: Event[] = [];
-      for (const event of decide(this.current) ?? []) written.push(await this.commit(event));
+      for (const each of staged) written.push(await this.persist(each));
+      for (const line of written)
+        if (line.type === "run.changed" && isRunOver(line.data.to) && line.run_id !== null)
+          await this.seal(line.run_id);
       return written;
     });
   }
@@ -231,6 +253,14 @@ export class EventStore {
   }
 
   private async write(event: NewEvent): Promise<Event> {
+    return await this.persist(this.stage(event));
+  }
+
+  /**
+   * Makes the event's line and applies it to the state, before anything is written; the line's
+   * log then counts it, so that the next line staged follows it.
+   */
+  private stage(event: NewEvent): Staged {
     if (this.broken) throw this.broken;
     const log = event.run_id ?? "";
     const now = Math.max(Date.now(), this.lastMs + 1);
@@ -261,6 +291,13 @@ export class EventStore {
     const path =
       line.run_id === null ? this.home.eventsLog : runFiles(this.home, line.run_id).events;
     const text = JSON.stringify(line);
+    this.lastMs = now;
+    this.logs.set(log, { seq: line.seq + 1, last: sha256(text) });
+    return { line, path, text };
+  }
+
+  /** Writes a staged line to its log and to the index, and tells the listeners. */
+  private async persist({ line, path, text }: Staged): Promise<Event> {
     try {
       await mkdir(dirname(path), { recursive: true });
       const file = await open(path, "a");
@@ -273,8 +310,6 @@ export class EventStore {
     } catch (error) {
       throw this.break(error);
     }
-    this.lastMs = now;
-    this.logs.set(log, { seq: line.seq + 1, last: sha256(text) });
     if (line.type === "run.started" && line.run_id) this.count(line.run_id);
     if (line.type === "item.created" && line.item) this.count(line.item);
     const id = this.index.record(line, this.current, text);

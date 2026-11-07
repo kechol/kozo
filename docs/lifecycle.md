@@ -9,7 +9,10 @@ Every move is an event (`stage.changed`, `hold.set`, `hold.cleared`, `run.change
 `applyEvent` in `packages/core/src/state.ts` refuses a move the state does not allow, and
 `EventStore` then refuses to write it. kozod appends every stage move and hold through `move`,
 `hold` and `clearHold` in `packages/daemon/src/transitions.ts`, which append nothing when the
-subject is gone or already as asked; `by` is `human` when a person's act made the move, a verb
+subject is gone or already as asked. A verb that clears a hold and moves on in the same act,
+such as `take`, `return`, `approve`, `reject`, `retry` and `close`, goes through `releaseHold`,
+which appends both in one turn of the store's queue and applies them to the state together, so
+the scheduler never sees the subject without its hold in between; `by` is `human` when a person's act made the move, a verb
 of the local API or a writer's change request or closed Issue on GitHub, and `kozod` otherwise.
 
 `packages/core/src/docs.test.ts` fails when a stage, hold, run state, edge, hold target or

@@ -116,6 +116,67 @@ export async function clearHold(
   return event !== null;
 }
 
+/** A step that releaseHold appends after the hold it clears. */
+export type AfterHold =
+  | { move: Stage; reason: Message }
+  | { hold: HoldKind; reason: Message; by?: Actor }
+  | { note: NoteKind; text: Message }
+  | { event: NewEvent };
+
+/**
+ * Clears the subject's hold, when it has one, and appends the steps `after` makes of the
+ * subject in the same turn of the store's queue, so that nothing, the scheduler included, sees
+ * the subject without a hold in between; a move to the stage the subject is in is left out.
+ * Nothing happens when the subject is gone; resolves to whether anything was appended.
+ */
+export async function releaseHold(
+  store: EventStore,
+  subject: Subject,
+  after: (current: ItemState | TaskState) => AfterHold[],
+  { by = "kozod", reason }: { by?: Actor; reason?: Message } = {},
+): Promise<boolean> {
+  const written = await store.appendAllIf((state) => {
+    const current = stateOf(state, subject);
+    if (!current) return null;
+    const target = targetOf(subject);
+    const events: NewEvent[] = [];
+    if (current.hold)
+      events.push({
+        type: "hold.cleared",
+        item: subject.item,
+        task: subject.task,
+        data: {
+          target,
+          hold: current.hold.kind,
+          by,
+          ...(reason ? { reason: cutValues(reason) } : {}),
+        },
+      });
+    for (const step of after(current)) {
+      if ("move" in step) {
+        if (step.move !== current.stage)
+          events.push(stageChanged(subject, current.stage, step.move, step.reason, by));
+      } else if ("hold" in step) {
+        events.push({
+          type: "hold.set",
+          item: subject.item,
+          task: subject.task,
+          data: { target, hold: step.hold, by: step.by ?? by, reason: cutValues(step.reason) },
+        });
+      } else if ("note" in step) {
+        events.push({
+          type: "note.added",
+          item: subject.item,
+          task: subject.task,
+          data: { kind: step.note, text: cutValues(step.text) },
+        });
+      } else events.push(step.event);
+    }
+    return events;
+  });
+  return written.length > 0;
+}
+
 /**
  * Moves the subject to `to` unless it is there already, or, when `from` is given, unless it has
  * left `from` since the caller looked; resolves to whether it did.

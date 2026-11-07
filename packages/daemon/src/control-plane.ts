@@ -6,6 +6,7 @@ import {
   type Automation,
   autonomyLevel,
   type Charter,
+  type ItemState,
   isClosed,
   type KozoHome,
   type Message,
@@ -15,6 +16,7 @@ import {
   runFiles,
   type Stage,
   startNeeded,
+  type TaskState,
   type Verb,
   type verbBodySchemas,
 } from "@kozo/core";
@@ -28,7 +30,7 @@ import { type ItemFile, itemPath, writeItemFile } from "./item-file.ts";
 import { costToday } from "./queries.ts";
 import { readCharter } from "./repository.ts";
 import type { Runner } from "./runner.ts";
-import { clearHold, hold, move, note } from "./transitions.ts";
+import { type AfterHold, clearHold, hold, move, note, releaseHold } from "./transitions.ts";
 import { hasWorktree, taskBranch, worktreePath } from "./worktrees.ts";
 
 /** What a human wrote, as the message that carries it, or nothing when they wrote nothing. */
@@ -221,6 +223,23 @@ export class ControlPlane {
     await clearHold(this.store, { item, task }, { by: "human", reason });
   }
 
+  /**
+   * Clears the subject's hold for a human and appends `after` in the same turn of the store's
+   * queue, so that the scheduler never starts work on the subject in between.
+   */
+  private async release(
+    kind: "item" | "task",
+    ref: string,
+    after: (current: ItemState | TaskState) => AfterHold[],
+    reason?: Message,
+  ) {
+    const { item, task } = this.subject(ref, kind);
+    await releaseHold(this.store, { item, task }, after, {
+      by: "human",
+      ...(reason ? { reason } : {}),
+    });
+  }
+
   private async setHold(
     kind: "item" | "task",
     ref: string,
@@ -241,31 +260,38 @@ export class ControlPlane {
     );
   }
 
-  /** Moves an item or a task as a human asked, with the command that asked as the reason. */
-  private async move(kind: "item" | "task", ref: string, to: Stage, reason: Message) {
-    const { item, task } = this.subject(ref, kind);
-    await move(this.store, { item, task }, to, reason, { by: "human" });
-  }
-
   private async approve(ref: string, body: Body<"approve">): Promise<VerbResult> {
     const { subject } = this.subject(ref, "item");
     const item = this.store.state.items[ref];
     if (subject.hold?.kind !== "approval" || !item)
       return { message: message("api.no-approval", { ref }) };
     const start = subject.hold.approval === "start";
+    const approval: AfterHold[] = body.text
+      ? [{ note: "approval", text: message("text", { text: body.text }) }]
+      : [];
     if (start) {
-      await this.clearHold("item", ref, said(body.text));
-      if (body.text) await this.note(ref, ref, "approval", body.text);
-      await this.move("item", ref, "triage", message("stage.approve"));
+      await this.release(
+        "item",
+        ref,
+        () => [...approval, { move: "triage", reason: message("stage.approve") }],
+        said(body.text),
+      );
       return { message: message("api.approved-start", { ref }) };
     }
     const plan = item.draft;
     // Checked before the hold is cleared, so that a refusal leaves the plan waiting.
     if (!plan) throw new CommandError(409, message("api.no-plan", { ref }));
-    await this.clearHold("item", ref, said(body.text));
-    await this.store.append({ type: "plan.accepted", item: ref, data: { plan, by: "human" } });
-    // After the acceptance, so that the tasks' runs take it as said about their plan.
-    if (body.text) await this.note(ref, ref, "approval", body.text);
+    // The note after the acceptance, so that the tasks' runs take it as said about their plan,
+    // and in the same turn, so that none of them starts before it.
+    await this.release(
+      "item",
+      ref,
+      () => [
+        { event: { type: "plan.accepted", item: ref, data: { plan, by: "human" } } },
+        ...approval,
+      ],
+      said(body.text),
+    );
     return {
       message: message("api.approved-plan", { ref, count: plan.tasks.length }),
     };
@@ -278,16 +304,17 @@ export class ControlPlane {
     }
     // The rejection comes first: once the hold clears, the next tick may start the plan agent.
     await this.note(ref, ref, "rejection", body.reason);
-    await this.clearHold("item", ref, said(body.reason));
-    if ((this.store.state.items[ref]?.rejections ?? 0) >= 2) {
-      await hold(
-        this.store,
-        { item: ref, task: null },
-        "attention",
-        message("hold.rejected-twice"),
-      );
-      return { message: message("api.rejected-twice", { ref }) };
-    }
+    // A second rejection holds the item for attention in the same turn, so that the plan
+    // agent does not start on it in between.
+    const twice = (this.store.state.items[ref]?.rejections ?? 0) >= 2;
+    await this.release(
+      "item",
+      ref,
+      () =>
+        twice ? [{ hold: "attention", reason: message("hold.rejected-twice"), by: "kozod" }] : [],
+      said(body.reason),
+    );
+    if (twice) return { message: message("api.rejected-twice", { ref }) };
     return {
       message: message("api.rejected", { ref }),
     };
@@ -377,13 +404,18 @@ export class ControlPlane {
       subject.hold?.kind === "attention" &&
       (await this.fixRoundsSpent(ref));
     if (body.text) await this.note(item, ref, "instruction", body.text);
-    await this.clearHold(kind, ref, said(body.text));
-    if (sendBack) {
-      await this.move("task", ref, "building", message("stage.retry"));
-      return { message: message("api.retry-building", { ref }) };
-    }
-    if (kind === "item" && subject.stage === "planning")
-      await this.move("item", ref, "triage", message("stage.retry"));
+    const back: Stage | null = sendBack
+      ? "building"
+      : kind === "item" && subject.stage === "planning"
+        ? "triage"
+        : null;
+    await this.release(
+      kind,
+      ref,
+      () => (back ? [{ move: back, reason: message("stage.retry") }] : []),
+      said(body.text),
+    );
+    if (sendBack) return { message: message("api.retry-building", { ref }) };
     return {
       message:
         kind === "task"
@@ -423,8 +455,12 @@ export class ControlPlane {
     const worktree = worktreePath(this.home, item.repository, ref);
     if (!(await hasWorktree(worktree)))
       throw new CommandError(409, message("api.no-worktree", { ref }));
-    await this.clearHold("task", ref, message("hold.take"));
-    await this.setHold("task", ref, "taken", message("hold.take"));
+    await this.release(
+      "task",
+      ref,
+      () => [{ hold: "taken", reason: message("hold.take") }],
+      message("hold.take"),
+    );
     // Held first, so that the run stops at its node; the worktree is the human's once it has.
     await this.runner?.stopWork(ref);
     const branch = taskBranch(this.store.factoryId, ref);
@@ -452,8 +488,12 @@ export class ControlPlane {
       throw new CommandError(409, message("api.wrong-branch", { worktree, branch }));
     await this.note(item, ref, "instruction", body.text);
     await this.store.append({ type: "task.returned", item, task: ref, data: {} });
-    await this.clearHold("task", ref, said(body.text));
-    await this.move("task", ref, "building", message("stage.return"));
+    await this.release(
+      "task",
+      ref,
+      () => [{ move: "building", reason: message("stage.return") }],
+      said(body.text),
+    );
     return { message: message("api.returned", { ref }) };
   }
 
@@ -513,8 +553,7 @@ export class ControlPlane {
     for (const task of tasks) {
       const state = this.store.state.tasks[task];
       if (!state || isClosed(state.stage)) continue;
-      await this.clearHold("task", task);
-      await this.move("task", task, to, reason);
+      await this.release("task", task, () => [{ move: to, reason }]);
       // Closed first, so that the run stops; its worktree goes once it has, and its branch with
       // it when cancelled.
       await this.runner?.stopWork(task);
@@ -526,13 +565,8 @@ export class ControlPlane {
     if (!owner || isClosed(owner.stage)) return;
     const stages = owner.tasks.map((task) => this.store.state.tasks[task]?.stage ?? "cancelled");
     if (kind === "task" && !stages.every(isClosed)) return;
-    await this.clearHold("item", item);
-    await this.move(
-      "item",
-      item,
-      kind === "task" && stages.includes("complete") ? "complete" : to,
-      reason,
-    );
+    const closed = kind === "task" && stages.includes("complete") ? "complete" : to;
+    await this.release("item", item, () => [{ move: closed, reason }]);
     // Triage or the plan agent may be running for the item itself; it stops once the item is closed.
     if (kind === "item") await this.runner?.stopWork(item);
   }

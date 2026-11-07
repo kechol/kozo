@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { kozoHome, message } from "@kozo/core";
 import { tempDirectory } from "@kozo/testing";
 import { EventStore } from "./event-store.ts";
-import { clearHold, hold, move } from "./transitions.ts";
+import { clearHold, hold, move, releaseHold } from "./transitions.ts";
 
 async function storeWithItem() {
   const dir = await tempDirectory();
@@ -81,5 +81,56 @@ describe("transitions", () => {
     await using env = await storeWithItem();
     await hold(env.store, item, "attention", message("text", { text: "x".repeat(3_000) }));
     expect(env.store.state.items["K-1"]?.hold?.reason.values.text).toHaveLength(2_000);
+  });
+
+  test("releaseHold clears and holds again in one turn, so no reader sees the subject unheld", async () => {
+    await using env = await storeWithItem();
+    await hold(env.store, item, "attention", message("text", { text: "the poll saw it" }));
+    const seen: (string | null)[] = [];
+    const stop = env.store.subscribe(() => {
+      seen.push(env.store.state.items["K-1"]?.hold?.kind ?? null);
+    });
+    const done = await releaseHold(
+      env.store,
+      item,
+      () => [{ hold: "paused", reason: message("text", { text: "kozo pause" }) }],
+      { by: "human" },
+    );
+    stop();
+    expect(done).toBe(true);
+    expect(seen).toEqual(["paused", "paused"]);
+    const types = env.store.db
+      .query<{ type: string }, []>("select type from events order by id")
+      .all()
+      .map((row) => row.type);
+    expect(types.slice(-2)).toEqual(["hold.cleared", "hold.set"]);
+  });
+
+  test("releaseHold leaves out a move to the stage the subject is in, and appends nothing for a subject that is gone", async () => {
+    await using env = await storeWithItem();
+    const gone = await releaseHold(env.store, { item: "K-9", task: null }, () => [
+      { move: "triage", reason: message("text", { text: "approve" }) },
+    ]);
+    expect(gone).toBe(false);
+    const stayed = await releaseHold(env.store, item, () => [
+      { move: "intake", reason: message("text", { text: "approve" }) },
+    ]);
+    expect(stayed).toBe(false);
+  });
+
+  test("a batch whose first event the state refuses writes nothing, and the store goes on", async () => {
+    await using env = await storeWithItem();
+    await expect(
+      env.store.appendAllIf(() => [
+        {
+          type: "hold.cleared",
+          item: "K-1",
+          data: { target: "item", hold: "paused", by: "human" },
+        },
+      ]),
+    ).rejects.toThrow();
+    expect(await hold(env.store, item, "paused", message("text", { text: "kozo pause" }))).toBe(
+      true,
+    );
   });
 });
