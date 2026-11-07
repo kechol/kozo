@@ -280,7 +280,7 @@ export class Runner implements RunnerOps {
     const stopReason = (task: TaskState | undefined) =>
       !task || isClosed(task.stage)
         ? message("run.closed")
-        : task.hold
+        : task.hold || this.store.state.items[task.item]?.hold
           ? message("run.held")
           : this.records.stopping
             ? message("run.kozod-stopped")
@@ -310,7 +310,12 @@ export class Runner implements RunnerOps {
       const current = this.store.state.tasks[taskRef];
       if (!current || isClosed(current.stage))
         return await blueprintRun.stopHere("stopped", stopReason(current));
-      if (current.hold || this.records.stopping || signal.aborted) {
+      if (
+        current.hold ||
+        this.store.state.items[current.item]?.hold ||
+        this.records.stopping ||
+        signal.aborted
+      ) {
         // The next run resumes at this node, not at the one that finished before the stop.
         await blueprintRun.checkpoint(node);
         return await blueprintRun.stopHere("stopped", stopReason(current));

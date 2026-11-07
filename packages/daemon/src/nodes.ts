@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import {
   afterReview,
@@ -244,6 +245,9 @@ const brief: NodeStep = async (run, current) => {
     ],
   };
   run.prompt = renderBrief(written, { reportSchema: runReportJsonSchema });
+  // A run stopped before its implement session starts resumes at implement from this file.
+  await mkdir(run.files.dir, { recursive: true });
+  await Bun.write(run.files.brief, run.prompt);
   await run.exit("brief", true);
 };
 

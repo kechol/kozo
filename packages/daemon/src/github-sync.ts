@@ -365,7 +365,8 @@ export class GitHubSync {
     if (!item || isClosed(item.stage)) return false;
     const file = await readItemFile(this.home, ref);
     const title = issue.title.trim();
-    if (file.title === title && file.body === issue.body) return false;
+    // The item file keeps the body trimmed, as the Issue's may not be.
+    if (file.title === title && file.body === issue.body.trim()) return false;
     const waiting = item.hold?.approval === "start";
     // Another hold first needs the human; the edit is taken once it clears.
     if (item.hold && !waiting) return true;

@@ -102,6 +102,8 @@ export class RunRecords {
   stop() {
     this.shutDown = true;
     for (const session of this.sessions.values()) session.stop();
+    // A command in prepare, the gates or prove would otherwise run on until it ends.
+    for (const work of this.building.values()) work.stop.abort();
   }
 
   /**

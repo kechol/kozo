@@ -253,14 +253,16 @@ export class ControlPlane {
     if (subject.hold?.kind !== "approval" || !item)
       return { message: message("api.no-approval", { ref }) };
     const start = subject.hold.approval === "start";
-    await this.clearHold("item", ref, said(body.text));
     if (start) {
+      await this.clearHold("item", ref, said(body.text));
       if (body.text) await this.note(ref, ref, "approval", body.text);
       await this.move("item", ref, "triage", message("stage.approve"));
       return { message: message("api.approved-start", { ref }) };
     }
     const plan = item.draft;
+    // Checked before the hold is cleared, so that a refusal leaves the plan waiting.
     if (!plan) throw new CommandError(409, message("api.no-plan", { ref }));
+    await this.clearHold("item", ref, said(body.text));
     await this.store.append({ type: "plan.accepted", item: ref, data: { plan, by: "human" } });
     // After the acceptance, so that the tasks' runs take it as said about their plan.
     if (body.text) await this.note(ref, ref, "approval", body.text);
@@ -274,8 +276,9 @@ export class ControlPlane {
     if (subject.hold?.approval !== "plan") {
       return { message: message("api.no-plan-approval", { ref }) };
     }
-    await this.clearHold("item", ref, said(body.reason));
+    // The rejection comes first: once the hold clears, the next tick may start the plan agent.
     await this.note(ref, ref, "rejection", body.reason);
+    await this.clearHold("item", ref, said(body.reason));
     if ((this.store.state.items[ref]?.rejections ?? 0) >= 2) {
       await hold(
         this.store,
@@ -530,6 +533,8 @@ export class ControlPlane {
       kind === "task" && stages.includes("complete") ? "complete" : to,
       reason,
     );
+    // Triage or the plan agent may be running for the item itself; it stops once the item is closed.
+    if (kind === "item") await this.runner?.stopWork(item);
   }
 
   async pauseFactory(): Promise<VerbResult> {

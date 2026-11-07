@@ -529,6 +529,22 @@ describe("GitHubSync", () => {
     );
   });
 
+  test("an Issue body that ends in white space is no edit on the next poll", async () => {
+    await using env = await setup();
+    await env.sync.register();
+    env.github.addIssue("me/shop", {
+      title: "Sort",
+      body: "Sort the list by name.\n\n",
+      createdAt: afterRegistration(),
+    });
+    await env.sync.poll();
+    await env.sync.poll();
+    const edits = env.store.db
+      .query<{ n: number }, []>("select count(*) as n from events where type = 'item.edited'")
+      .get();
+    expect(edits?.n).toBe(0);
+  });
+
   test("follows Issues closed, edited and completed on GitHub, by whom may", async () => {
     await using env = await setup();
     await env.sync.register();

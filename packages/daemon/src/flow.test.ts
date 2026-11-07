@@ -2627,6 +2627,109 @@ test("one unit is still counted", () => {
     expect(handoff).toContain("Kept the label");
   }, 120_000);
 
+  test("an item paused during its task's node stops the run at the next node", async () => {
+    await using env = await factoryOf((request) =>
+      request.agent === "triage"
+        ? [{ answer: plan }]
+        : [{ awaitInstruction: true }, ...implement()],
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    const item = { kind: "item", item: { repo: null, number: 1 } } as const;
+    await env.control.act(ref, item, "approve", {});
+    env.scheduler.tick();
+    await eventually(() => env.agent.requests.length >= 2, "session 2 to start");
+    const task = `${ref}/t1`;
+    await env.control.act(ref, item, "pause", {});
+    await env.control.act(task, { ...item, kind: "task", task: 1 }, "say", { text: "Go on." });
+    await env.scheduler.idle();
+    expect(env.store.state.tasks[task]?.checkpoint?.node).toBe("verify-deterministic");
+    expect(env.store.state.tasks[task]?.stage).toBe("building");
+    expect(Object.values(env.store.state.runs).at(-1)?.state).toBe("stopped");
+  }, 120_000);
+
+  test("closing an item stops the triage session of the item itself", async () => {
+    await using env = await factoryOf(() => [{ hang: true }]);
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    env.scheduler.tick();
+    await eventually(() => env.agent.requests.length >= 1, "triage to start");
+    const item = { kind: "item", item: { repo: null, number: 1 } } as const;
+    await env.control.act(ref, item, "close", { cancel: "not needed" });
+    await env.scheduler.idle();
+    expect(env.store.state.items[ref]?.stage).toBe("cancelled");
+    const triage = Object.values(env.store.state.runs).find((run) => run.agent === "triage");
+    expect(triage?.state).not.toBe("running");
+  }, 120_000);
+
+  test("stopping kozod stops a gate that is running", async () => {
+    const slow = "sleep 53";
+    const lowPlan = {
+      ...plan,
+      plan: {
+        ...plan.plan,
+        risk: "low",
+        tasks: [{ ...plan.plan.tasks[0], scope: ["docs/**"] }],
+      },
+    };
+    const docs: FakeStep[] = [
+      { write: { "docs/stock.md": "Stock labels say Only N left from 1 to 3 units.\n" } },
+      { commit: "docs: describe the low stock label" },
+      { use: "kozo_gates", input: { level: "full" } },
+      { use: "kozo_note", input: { choice: "Documented it", reason: "Docs only" } },
+      { answer: { ...report, tests: [] } },
+    ];
+    await using env = await factoryOf(
+      (request) => (request.agent === "triage" ? [{ answer: lowPlan }] : docs),
+      judgeWith("accept"),
+      {
+        constraints: (text) =>
+          text
+            .replace("gates:\n", `gates:\n  slow:\n    run: ${slow}\n`)
+            .replace("fast: [lint, test]", "fast: [slow, lint, test]"),
+      },
+    );
+    const running = () => Bun.spawnSync(["pgrep", "-f", slow]).stdout.toString().trim() !== "";
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    env.scheduler.tick();
+    await eventually(running, "the slow gate to start");
+    // In the order Daemon.stop takes.
+    env.runner.stop();
+    const stopped = env.scheduler.stop();
+    await eventually(() => !running(), "the slow gate to stop", 15_000);
+    await stopped;
+    expect(env.store.state.tasks[`${ref}/t1`]?.checkpoint?.node).toBe("verify-deterministic");
+  }, 120_000);
+
+  test("a run stopped in its codemod, before its implement session, keeps a brief to resume with", async () => {
+    const codemod = "sleep 59; perl -pi -e 's/units/count/g' src/stock.ts";
+    const codemodPlan = {
+      ...plan,
+      plan: { ...plan.plan, tasks: [{ ...plan.plan.tasks[0], codemod }] },
+    };
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: codemodPlan }] : implement(),
+    );
+    const running = () =>
+      Bun.spawnSync(["pgrep", "-f", "sleep 59"]).stdout.toString().trim() !== "";
+    const { ref } = await env.control.addItem({ title: "Low stock" });
+    const item = { kind: "item", item: { repo: null, number: 1 } } as const;
+    while (!running()) {
+      if (env.store.state.items[ref]?.hold?.kind === "approval")
+        await env.control.act(ref, item, "approve", {});
+      env.scheduler.tick();
+      await Bun.sleep(50);
+    }
+    const task = `${ref}/t1`;
+    await env.control.act(task, { ...item, kind: "task", task: 1 }, "pause", { now: true });
+    await env.scheduler.idle();
+    const state = env.store.state.tasks[task] as TaskState;
+    expect(state.checkpoint?.node).toBe("implement");
+    expect(await env.runner.lastBrief(state, "")).toContain("GOAL");
+    expect(env.agent.requests.filter((request) => request.agent === "implement")).toHaveLength(0);
+  }, 120_000);
+
   test("three sessions in a row that fail without an answer or on a limit do not pause the factory", async () => {
     for (const kind of ["no-answer", "limit", "crash"] as const) {
       await using env = await factoryOf(() => [{ fail: `failed: ${kind}`, kind }]);
