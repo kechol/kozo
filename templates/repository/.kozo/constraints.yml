@@ -22,6 +22,10 @@ tests: ["**/*.test.*", "**/test_*.py", "**/*_test.go"]
 # protected paths, review and prove still see them. For example:
 # generated: ["bun.lock", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"]
 generated: []
+# A gate can keep the structure AGENTS.md describes, such as which module may import which, with
+# the repository's own tool; add it to the levels too. For example:
+#   boundaries:
+#     run: npx depcruise src --config .dependency-cruiser.cjs
 gates:
   lint:
     run: echo "replace with the lint command" && exit 1

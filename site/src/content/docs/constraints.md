@@ -110,6 +110,9 @@ verify with the task's goal and completion conditions. Without it, verify does n
 
 ## `AGENTS.md`
 
-kozo's agents do not load it as memory; the implement brief tells the agent to read it before
-changing anything. Describe there what an agent must know about the repository: its layout, its
-conventions, and how its tests run.
+kozo's agents do not load it as memory. The implement brief tells the agent to read it before
+changing anything, and review judges every diff against it as it is on the default branch,
+reading its first 12,000 characters. Describe there what an agent must know about the
+repository: its modules, which may depend on which and where new code goes, the existing pieces
+a change should reuse, its conventions, and how its tests run. A rule a tool can check, such as
+the direction of imports, belongs in the constraints as a gate as well.
