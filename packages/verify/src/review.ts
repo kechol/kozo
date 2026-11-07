@@ -8,9 +8,9 @@ import reviewDefinition from "../../../templates/factory/agents/review/agent.md"
   type: "text",
 };
 import { parseAgentDefinition } from "./agent-definition.ts";
-import { diffCommand, resolveRange } from "./changes.ts";
+import { diffCommand, resolveRange, resolveRef } from "./changes.ts";
 import { guarded } from "./command.ts";
-import { GitError, git } from "./git.ts";
+import { GitError, git, showFile } from "./git.ts";
 import {
   defuseSections,
   type Judge,
@@ -34,6 +34,8 @@ export interface ReviewOptions {
   ownerNotes?: readonly string[];
   /** What the judge is told about the language of its prose, if anything. */
   language?: string | null;
+  /** How the plan makes the item's change; it was drafted from the request, so it is data. */
+  approach?: string | null;
   judge: Judge;
   model: string;
   /** The review agent's instructions; kozod passes its factory definition's. */
@@ -66,6 +68,9 @@ async function review(options: ReviewOptions, spend: Spend): Promise<ReviewRecor
   const diff = await git(cwd, [...(await diffCommand(cwd)), "-U5", base, head, "--"]);
   if (diff.trim() === "") throw new SessionError(message("session.no-diff"));
   const shown = capDiff(diff);
+  // The rules come from the base's tip, as the Charter does, so the diff under review cannot
+  // rewrite what it is judged against.
+  const rules = await showFile(cwd, await resolveRef(cwd, options.base), rulesPath);
 
   const answer = await spending(
     spend,
@@ -78,6 +83,7 @@ async function review(options: ReviewOptions, spend: Spend): Promise<ReviewRecor
         options.ownerNotes,
         shown.unseen,
         options.language,
+        { rules, approach: options.approach ?? null },
       ),
       schema: reviewJudgmentJsonSchema,
       model,
@@ -99,6 +105,11 @@ async function review(options: ReviewOptions, spend: Spend): Promise<ReviewRecor
     reviewedAt: new Date().toISOString(),
   };
 }
+
+// The repository's rules that review judges conventions against, and how much of them it reads:
+// enough for any AGENTS.md written for people, while one grown past it cannot crowd out the diff.
+const rulesPath = "AGENTS.md";
+const rulesLimit = 12_000;
 
 // How much of a diff the judge reads: enough for any change a task makes by hand, while a
 // lockfile or a generated file would fill the session with lines nobody wrote. A lockfile is
@@ -146,8 +157,19 @@ export function reviewPrompt(
   ownerNotes: readonly string[] = [],
   unseen: readonly string[] = [],
   language: string | null = null,
+  { rules = null, approach = null }: { rules?: string | null; approach?: string | null } = {},
 ): string {
-  const defuse = (text: string) => defuseSections(text, ["instructions", "diff"]);
+  const defuse = (text: string) => defuseSections(text, ["instructions", "approach", "diff"]);
+  const shownRules =
+    rules === null || rules.trim() === ""
+      ? []
+      : [
+          `RULES: the repository's ${rulesPath} at the base, which the conventions criterion judges against:`,
+          defuse(rules.slice(0, rulesLimit)).trimEnd(),
+          ...(rules.length > rulesLimit
+            ? [`RULES CUT: kozod showed the first ${rulesLimit} of its ${rules.length} characters.`]
+            : []),
+        ];
   const conditions = doneWhen.map((condition) => `- ${defuse(condition)}`).join("\n");
   const cut =
     unseen.length === 0
@@ -164,8 +186,12 @@ export function reviewPrompt(
     ...ownerNotesSection(ownerNotes, defuse),
     ...cut,
     ...(language ? [`LANGUAGE: ${language}`] : []),
+    ...shownRules,
     "</instructions>",
     "",
+    ...(approach
+      ? ['<approach trust="untrusted">', defuse(approach).trimEnd(), "</approach>", ""]
+      : []),
     '<diff trust="untrusted">',
     defuse(diff).trimEnd(),
     "</diff>",

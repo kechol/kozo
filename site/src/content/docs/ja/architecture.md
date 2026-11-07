@@ -52,7 +52,7 @@ blueprint は、1 つのタスクを Building から Handoff まで進める、�
 | brief                | 決定的       | 計画から決まった形式の指示（brief）を書きます。計画の方針、同じ item のほかのタスク、先行タスクが変えたことも入れ、依頼は信頼できないデータとして入れます。 |
 | implement            | エージェント | implement エージェントが、タスクの scope の中でコードを変えてコミットします。計画に codemod があれば、先にそれを実行します。                                |
 | verify-deterministic | 決定的       | risk tier の水準の gate、prove、diff-guard を実行します。                                                                                                   |
-| review               | エージェント | 別のセッションの判定役が、差分、目的、完了の条件だけを読みます。                                                                                            |
+| review               | エージェント | 別のセッションの判定役が、差分、目的、完了の条件、リポジトリの AGENTS.md、計画の方針だけを読みます。実装者の説明は読みません。                              |
 | verify-app           | エージェント | risk tier が low でなければ、verify エージェントが `.kozo/verify-app.md` の手順でアプリを動かし、証拠を残します。                                           |
 | handoff              | 決定的       | handoff report を書きます。                                                                                                                                 |
 | final-verify         | 決定的       | 最新のデフォルトブランチに rebase して deep の gate を実行します。これを通ってはじめて、タスクがあなたのマージを待つ状態になります。                        |

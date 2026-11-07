@@ -54,17 +54,17 @@ carries.
 A blueprint is the fixed sequence of nodes that takes one task from Building to Handoff. Some
 nodes are deterministic and kozod runs them itself; agent nodes run a model in a worker.
 
-| Node                 | Kind          | What happens                                                                                                                                                              |
-| -------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| claim                | Deterministic | Creates the task branch and the worktree from the latest default branch. Creating the branch claims the task.                                                             |
-| prepare              | Deterministic | Starts the services, picks the ports, and runs prepare once per worktree.                                                                                                 |
-| brief                | Deterministic | Writes the brief: fixed-format instructions built from the plan, with its approach, the item's other tasks and what earlier tasks did, and the request as untrusted data. |
-| implement            | Agent         | The implement agent changes the code and commits, within the task's scope. A codemod runs first if the plan has one.                                                      |
-| verify-deterministic | Deterministic | The gates of the risk tier's level, prove, and diff-guard.                                                                                                                |
-| review               | Agent         | A judge in a separate session reads only the diff, the goal and the completion conditions.                                                                                |
-| verify-app           | Agent         | The verify agent runs the app by `.kozo/verify-app.md` and keeps evidence, unless the risk tier is low.                                                                   |
-| handoff              | Deterministic | Writes the handoff report.                                                                                                                                                |
-| final-verify         | Deterministic | Rebases on the latest default branch and runs the deep gates; only then is the task ready for your merge.                                                                 |
+| Node                 | Kind          | What happens                                                                                                                                                                     |
+| -------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| claim                | Deterministic | Creates the task branch and the worktree from the latest default branch. Creating the branch claims the task.                                                                    |
+| prepare              | Deterministic | Starts the services, picks the ports, and runs prepare once per worktree.                                                                                                        |
+| brief                | Deterministic | Writes the brief: fixed-format instructions built from the plan, with its approach, the item's other tasks and what earlier tasks did, and the request as untrusted data.        |
+| implement            | Agent         | The implement agent changes the code and commits, within the task's scope. A codemod runs first if the plan has one.                                                             |
+| verify-deterministic | Deterministic | The gates of the risk tier's level, prove, and diff-guard.                                                                                                                       |
+| review               | Agent         | A judge in a separate session reads only the diff, the goal, the completion conditions, the repository's AGENTS.md and the plan's approach, never the implementer's explanation. |
+| verify-app           | Agent         | The verify agent runs the app by `.kozo/verify-app.md` and keeps evidence, unless the risk tier is low.                                                                          |
+| handoff              | Deterministic | Writes the handoff report.                                                                                                                                                       |
+| final-verify         | Deterministic | Rebases on the latest default branch and runs the deep gates; only then is the task ready for your merge.                                                                        |
 
 kozod records a checkpoint when a task enters each node, so a stopped or lost run continues from
 there. A failing check sends the task back with what failed, within the Charter's limits; past

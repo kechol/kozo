@@ -225,7 +225,7 @@ kozod は、各タスクでこれらを実行します。worktree やクロー�
 | `kozo gates [--level fast\|full\|deep] [--base <ref>]`            | V1  | 1 つの水準の gate を実行します。既定は `full` です。`--base` を付けると、constraints を worktree ではなくその ref の先端から読みます。                                                                                              |
 | `kozo diff-guard --base <ref> [--head <ref>] [--scope <glob>]...` | V2  | `<ref>` とのマージベースから `--head`（既定は `HEAD`）までの差分を、`<ref>` の先端にある Charter と constraints に照らして確かめます。                                                                                              |
 | `kozo prove --base <ref> [--preserve]`                            | V3  | 変えたテストが、`HEAD` では通り、テスト以外の変更を戻すと失敗することを求めます。`--preserve` を付けると、振る舞いを変えない変更向けに、戻しても通り続けることを求めます。worktree に、コミットしていない変更があってはいけません。 |
-| `kozo review --base <ref> --goal <text> --done-when <text>...`    | V4  | 差分、目的、条件だけを見る別の `claude` のセッションで、差分を判定します。                                                                                                                                                          |
+| `kozo review --base <ref> --goal <text> --done-when <text>...`    | V4  | 差分、目的、条件、`--base` の時点のリポジトリの AGENTS.md だけを見る別の `claude` のセッションで、差分を判定します。                                                                                                                |
 | `kozo verify --base <ref> --goal <text> --done-when <text>...`    | V5  | sandbox の中の `claude` のセッションで、`.kozo/verify-app.md` の手順でアプリを動かし、各条件を確かめます。                                                                                                                          |
 
 `review` と `verify` は、`--model <id>`、`--max-cost <usd>`、`--out <dir>` も受け付けます。`--out` は、判定と、`verify` なら証拠も、そのディレクトリに残します。検証のコマンドはどれも `--json` を受け付けます。

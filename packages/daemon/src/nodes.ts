@@ -552,6 +552,7 @@ const review: NodeStep = async (run, current) => {
     doneWhen: current.done_when,
     ownerNotes: run.ownerWords().map((note) => render(note.text, "en")),
     language: languageOf(run),
+    approach: run.plan.approach,
     judge: runner.deps.judge,
     model: modelFor(definition, "review"),
     instructions: definition.agents.review.instructions,

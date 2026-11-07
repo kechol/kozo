@@ -118,7 +118,7 @@
 | judge | A separate model session without tools that reads only what it is given and returns a structured judgment, as review does. | `Judge` | - | - |
 | prepare | The constraints commands that run once in a worktree before its first gate, such as installing dependencies. | `prepare` | setup | - |
 | prove | The V3 check that reverts non-test changes and requires the changed tests to fail, or for a blueprint that does not reproduce, to keep passing. | `kozo prove`, `--preserve` | - | - |
-| review | The V4 judge that sees only the diff and the original instructions in a separate session. | `review` | - | - |
+| review | The V4 judge that sees only the diff, the original instructions, the repository's AGENTS.md and the plan's approach in a separate session without tools. | `review` | - | - |
 | review verdict | The recommendation that review returns: accept, revise or escalate. | `review.verdict` | - | - |
 | test file | A file that a `tests` glob in the constraints matches, which diff-guard and prove treat as a test. | `tests` | spec file | - |
 | verification layer | One of the five layers V1 to V5, ordered from the cheapest deterministic check to the costliest judgment. | `V1`–`V5` | - | - |

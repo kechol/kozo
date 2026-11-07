@@ -38,16 +38,16 @@ A **run** is one agent session for an item or a task, referenced as `r-<nnnn>`.
 
 Items and tasks move through the same stages:
 
-| Stage     | What happens                                                                                                                                                                                           |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Intake    | kozod checks that the repository's Charter is ready, and holds the item for a start approval when its level asks for one.                                                                              |
-| Triage    | The triage agent reads the repository without changing it and drafts a plan: the work class, the risk tier, the approach, the completion conditions (DONE_WHEN) and the tasks. kozod checks the draft. |
-| Planning  | The plan waits for your approval. The plan agent redrafts it after a rejection or an answer, and for a feature it first works out the acceptance criteria with you.                                    |
-| Building  | Each task is implemented in its worktree, then run through the gates, prove and diff-guard.                                                                                                            |
-| Reviewing | A review agent in a separate session judges the diff against the task's goal and DONE_WHEN only, and the verify agent drives the app and saves evidence.                                               |
-| Handoff   | The task is rebased on the latest default branch and checked again; kozod writes the handoff report, and the diff waits for your merge.                                                                |
-| Complete  | After your merge, kozod runs the gates on the merged default branch. An item is complete once all its tasks are.                                                                                       |
-| Cancelled | You cancelled the item or task.                                                                                                                                                                        |
+| Stage     | What happens                                                                                                                                                                                            |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Intake    | kozod checks that the repository's Charter is ready, and holds the item for a start approval when its level asks for one.                                                                               |
+| Triage    | The triage agent reads the repository without changing it and drafts a plan: the work class, the risk tier, the approach, the completion conditions (DONE_WHEN) and the tasks. kozod checks the draft.  |
+| Planning  | The plan waits for your approval. The plan agent redrafts it after a rejection or an answer, and for a feature it first works out the acceptance criteria with you.                                     |
+| Building  | Each task is implemented in its worktree, then run through the gates, prove and diff-guard.                                                                                                             |
+| Reviewing | A review agent in a separate session judges the diff against the task's goal and DONE_WHEN, the repository's AGENTS.md and the plan's approach, and the verify agent drives the app and saves evidence. |
+| Handoff   | The task is rebased on the latest default branch and checked again; kozod writes the handoff report, and the diff waits for your merge.                                                                 |
+| Complete  | After your merge, kozod runs the gates on the merged default branch. An item is complete once all its tasks are.                                                                                        |
+| Cancelled | You cancelled the item or task.                                                                                                                                                                         |
 
 You can close any open item or task yourself with `kozo close <ref> --done` or
 `--cancel <reason>`.
@@ -116,13 +116,13 @@ The plan's work class picks the blueprint that a task follows from Building to H
 
 Every diff passes the same layers, from the cheapest to the costliest:
 
-| Layer         | Check                                                                                                                |
-| ------------- | -------------------------------------------------------------------------------------------------------------------- |
-| V1 gates      | The repository's own commands from the constraints, such as lint and tests, at a level of fast, full or deep.        |
-| V2 diff-guard | The diff's size, its scope, protected paths, edits to existing tests and disabled tests.                             |
-| V3 prove      | Reverting everything but the tests: the changed tests must then fail, or, for work that keeps behaviour, still pass. |
-| V4 review     | A separate session that sees only the diff and the original instructions.                                            |
-| V5 verify     | An agent that runs the app as `.kozo/verify-app.md` describes and saves evidence.                                    |
+| Layer         | Check                                                                                                                      |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| V1 gates      | The repository's own commands from the constraints, such as lint and tests, at a level of fast, full or deep.              |
+| V2 diff-guard | The diff's size, its scope, protected paths, edits to existing tests and disabled tests.                                   |
+| V3 prove      | Reverting everything but the tests: the changed tests must then fail, or, for work that keeps behaviour, still pass.       |
+| V4 review     | A separate session that sees only the diff, the original instructions, the repository's AGENTS.md and the plan's approach. |
+| V5 verify     | An agent that runs the app as `.kozo/verify-app.md` describes and saves evidence.                                          |
 
 The plan's risk tier sets the depth: a low-risk task runs the fast gates and stops at review, a
 normal one adds the full gates, prove and verify, and a high-risk one runs the deep gates. kozod
