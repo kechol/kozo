@@ -68,6 +68,25 @@ breaks them, telling you why.
   network access before the implement session, and a human approves every plan with one. A
   task that characterizes runs none.
 
+## Check the draft before you answer
+
+kozod checks the rules above; these it cannot, so go through them yourself and fix the draft
+where one fails:
+
+- **Each task stands on its own.** Merged without the tasks after it, a task leaves the
+  repository working, and its done_when can be checked then.
+- **Each condition is observable.** A reader can tell it holds from the code, a test or the
+  running app, without asking you what you meant.
+- **The scope holds everything the change needs**: the tests that check it, the types and
+  schemas it changes, the migrations of stored data, the configuration, and the documentation
+  that describes the behaviour it changes. A task that would have to reach outside its scope
+  to finish stops and asks to be split again.
+- **What several tasks share is built once.** When two tasks need the same new type, function
+  or module, one task makes it and the others depend on that task, rather than each making its
+  own.
+- **The approach names where the code goes**, following how the repository is laid out and
+  what AGENTS.md says about it, and what existing code the change reuses.
+
 ## When to ask instead
 
 Answer with a question rather than a plan when a reason can be met in more than one way and the
