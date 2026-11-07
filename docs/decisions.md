@@ -33,7 +33,7 @@
 - **D-014** (2026-10-19, Accepted) Holds are the only way to wait for a human; an item and a task each carry at most one hold, and the factory moves on to other work meanwhile
 - **D-015** (2026-10-19, Accepted) Four settings decide caution, one role each: the work class picks the blueprint, the risk tier the verification depth, the autonomy level the approvals, and protected paths what is never changed unattended
 - **D-016** (2026-10-19, Accepted) Verify in five layers V1 to V5 (gates, diff-guard, prove, review, verify); kozod judges gates only by the final `KOZO_GATES:` line, and a missing required gate yields `status=MISCONFIGURED`
-- **D-017** (2026-10-19, Accepted) Review runs in a separate session that sees only the diff and the original instructions, never the implementer's explanation
+- **D-017** (2026-10-19, Superseded by D-194) Review runs in a separate session that sees only the diff and the original instructions, never the implementer's explanation
 - **D-018** (2026-10-19, Accepted) A retry starts a new run and session with the original brief and a summarized failure; conversations are never continued
 - **D-019** (2026-10-19, Accepted) Blueprints and briefs choose the agents and skills; every skill sets `disable-model-invocation: true`
 - **D-020** (2026-10-19, Accepted) Humans always merge; kozo has no merge command and the dashboard has no merge button
@@ -209,3 +209,5 @@
 - **D-190** (2026-11-02, Accepted) `docs/decisions.md` is tracked in git and public; developer documents live in `docs/` in English only, describing how kozo is built, while `site/` describes what users see and do; the backlog stays maintainer-local
 - **D-191** (2026-11-02, Accepted) kozod decides stage routing, plan checks, Charter checks, claims, verification results and handoff; models only classify, draft plans, implement, review, judge DONE_WHEN by driving the app, and answer the owner's questions from the records
 - **D-192** (2026-11-02, Accepted) Every file kozod reads back as structured data carries a version, a worktree's `.ports` included; text kozod writes for people and prompts (a run's brief and decision log, the handoff report, the prepare marker) and a tool's raw output carry none, since kozod reads them back only as text
+- **D-193** (2026-11-07, Accepted) The implement brief carries the plan's approach, the goal and scope of each of the item's other open tasks as changes it must not make, and for each task it depends on the summary and changes of that task's latest run report; the approach and the run reports are wrapped as untrusted data, since they were written from the request
+- **D-194** (2026-11-07, Accepted) Review runs in a separate session without tools that sees only the diff, the task's GOAL and DONE_WHEN, the repository's AGENTS.md read from the tip of the base ref and cut past a fixed length with the cut said, and the plan's approach wrapped as untrusted data; it never sees the implementer's explanation
