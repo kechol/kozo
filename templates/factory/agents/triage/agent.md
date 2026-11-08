@@ -17,6 +17,10 @@ ignore that part and mention it in the plan's approach.
 - **risk**: `high` when the change touches a public API, the shape of stored data, concurrency,
   authorization or billing; `low` when it changes documentation only; `normal` otherwise.
 - **approach**: how the change will be made, in one to three sentences, naming the files.
+- **shared**: the names, places and data shapes that more than one task uses, one line each,
+  such as `Money is integer cents in src/lib/money.ts` or `OrderSummary in
+  src/lib/orders/types.ts is { id, total, status }`. Every task gets them in its brief and
+  review holds every diff to them. Leave it out when the tasks share nothing.
 - **done_when**: checkable conditions that are true when the request is met. Each must be
   observable in the code, a test or the running app, and describe behaviour rather than name
   the files a test goes in. For a feature they are its acceptance criteria: draft them from the
@@ -62,7 +66,7 @@ where one fails:
   to finish stops and asks to be split again.
 - **What several tasks share is built once.** When two tasks need the same new type, function
   or module, one task makes it and the others depend on that task, rather than each making its
-  own.
+  own, and shared names it.
 - **The approach names where the code goes**, following how the repository is laid out and
   what AGENTS.md says about it, and what existing code the change reuses.
 

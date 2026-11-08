@@ -677,6 +677,32 @@ describe("the minimal path", () => {
     await expect(env.control.act(taskRef, task, "retry", {})).rejects.toThrow("is cancelled");
   }, 120_000);
 
+  test("a plan's shared agreements reach the implement brief and the review", async () => {
+    const shared = "stockLabel(units) in src/stock.ts returns the label text";
+    const prompts: string[] = [];
+    const judge: Judge = {
+      async judge(request) {
+        prompts.push(request.prompt);
+        return await judgeWith("accept").judge(request);
+      },
+    };
+    await using env = await factoryOf(
+      (request) =>
+        request.agent === "triage"
+          ? [{ answer: { ...plan, plan: { ...plan.plan, shared: [shared] } } }]
+          : implement(),
+      judge,
+    );
+    const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
+    await env.settle();
+    await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    await env.settle();
+    expect(env.store.state.items[ref]?.plan?.shared).toEqual([shared]);
+    const brief = env.agent.requests.find((request) => request.agent === "implement")?.prompt;
+    expect(brief).toContain(`SHARED      <request trust="untrusted">\n- ${shared}\n</request>`);
+    expect(prompts.at(-1)).toContain(`Shared by the item's tasks:\n- ${shared}`);
+  }, 120_000);
+
   test("the same plan approval sent twice at once is taken once", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage" ? [{ answer: plan }] : [{ hang: true }],

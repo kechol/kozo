@@ -102,8 +102,8 @@ the rest scrolls, so you act where you finish reading:
 ### Item
 
 The item's page starts with the request as it was written, then the plan: the drafted one while
-it waits for your approval, or the accepted one. Each shows the approach, the completion
-conditions and the tasks. A list of its tasks follows.
+it waits for your approval, or the accepted one. Each shows the approach, what the tasks share,
+the completion conditions and the tasks. A list of its tasks follows.
 
 ### Task
 

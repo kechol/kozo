@@ -36,6 +36,8 @@ export interface ReviewOptions {
   language?: string | null;
   /** How the plan makes the item's change; it was drafted from the request, so it is data. */
   approach?: string | null;
+  /** The plan's shared agreements, data like the approach. */
+  shared?: readonly string[];
   judge: Judge;
   model: string;
   /** The review agent's instructions; kozod passes its factory definition's. */
@@ -83,7 +85,7 @@ async function review(options: ReviewOptions, spend: Spend): Promise<ReviewRecor
         options.ownerNotes,
         shown.unseen,
         options.language,
-        { rules, approach: options.approach ?? null },
+        { rules, approach: options.approach ?? null, shared: options.shared ?? [] },
       ),
       schema: reviewJudgmentJsonSchema,
       model,
@@ -157,7 +159,11 @@ export function reviewPrompt(
   ownerNotes: readonly string[] = [],
   unseen: readonly string[] = [],
   language: string | null = null,
-  { rules = null, approach = null }: { rules?: string | null; approach?: string | null } = {},
+  {
+    rules = null,
+    approach = null,
+    shared = [],
+  }: { rules?: string | null; approach?: string | null; shared?: readonly string[] } = {},
 ): string {
   const defuse = (text: string) => defuseSections(text, ["instructions", "approach", "diff"]);
   const shownRules =
@@ -189,8 +195,16 @@ export function reviewPrompt(
     ...shownRules,
     "</instructions>",
     "",
-    ...(approach
-      ? ['<approach trust="untrusted">', defuse(approach).trimEnd(), "</approach>", ""]
+    ...(approach || shared.length > 0
+      ? [
+          '<approach trust="untrusted">',
+          ...(approach ? [defuse(approach).trimEnd()] : []),
+          ...(shared.length > 0
+            ? ["Shared by the item's tasks:", ...shared.map((line) => `- ${defuse(line)}`)]
+            : []),
+          "</approach>",
+          "",
+        ]
       : []),
     '<diff trust="untrusted">',
     defuse(diff).trimEnd(),

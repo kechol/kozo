@@ -107,7 +107,7 @@ kozo ls [inbox|items|tasks|runs] [--json]
 kozo show <ref> [-f] [--diff] [--json]
 ```
 
-item、task、run を表示します。計画の承認を待っている item では、下書きの計画を表示します。中身は、work class、risk tier、方針、各タスクの目的と、タスクが実行する codemod です。
+item、task、run を表示します。計画の承認を待っている item では、下書きの計画を表示します。中身は、work class、risk tier、方針、タスクで共有するもの、各タスクの目的と、タスクが実行する codemod です。
 
 | フラグ   | 意味                                                                         |
 | -------- | ---------------------------------------------------------------------------- |

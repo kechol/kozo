@@ -30,6 +30,8 @@ const draftFields = {
   class: workClassSchema,
   risk: riskTierSchema,
   approach: text,
+  /** Shared agreements: the names, places and data shapes more than one task uses. */
+  shared: z.array(text).optional(),
   done_when: conditions,
   tasks: z.array(planTaskSchema).nonempty(),
 };

@@ -26,6 +26,10 @@ means in a triage draft:
 - **approach**: how the change will be made, in one to three sentences, naming the files.
 - **done_when**: checkable conditions that are true when the request is met, observable in the
   code, a test or the running app.
+- **shared**: the names, places and data shapes that more than one task uses, one line each,
+  such as `Money is integer cents in src/lib/money.ts` or `OrderSummary in
+  src/lib/orders/types.ts is { id, total, status }`. Every task gets them in its brief and
+  review holds every diff to them. Leave it out when the tasks share nothing.
 - **tasks**: the units that each become one diff, each with a goal, its own done_when, the path
   globs it may change as its scope, the IDs of tasks it depends on, and an estimate of the lines
   and files it changes. Existing tests cannot be changed, so a task's tests go in new files.
@@ -83,7 +87,7 @@ where one fails:
   to finish stops and asks to be split again.
 - **What several tasks share is built once.** When two tasks need the same new type, function
   or module, one task makes it and the others depend on that task, rather than each making its
-  own.
+  own, and shared names it.
 - **The approach names where the code goes**, following how the repository is laid out and
   what AGENTS.md says about it, and what existing code the change reuses.
 

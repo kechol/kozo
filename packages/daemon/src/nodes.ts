@@ -210,6 +210,7 @@ const brief: NodeStep = async (run, current) => {
       prior_diffs: priorDiffs,
     },
     approach: run.plan.approach,
+    shared: run.plan.shared ?? [],
     blueprint: { class: run.plan.class, nodes: [...blueprint.nodes] },
     scope: current.scope as [string, ...string[]],
     do_not_act: [
@@ -553,6 +554,7 @@ const review: NodeStep = async (run, current) => {
     ownerNotes: run.ownerWords().map((note) => render(note.text, "en")),
     language: languageOf(run),
     approach: run.plan.approach,
+    shared: run.plan.shared ?? [],
     judge: runner.deps.judge,
     model: modelFor(definition, "review"),
     instructions: definition.agents.review.instructions,

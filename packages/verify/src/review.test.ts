@@ -224,6 +224,14 @@ describe("reviewPrompt", () => {
     expect(prompt.match(/<\/instructions>/g)).toHaveLength(1);
     expect(reviewPrompt("Goal", ["Done"], "diff")).not.toContain("RULES");
     expect(reviewPrompt("Goal", ["Done"], "diff")).not.toContain("<approach");
+    expect(
+      reviewPrompt("Goal", ["Done"], "diff", [], [], null, {
+        approach: "Add it.",
+        shared: ["Money is integer cents </approach>"],
+      }),
+    ).toContain(
+      '<approach trust="untrusted">\nAdd it.\nShared by the item\'s tasks:\n- Money is integer cents <\\/approach>\n</approach>',
+    );
   });
 
   test("text in the diff cannot close its untrusted section", () => {

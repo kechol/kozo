@@ -29,6 +29,8 @@ export const briefSchema = z.strictObject({
     .refine((item) => item.position <= item.of, "The position is past the number of tasks"),
   /** How the plan makes the item's change; it was drafted from the request, so it is data. */
   approach: text,
+  /** The plan's shared agreements, data like the approach; empty when the plan has none. */
+  shared: z.array(text),
   blueprint: z.strictObject({ class: workClassSchema, nodes: list }),
   scope: list,
   /** Changes outside the scope, including the work of the item's other tasks, that the run must leave. */
@@ -77,6 +79,9 @@ export function renderBrief(brief: Brief, { reportSchema }: { reportSchema: unkn
     `ITEM        ${item.goal}`,
     `            This is ${item.task}, task ${item.position} of ${item.of}.`,
     `APPROACH    ${wrapRequest(brief.approach)}`,
+    ...(brief.shared.length > 0
+      ? [`SHARED      ${wrapRequest(brief.shared.map((agreement) => `- ${agreement}`).join("\n"))}`]
+      : []),
     ...item.prior_diffs.map((diff) => `            Earlier task: ${diff}`),
     `BLUEPRINT   ${brief.blueprint.class}: ${brief.blueprint.nodes.join(" → ")}`,
     `SCOPE       ${bullets(brief.scope)}`,

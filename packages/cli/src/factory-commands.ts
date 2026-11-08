@@ -433,6 +433,7 @@ export function detailLines(body: Record<string, unknown>, t = english): string[
       ...(item.draft
         ? [
             `draft      ${t("cli.draft-summary", { class: item.draft.class, risk: item.draft.risk, approach: item.draft.approach })}`,
+            ...(item.draft.shared ?? []).map((agreement) => `  shared  ${agreement}`),
             ...item.draft.tasks.flatMap((task) => [
               `  ${task.id}  ${task.goal}${task.characterize ? ` ${t("cli.characterizes")}` : ""}`,
               ...(task.codemod ? [`      codemod: ${task.codemod}`] : []),

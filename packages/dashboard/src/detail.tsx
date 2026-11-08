@@ -37,6 +37,7 @@ interface Plan {
   class: string;
   risk: string;
   approach: string;
+  shared?: string[];
   done_when: string[];
   tasks: PlanTask[];
 }
@@ -461,6 +462,16 @@ function PlanView({
     <section class="card">
       <h2>{title}</h2>
       <p>{plan.approach}</p>
+      {plan.shared && plan.shared.length > 0 ? (
+        <>
+          <h3>{t("detail.shared")}</h3>
+          <ul>
+            {plan.shared.map((agreement) => (
+              <li key={agreement}>{agreement}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
       <h3>{t("detail.doneWhen")}</h3>
       <ul>
         {plan.done_when.map((condition) => (

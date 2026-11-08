@@ -120,8 +120,8 @@ kozo show <ref> [-f] [--diff] [--json]
 ```
 
 Shows an item, a task or a run. For an item awaiting plan approval it prints the drafted plan:
-the work class, the risk tier, the approach and each task's goal, with any codemod a task would
-run.
+the work class, the risk tier, the approach, what the tasks share and each task's goal, with any
+codemod a task would run.
 
 | Flag     | Meaning                                                                                 |
 | -------- | --------------------------------------------------------------------------------------- |
