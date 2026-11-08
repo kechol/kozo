@@ -239,7 +239,15 @@ export class Daemon {
       repositories: () => definition.current.factory.repositories.map(({ path }) => path),
       reservedUsd: () => runner.reservedUsd,
       report: (view, days) =>
-        buildReport(store.db, store.state, definition.current.factory, view, days),
+        buildReport(
+          store.db,
+          store.state,
+          definition.current.factory,
+          view,
+          days,
+          new Date(),
+          home,
+        ),
       records: {
         task: (ref) => taskRecords(home, store, ref),
         evidence: (run, path) => evidenceFile(home, run, path),

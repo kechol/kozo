@@ -482,6 +482,7 @@ item の <ref> は K-<n> か <repo>#<n>、タスクは <item>/t<n>、run は r-<
   "cli.promotions": "昇格の提案: Charter で L3 に上げる",
   "cli.class-in-repository": "{repository} の {class}",
   "cli.levels": "kozod が適用しているレベル",
+  "cli.noticed": "範囲外で気づいて残したもの {count} 件。`kozo add` で item にできます:",
   "cli.demotions": "降格（Charter が変わるまで）",
   "cli.demotion": "{place}: {from} から {to} へ、{reason}",
   "cli.cost-in-window": "期間内 {cost}",

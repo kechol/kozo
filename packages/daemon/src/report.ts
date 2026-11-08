@@ -4,6 +4,7 @@ import {
   dayMs,
   type Factory,
   type FactoryState,
+  type KozoHome,
   type Message,
   promotionProposals,
   type TaskState,
@@ -21,8 +22,39 @@ import {
   reviewVerdicts,
 } from "./queries.ts";
 import { readCharter } from "./repository.ts";
+import { runRecords } from "./task-records.ts";
 
 export type ReportView = "summary" | "review" | "cost";
+
+/** One thing an implementer noticed out of its task's scope and left alone. */
+export interface Noticed {
+  task: string;
+  path: string | null;
+  note: string;
+}
+
+/**
+ * The out-of-scope notes of the run reports of the tasks merged since `since`, one per distinct
+ * path and note, so that what several runs noticed shows once.
+ */
+async function noticed(home: KozoHome, state: FactoryState, since: string): Promise<Noticed[]> {
+  const seen = new Set<string>();
+  const notes: Noticed[] = [];
+  const merged = Object.values(state.tasks).filter(
+    (task) => task.merged !== null && task.merged.at >= since,
+  );
+  for (const task of merged) {
+    for (const record of await runRecords(home, state, task)) {
+      for (const { path, note } of record.report?.out_of_scope ?? []) {
+        const key = `${path ?? ""}\n${note.trim()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        notes.push({ task: task.ref, path: path ?? null, note });
+      }
+    }
+  }
+  return notes;
+}
 
 /** The window a report covers when the request names none, and the longest it may cover. */
 export const reportDays = { default: 30, max: 365 } as const;
@@ -133,6 +165,7 @@ export async function buildReport(
   view: ReportView,
   days: number = reportDays.default,
   now = new Date(),
+  home: KozoHome | null = null,
 ) {
   const budget = factory.budget.daily_usd;
   if (view === "cost") {
@@ -185,5 +218,6 @@ export async function buildReport(
     levels,
     demotions: Object.values(state.demotions),
     cost_usd: costBetween(db, new Date(since)),
+    noticed: home ? await noticed(home, state, since) : [],
   };
 }

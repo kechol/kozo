@@ -1501,6 +1501,44 @@ describe("the minimal path", () => {
     expect(env.store.state.items[ref]?.stage).toBe("complete");
   }, 180_000);
 
+  test("the review report lists what merged tasks noticed out of scope, once each", async () => {
+    const note = { path: "src/cart.ts", note: "The cart rounds prices twice" };
+    const noticing = () =>
+      implement().map((step) =>
+        "answer" in step
+          ? { answer: { ...report, out_of_scope: [note, note, { note: "The README is stale" }] } }
+          : step,
+      );
+    await using env = await factoryOf((request) =>
+      request.agent === "triage" ? [{ answer: plan }] : noticing(),
+    );
+    const { task } = await toHandoff(env);
+    await env.repo.git(
+      "merge",
+      "--no-ff",
+      "--quiet",
+      "-m",
+      "merge",
+      `kozo/${env.store.factoryId}/K-1-t1`,
+    );
+    await env.reconciler.reconcile();
+    await env.scheduler.idle();
+    const factory = env.definition.current.factory;
+    const review = await buildReport(
+      env.store.db,
+      env.store.state,
+      factory,
+      "review",
+      30,
+      new Date(),
+      env.home,
+    );
+    expect((review as { noticed: unknown[] }).noticed).toEqual([
+      { task, path: "src/cart.ts", note: "The cart rounds prices twice" },
+      { task, path: null, note: "The README is stale" },
+    ]);
+  }, 180_000);
+
   test("a merged task's check takes the next free slot before new work", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage" ? [{ answer: plan }] : implement(),

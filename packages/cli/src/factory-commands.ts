@@ -624,6 +624,7 @@ interface Metrics {
   demotions?: { repository: string; class: string; from: string; to: string; reason: string }[];
   cost_usd?: number;
   failures?: { kind: string; ref: string; at: string; text: string }[];
+  noticed?: { task: string; path: string | null; note: string }[];
 }
 
 interface CostReport {
@@ -687,6 +688,15 @@ function metricLines(r: Metrics, t: Words): string[] {
     ...(r.cost_usd === undefined
       ? []
       : ["", `cost              ${t("cli.cost-in-window", { cost: dollars(r.cost_usd) })}`]),
+    ...(r.noticed && r.noticed.length > 0
+      ? [
+          "",
+          t("cli.noticed", { count: r.noticed.length }),
+          ...r.noticed.map(
+            (n) => `  ${n.task}  ${n.path ? `${n.path}: ` : ""}${n.note.split("\n")[0]}`,
+          ),
+        ]
+      : []),
   ];
 }
 
