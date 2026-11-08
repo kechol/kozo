@@ -1,4 +1,11 @@
-import { type Charter, type Message, message, type Plan, type PlanTask } from "@kozo/core";
+import {
+  type Charter,
+  type Constraints,
+  type Message,
+  message,
+  type Plan,
+  type PlanTask,
+} from "@kozo/core";
 import { globMatcher, protectedPathMatcher } from "@kozo/verify";
 
 /**
@@ -11,6 +18,7 @@ export function checkPlan(
   plan: Plan,
   charter: Charter,
   files: readonly string[],
+  together: Constraints["together"] = [],
 ): { plan: Plan; issues: Message[] } {
   const { limits, protected_paths } = charter;
   const issues: Message[] = [];
@@ -77,6 +85,28 @@ export function checkPlan(
   for (const task of plan.tasks) {
     if (task.characterize && task.codemod !== undefined)
       issues.push(message("plan.characterize-codemod", { task: task.id }));
+  }
+
+  // A task that may change one side of a together rule needs a task that may change the other.
+  const mayChange = (task: PlanTask, globs: readonly string[]) => {
+    const inScope = matchers.get(task.id) ?? (() => false);
+    const inSide = globMatcher(globs);
+    return (
+      task.scope.some(inSide) ||
+      globs.some(inScope) ||
+      files.some((path) => inScope(path) && inSide(path))
+    );
+  };
+  for (const rule of together) {
+    const reaching = plan.tasks.find((task) => mayChange(task, rule.when));
+    if (reaching && !plan.tasks.some((task) => mayChange(task, rule.also)))
+      issues.push(
+        message("plan.together", {
+          task: reaching.id,
+          when: rule.when.join(", "),
+          also: rule.also.join(", "),
+        }),
+      );
   }
 
   const carried = new Set(plan.tasks.flatMap((task) => task.done_when.map((text) => text.trim())));

@@ -596,6 +596,8 @@ item の <ref> は K-<n> か <repo>#<n>、タスクは <item>/t<n>、run は r-<
     "{task} の見積もりは {files} ファイル {lines} 行で、Charter の上限（{maxFiles} ファイル {maxLines} 行）を超えています",
   "plan.cycle": "依存関係が循環しています（{cycle}）",
   "plan.shared-scope": "{a} と {b} は scope が重なっていますが、どちらも他方に依存していません",
+  "plan.together":
+    "{task} は {when} を変えられます。constraints はこれを {also} と一緒に変えるとしていますが、{also} に届く scope のタスクがありません",
   "plan.migration-after":
     "migration のタスクは順に 1 本の鎖になるので、{task} は {before} だけに依存します",
   "plan.migration-first":

@@ -584,6 +584,8 @@ as refs/remotes/origin/main, or a branch name, read as refs/heads/<name>.`,
     "{task} is estimated at {lines} lines in {files} files, over the Charter's {maxLines} lines in {maxFiles} files",
   "plan.cycle": "the dependencies form a cycle: {cycle}",
   "plan.shared-scope": "{a} and {b} share scope, but neither depends on the other",
+  "plan.together":
+    "{task} may change {when}, which the constraints change together with {also}, but no task's scope reaches {also}",
   "plan.migration-after":
     "a migration's tasks form one chain in order, so {task} depends on {before} alone",
   "plan.migration-first":

@@ -29,6 +29,16 @@ export const constraintsSchema = z
     // Files a tool writes, such as lockfiles, which count apart from the Charter's line and file
     // limits; every other check sees them as any file.
     generated: z.array(z.string().min(1)).default([]),
+    // Paths that change together: a change under `when` brings one under `also`, such as an
+    // API and its documentation.
+    together: z
+      .array(
+        z.strictObject({
+          when: z.array(z.string().min(1)).nonempty(),
+          also: z.array(z.string().min(1)).nonempty(),
+        }),
+      )
+      .default([]),
     gates: z.record(gateName, z.strictObject({ run: z.string().min(1) })),
     levels: z.partialRecord(gateLevelSchema, levelGates),
     prove: z

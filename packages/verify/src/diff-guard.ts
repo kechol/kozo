@@ -31,7 +31,8 @@ export type Violation =
   | { kind: "existing-test"; path: string; change: "modified" | "deleted" }
   | TestWeakening
   | { kind: "gate-script"; path: string; script: string }
-  | { kind: "gate-file"; path: string; command: string };
+  | { kind: "gate-file"; path: string; command: string }
+  | { kind: "together"; path: string; also: string };
 
 export type DiffGuardResult =
   | {
@@ -105,6 +106,15 @@ async function guard({ cwd, base, head, scope, log }: DiffGuardOptions): Promise
     if (charter.existing_tests_protected && file.change !== "added" && isTest(file.path)) {
       violations.push({ kind: "existing-test", path: file.path, change: file.change });
     }
+  }
+
+  // A change under one side of a together rule brings a change under the other.
+  for (const rule of constraints.together) {
+    const inWhen = globMatcher(rule.when);
+    const inAlso = globMatcher(rule.also);
+    const touched = files.find((file) => inWhen(file.path));
+    if (touched && !files.some((file) => inAlso(file.path)))
+      violations.push({ kind: "together", path: touched.path, also: rule.also.join(", ") });
   }
 
   const testChanges = await Promise.all(
@@ -195,6 +205,8 @@ function describe(violation: Violation): string {
       return `the script "${violation.script}" in ${violation.path}, which a gate runs, was changed`;
     case "gate-file":
       return `${violation.path}, which the gate "${violation.command}" runs, was changed`;
+    case "together":
+      return `${violation.path} changed, which the constraints change together with ${violation.also}, and nothing there did`;
   }
 }
 

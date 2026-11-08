@@ -42,6 +42,7 @@ prove:
 | `prepare`   | `[]`   | 依存のインストールなど、新しい worktree を準備するコマンド。                                                |
 | `tests`     |        | リポジトリのテストファイルを表す glob。必須です。                                                           |
 | `generated` | `[]`   | lockfile など、ツールが書くファイルを表す glob。                                                            |
+| `together`  | `[]`   | 一緒に変えるパス。`when` と `also` の glob の組です。                                                       |
 | `gates`     |        | 名前ごとの gate。                                                                                           |
 | `levels`    |        | 各水準が実行する gate。                                                                                     |
 | `prove`     | `[]`   | 変えたテストファイルの実行方法。                                                                            |
@@ -57,6 +58,17 @@ gate の名前には英小文字、数字、`-` が使え、キーはシェル�
 kozo は、`tests` だけでテストとそれ以外のファイルを見分けます。diff-guard、prove、Charter の `existing_tests_protected` は、すべてこれを使います。
 
 `generated` のファイルは、Charter の行数とファイル数の上限からは外して数えます。scope、保護されたパス、review、prove など、ほかの確認ではほかのファイルと同じように扱います。
+
+## `together`
+
+API とその文書のように、一緒に変えるパスを組にして書きます。
+
+```yaml
+together:
+  - { when: ['src/api/**'], also: ['docs/api/**'] }
+```
+
+`when` のパスを変えられるタスクがあるのに、`also` のパスを変えられるタスクがない計画を、kozo は受け付けません。diff-guard は、`when` のファイルを変えて `also` のファイルを 1 つも変えない差分を拒みます。拒まれた差分は、diff-guard のほかの拒否と同じく、あなたの答えを待ちます。
 
 ## `prove`
 

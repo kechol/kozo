@@ -94,6 +94,25 @@ describe("runDiffGuard", () => {
     expect(kinds(scoped.result)).toEqual(["out-of-scope", "out-of-scope", "out-of-scope"]);
   });
 
+  test("a change under one side of a together rule needs a change under the other", async () => {
+    const repo = await gitRepository();
+    await using _ = repo;
+    const base = await repo.commit({
+      [charterPath]: charter,
+      [constraintsPath]: `${constraints}together:\n  - { when: ["src/api/**"], also: ["docs/api/**"] }\n`,
+      "src/api/cart.ts": "export const cart = 1;\n",
+      "docs/api/cart.md": "Cart\n",
+    });
+    await repo.commit({ "src/api/cart.ts": "export const cart = 2;\n" });
+    const alone = await guard(repo.path, base);
+    expect(kinds(alone.result)).toEqual(["together"]);
+    expect(alone.log).toContain(
+      "src/api/cart.ts changed, which the constraints change together with docs/api/**, and nothing there did",
+    );
+    await repo.commit({ "docs/api/cart.md": "Cart, now 2\n" });
+    expect((await guard(repo.path, base)).result.status).toBe("pass");
+  });
+
   test("files outside the scope are violations", async () => {
     const { repo, base } = await repository();
     await using _ = repo;

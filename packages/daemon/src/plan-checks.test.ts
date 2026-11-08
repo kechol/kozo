@@ -37,6 +37,23 @@ const planOf = (tasks: PlanTask[], done_when = tasks.flatMap((entry) => entry.do
   }) as Plan;
 
 describe("checkPlan", () => {
+  test("a task that may change one side of a together rule needs a task that may change the other", () => {
+    const together = [{ when: ["src/stock.ts"], also: ["docs/**"] }] as [
+      { when: [string]; also: [string] },
+    ];
+    const code = task("t1", { scope: ["src/**"] });
+    const refused = checked(planOf([code]), charter, files, together);
+    expect(refused.issues).toEqual([
+      "t1 may change src/stock.ts, which the constraints change together with docs/**, but no task's scope reaches docs/**",
+    ]);
+    const docs = task("t2", { scope: ["docs/**"], depends_on: ["t1"] });
+    expect(checked(planOf([code, docs]), charter, files, together).issues).toEqual([]);
+    // A plan that does not reach the first side owes nothing to the second.
+    expect(
+      checked(planOf([task("t3", { scope: ["lib/**"] })]), charter, files, together).issues,
+    ).toEqual([]);
+  });
+
   test("takes a plan of independent tasks with disjoint scopes as it is", () => {
     const plan = planOf([task("t1"), task("t2", { scope: ["docs/**"] })]);
     expect(checked(plan, charter, files)).toEqual({ plan, issues: [] });

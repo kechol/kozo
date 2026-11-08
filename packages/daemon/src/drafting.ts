@@ -200,7 +200,12 @@ async function draftPlan(
       );
     else {
       const files = await listFiles(repository.path, repository.tip);
-      const checked = checkPlan(draft.data, repository.charter, files);
+      const checked = checkPlan(
+        draft.data,
+        repository.charter,
+        files,
+        repository.constraints.together,
+      );
       issues.push(...checked.issues);
       proposed = checked.plan;
     }

@@ -44,6 +44,7 @@ prove:
 | `prepare`   | `[]`    | Commands that set up a fresh worktree, such as installing dependencies.                                          |
 | `tests`     |         | Globs of the repository's test files. Required.                                                                  |
 | `generated` | `[]`    | Globs of files a tool writes, such as lockfiles.                                                                 |
+| `together`  | `[]`    | Paths that change together, each a `when` and an `also` list of globs.                                           |
 | `gates`     |         | The gates, by name.                                                                                              |
 | `levels`    |         | Which gates each level runs.                                                                                     |
 | `prove`     | `[]`    | How to run changed test files.                                                                                   |
@@ -65,6 +66,19 @@ but the constraints leave out holds the task for your attention.
 
 `generated` files count apart from the Charter's line and file limits. Every other check still
 sees them: scope, protected paths, review and prove.
+
+## `together`
+
+Each entry names paths that change together, such as an API and its documentation:
+
+```yaml
+together:
+  - { when: ['src/api/**'], also: ['docs/api/**'] }
+```
+
+kozo refuses a plan in which a task may change a path under `when` while no task may change one
+under `also`, and diff-guard refuses a diff that changes a file under `when` and none under
+`also`, which waits for your answer as any refusal of diff-guard does.
 
 ## `prove`
 
