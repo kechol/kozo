@@ -309,7 +309,14 @@ export async function runEvalCase(
     } finally {
       await scheduler.idle();
       const tasks = item ? (store.state.items[item]?.tasks ?? []) : [];
-      const dirs = [clone, ...tasks.map((task) => worktreePath(home, clone, task))];
+      // A task's services run in the checkout beside its worktree, so they are torn down there.
+      const dirs = [
+        clone,
+        ...tasks.flatMap((task) => {
+          const worktree = worktreePath(home, clone, task);
+          return [worktree, `${worktree}.services`];
+        }),
+      ];
       await tearDown(source, definition.factory.mode, clone, dirs, trustedBase, runner, log);
       store.close();
     }

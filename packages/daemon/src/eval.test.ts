@@ -124,7 +124,7 @@ describe("runEvalCase", () => {
     expect(await runEvalCase(file, env.definition, env.deps)).toMatchObject({ passed: true });
   }, 120_000);
 
-  test("tears down the services in the clone and the task worktree, back at the case's start", async () => {
+  test("tears down the services in the clone, the task worktree and its services checkout, back at the case's start", async () => {
     const dir = await tempDirectory();
     const marks = join(dir.path, "torn");
     await using env = await setup(
@@ -142,10 +142,12 @@ describe("runEvalCase", () => {
       await runEvalCase(file, env.definition, env.deps, (line) => logged.push(line)),
     ).toMatchObject({ passed: true });
     expect(logged.filter((line) => line.includes("teardown"))).toEqual([]);
-    // Both the clone and the task's worktree went back to the start, without the agent's test.
+    // The clone, the task's worktree and the checkout its services ran in went back to the
+    // start, without the agent's test.
     const torn = (await Bun.file(marks).text()).trim().split("\n");
-    expect(torn).toHaveLength(2);
-    expect(torn.some((path) => path.includes("K-1-t1"))).toBe(true);
+    expect(torn).toHaveLength(3);
+    expect(torn.some((path) => path.endsWith("K-1-t1"))).toBe(true);
+    expect(torn.some((path) => path.endsWith("K-1-t1.services"))).toBe(true);
     // No directory the teardown ran in has the name of the registered repository's own.
     expect(torn.some((path) => basename(path) === basename(env.repo.path))).toBe(false);
     await dir[Symbol.asyncDispose]();
