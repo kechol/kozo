@@ -1551,6 +1551,124 @@ describe("the minimal path", () => {
     ]);
   }, 180_000);
 
+  /** An item of two independent docs tasks, merged, whose acceptance verify answers `result`. */
+  async function acceptedAs(result: "pass" | "fail") {
+    const docTask = (id: string, file: string, condition: string) => ({
+      ...plan.plan.tasks[0],
+      id,
+      goal: `Document ${file}`,
+      done_when: [condition],
+      scope: [`docs/${file}`],
+      depends_on: [],
+    });
+    const conditions = [
+      "The docs explain the low-stock label",
+      "The docs explain the sold-out label",
+    ];
+    const twoDocs = {
+      ...plan,
+      plan: {
+        ...plan.plan,
+        risk: "low",
+        done_when: conditions,
+        tasks: [
+          docTask("t1", "low.md", conditions[0] ?? ""),
+          docTask("t2", "sold.md", conditions[1] ?? ""),
+        ],
+      },
+    };
+    const writing = (file: string): FakeStep[] => [
+      { write: { [`docs/${file}`]: `${file}\n` } },
+      { commit: `docs: ${file}` },
+      { use: "kozo_gates", input: { level: "full" } },
+      { use: "kozo_note", input: { choice: "Documented it", reason: "Docs only" } },
+      { answer: { ...report, tests: [] } },
+    ];
+    const asked: string[] = [];
+    const verifier: Verifier = {
+      async verify(request) {
+        const instructions = request.prompt.slice(0, request.prompt.indexOf("</instructions>"));
+        asked.push(instructions);
+        const met = result === "pass";
+        if (met) await Bun.write(join(request.cwd, ".output", "verify", "seen.txt"), "seen\n");
+        const output = {
+          result,
+          summary: met ? "Both labels are explained." : "The sold-out label is not explained.",
+          conditions: [...instructions.matchAll(/^- (.*)$/gm)].map(([, condition]) => ({
+            condition,
+            met,
+            observation: met ? "It is there." : "It is missing.",
+            evidence: met ? [".output/verify/seen.txt"] : [],
+          })),
+          cleanedUp: true,
+        };
+        return { output, model: request.model, costUsd: 0.01 };
+      },
+    };
+    const env = await factoryOf(
+      (request) =>
+        request.agent === "triage"
+          ? [{ answer: twoDocs }]
+          : writing(request.prompt.includes("SCOPE       - docs/low.md") ? "low.md" : "sold.md"),
+      judgeWith("accept"),
+      { verifier },
+    );
+    await env.repo.commit({ ".kozo/verify-app.md": "# Verify the app\n\nRun it.\n" }, "verify");
+    const { ref } = await env.control.addItem({ title: "Explain the stock labels", class: "docs" });
+    for (;;) {
+      await env.settle();
+      if (env.store.state.items[ref]?.hold?.kind !== "approval") break;
+      await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
+    }
+    for (const task of ["t1", "t2"])
+      await env.repo.git(
+        "merge",
+        "--no-ff",
+        "--quiet",
+        "-m",
+        `merge ${task}`,
+        `kozo/${env.store.factoryId}/K-1-${task}`,
+      );
+    await env.reconciler.reconcile();
+    await env.scheduler.idle();
+    await env.reconciler.reconcile();
+    await env.scheduler.idle();
+    return { env, ref, asked, conditions };
+  }
+
+  test("an item of several tasks is verified as a whole after its last merge, and completes when it passes", async () => {
+    const { env, ref, asked, conditions } = await acceptedAs("pass");
+    await using _ = env;
+    expect(asked).toEqual([
+      `<instructions>\nGOAL: Explain the stock labels\nDONE_WHEN:\n- ${conditions.join("\n- ")}\n`,
+    ]);
+    expect(env.store.state.items[ref]?.stage).toBe("complete");
+    const run = Object.values(env.store.state.runs).find((entry) => entry.agent === "verify");
+    expect(run).toMatchObject({ item: ref, task: null, state: "succeeded" });
+  }, 240_000);
+
+  test("an item that fails as a whole goes back to Triage with what failed, and records no defect", async () => {
+    const { env, ref } = await acceptedAs("fail");
+    await using _ = env;
+    // Triage takes the item up again at once, so its move there is read from the log.
+    const back = env.store.db
+      .query<{ to: string; code: string }, [string]>(
+        "select json_extract(line, '$.data.to') as \"to\", json_extract(line, '$.data.reason.code') as code from events where type = 'stage.changed' and item = ? and task is null order by id",
+      )
+      .all(ref)
+      .find((row) => row.to === "triage" && row.code === "stage.acceptance-failed");
+    expect(back).toBeDefined();
+    expect(env.store.state.items[ref]?.notes.at(-1)).toMatchObject({
+      kind: "check",
+      text: { code: "note.acceptance-failed" },
+    });
+    for (const task of ["t1", "t2"])
+      expect(env.store.state.tasks[`${ref}/${task}`]).toMatchObject({
+        stage: "complete",
+        defectAt: null,
+      });
+  }, 240_000);
+
   test("a merged task's check takes the next free slot before new work", async () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage" ? [{ answer: plan }] : implement(),

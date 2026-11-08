@@ -70,7 +70,7 @@ flowchart LR
 | triage or planning → building | `plan.accepted` from `afterTriage`, or from `approve` on a plan approval | A plan that needs no approval, or its approval | kozod or human |
 | planning → triage | `ControlPlane.retry` | `retry` on an item held in Planning | human |
 | building → planning | `Runner.splitAgain` in `packages/daemon/src/runner.ts` | A task blocked on its scope, while the item has no hold; a held item's task tries again once the hold clears | kozod |
-| building → triage | `completeTask` in `packages/daemon/src/completion.ts` | The check after the last task's merge failed | kozod |
+| building → triage | `completeTask` in `packages/daemon/src/completion.ts` | The check after the last task's merge failed, or the item failed verify-app as a whole | kozod |
 | building → complete | `completeTask` | Every task closed and the check passed | kozod |
 | open → complete or cancelled | `ControlPlane.closeWork` | `close`, or the Issue closed on GitHub | human |
 
@@ -191,7 +191,11 @@ tier on the default branch once neither the task nor its item is held. `complete
 `packages/daemon/src/transitions.ts` then appends the task's completion and the item's move in
 one turn of the store's queue, so no hold comes between them:
 
-- **They pass:** the task completes, and the item once all its tasks are closed.
+- **They pass:** the task completes, and the item once all its tasks are closed. On the last
+  task of an item that had two or more, `acceptItem` first runs verify-app on the default branch
+  against the item's DONE_WHEN, as a run of the item: a pass completes the item, a fail sends it
+  back to Triage with a check note and no defect, and a blocked check holds the item for
+  attention while the task stays in Handoff.
 - **They fail on a task that is not the item's last:** `task.defect` and an attention hold on the
   task, so its dependents wait.
 - **They fail on the last task:** the task completes with `task.defect`, and the item goes back to

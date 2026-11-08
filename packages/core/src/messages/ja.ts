@@ -600,6 +600,11 @@ item の <ref> は K-<n> か <repo>#<n>、タスクは <item>/t<n>、run は r-<
     "{task} の見積もりは {files} ファイル {lines} 行で、Charter の上限（{maxFiles} ファイル {maxLines} 行）を超えています",
   "plan.cycle": "依存関係が循環しています（{cycle}）",
   "plan.shared-scope": "{a} と {b} は scope が重なっていますが、どちらも他方に依存していません",
+  "hold.acceptance-blocked":
+    "最後のマージのあと、verify-app が item 全体を確かめられませんでした（{reason}）",
+  "note.acceptance-failed":
+    "最後のマージのあと {branch} で item 全体を確かめたところ、次の条件を満たしていません: {conditions}。verify の所見: {summary}",
+  "stage.acceptance-failed": "{branch} での verify-app で、item 全体が通りませんでした",
   "plan.together":
     "{task} は {when} を変えられます。constraints はこれを {also} と一緒に変えるとしていますが、{also} に届く scope のタスクがありません",
   "plan.migration-after":

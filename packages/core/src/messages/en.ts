@@ -588,6 +588,11 @@ as refs/remotes/origin/main, or a branch name, read as refs/heads/<name>.`,
     "{task} is estimated at {lines} lines in {files} files, over the Charter's {maxLines} lines in {maxFiles} files",
   "plan.cycle": "the dependencies form a cycle: {cycle}",
   "plan.shared-scope": "{a} and {b} share scope, but neither depends on the other",
+  "hold.acceptance-blocked":
+    "verify-app could not check the item as a whole after its last merge: {reason}",
+  "note.acceptance-failed":
+    "Checked as a whole on {branch} after its last merge, the item does not meet: {conditions}. verify said: {summary}",
+  "stage.acceptance-failed": "the item as a whole did not pass verify-app on {branch}",
   "plan.together":
     "{task} may change {when}, which the constraints change together with {also}, but no task's scope reaches {also}",
   "plan.migration-after":

@@ -1,11 +1,29 @@
+import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
-import { isClosed, message } from "@kozo/core";
-import { CommandStopped, git } from "@kozo/verify";
+import {
+  type ItemState,
+  isClosed,
+  type Message,
+  message,
+  proseLanguage,
+  repositoryLocale,
+  runFiles,
+} from "@kozo/core";
+import {
+  CommandStopped,
+  git,
+  modelFor,
+  runVerify,
+  SessionStopped,
+  verifyInstructions,
+  writeVerifyVerdict,
+} from "@kozo/verify";
 import { itemDirectory } from "./item-file.ts";
+import { discardChanges } from "./nodes.ts";
 import { layersFor } from "./risk.ts";
 import type { Runner } from "./runner.ts";
-import { tail } from "./task-run.ts";
-import { completeMerged, note } from "./transitions.ts";
+import { type Repository, tail } from "./task-run.ts";
+import { completeMerged, hold, note } from "./transitions.ts";
 import { releaseTask, worktreePath } from "./worktrees.ts";
 
 /**
@@ -83,6 +101,18 @@ export async function completeTask(
     await runner.hold(item.ref, taskRef, "attention", message("hold.defect", { defect }));
     return;
   }
+  // An item of several tasks is checked as a whole once its last one passes, since each task's
+  // verify-app saw it without the others.
+  const done = item.tasks.filter((ref) => runner.store.state.tasks[ref]?.stage !== "cancelled");
+  const accepted =
+    result.status === "pass" && last && done.length >= 2
+      ? await acceptItem(runner, item, worktree, repository, signal)
+      : ({ kind: "skipped" } as const);
+  if (accepted === null) return;
+  if (accepted.kind === "blocked") {
+    await hold(runner.store, { item: item.ref, task: null }, "attention", accepted.reason);
+    return;
+  }
   const completed = await completeMerged(
     runner.store,
     { item: item.ref, task: taskRef },
@@ -92,10 +122,16 @@ export async function completeTask(
     }),
     {
       complete: message("stage.complete"),
-      defect:
-        result.status === "pass"
-          ? null
-          : { reason: defect, note: checkNote, back: message("stage.defect") },
+      back:
+        result.status !== "pass"
+          ? { note: checkNote, reason: message("stage.defect"), defect }
+          : accepted.kind === "fail"
+            ? {
+                note: accepted.note,
+                reason: message("stage.acceptance-failed", { branch: repository.branch }),
+                defect: null,
+              }
+            : null,
     },
   );
   // Held, taken or closed during the check: the next pass, or the human's verb, settles it.
@@ -104,4 +140,78 @@ export async function completeTask(
     factory: runner.store.factoryId,
     deleteBranch: false,
   });
+}
+
+type Acceptance =
+  | { kind: "pass" | "skipped" }
+  | { kind: "fail"; note: Message }
+  | { kind: "blocked"; reason: Message };
+
+/**
+ * Runs verify-app on the merged default branch, checked out in the last task's worktree, against
+ * the item's DONE_WHEN, as a run of the item. Resolves to null when a human's stop ended it.
+ */
+async function acceptItem(
+  runner: Runner,
+  item: ItemState,
+  worktree: string,
+  repository: Repository,
+  signal: AbortSignal,
+): Promise<Acceptance | null> {
+  const definition = runner.deps.definition.current;
+  const doneWhen = item.plan?.done_when ?? [];
+  const run = await runner.startRun(
+    { item: item.ref, task: null },
+    "verify",
+    repository.tip,
+    definition,
+  );
+  const logPath = join(itemDirectory(runner.home, item.ref), "accept.log");
+  const verified = await runVerify({
+    cwd: worktree,
+    base: repository.base,
+    goal: item.title,
+    doneWhen,
+    language: proseLanguage(repositoryLocale(definition.factory, repository.path)),
+    verifier: runner.deps.verifier,
+    model: modelFor(definition, "verify"),
+    instructions: verifyInstructions(definition.agents.verify, definition.verifyApp),
+    maxCostUsd: repository.charter.limits.max_cost_usd,
+    signal,
+    log: (text) => void appendFile(logPath, text).catch(() => {}),
+  })
+    .catch(async (error: unknown) => {
+      if (!(error instanceof SessionStopped)) throw error;
+      await runner.endRun(run, "stopped", undefined, error.costUsd);
+      return null;
+    })
+    .finally(() => discardChanges(worktree));
+  if (verified === null) return null;
+  if (verified.status === "MISCONFIGURED") {
+    await runner.endRun(run, "succeeded", message("run.no-verify-app"));
+    return { kind: "skipped" };
+  }
+  if (verified.status === "error") {
+    const error = message("text", { text: verified.message });
+    await runner.endRun(run, "failed", error, verified.costUsd);
+    return { kind: "blocked", reason: message("hold.acceptance-blocked", { reason: error }) };
+  }
+  const { record } = verified;
+  await writeVerifyVerdict(runFiles(runner.home, run).dir, worktree, record).catch(() => "");
+  await runner.endRun(run, "succeeded", undefined, record.costUsd);
+  if (record.result === "pass") return { kind: "pass" };
+  const summary = message("text", { text: record.summary });
+  if (record.result === "blocked")
+    return { kind: "blocked", reason: message("hold.acceptance-blocked", { reason: summary }) };
+  const unmet = record.conditions.filter((condition) => !condition.met);
+  return {
+    kind: "fail",
+    note: message("note.acceptance-failed", {
+      branch: repository.branch,
+      conditions: unmet
+        .map((condition) => `${condition.condition}: ${condition.observation}`)
+        .join("; "),
+      summary,
+    }),
+  };
 }

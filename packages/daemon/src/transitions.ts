@@ -218,7 +218,8 @@ const stageChanged = (
 
 /**
  * Completes a merged task in Handoff and, once no other task of its item is open, moves the item
- * on with it: back to Triage with the defect when `defect` is given, else to Complete. Every
+ * on with it: back to Triage with a note when `back` is given, recording the task's defect when
+ * it names one, else to Complete. Every
  * event goes in one turn of the store's queue, so no hold can come between the task and its
  * item. Nothing happens while the task or its item is held; resolves to whether it completed.
  */
@@ -228,7 +229,7 @@ export async function completeMerged(
   reason: Message,
   last: {
     complete: Message;
-    defect: { reason: Message; note: Message; back: Message } | null;
+    back: { note: Message; reason: Message; defect: Message | null } | null;
   },
 ): Promise<boolean> {
   const written = await store.appendAllIf((state) => {
@@ -242,16 +243,25 @@ export async function completeMerged(
       others.some((ref) => !isClosed(state.tasks[ref]?.stage ?? "cancelled"))
     )
       return events;
-    const { defect } = last;
+    const { back } = last;
     const owner = { item: subject.item, task: null };
-    if (defect === null)
+    if (back === null)
       return [...events, stageChanged(owner, item.stage, "complete", last.complete)];
     return [
       ...events,
-      // A defect sends the item straight back to Triage, so it never looks complete in between.
-      { type: "note.added", ...subject, data: { kind: "check", text: cutValues(defect.note) } },
-      { type: "task.defect", ...subject, data: { reason: cutValues(defect.reason) } },
-      stageChanged(owner, item.stage, "triage", defect.back),
+      // A failed check sends the item straight back to Triage, so it never looks complete in
+      // between.
+      { type: "note.added", ...subject, data: { kind: "check", text: cutValues(back.note) } },
+      ...(back.defect
+        ? [
+            {
+              type: "task.defect" as const,
+              ...subject,
+              data: { reason: cutValues(back.defect) },
+            },
+          ]
+        : []),
+      stageChanged(owner, item.stage, "triage", back.reason),
     ];
   });
   return written.length > 0;

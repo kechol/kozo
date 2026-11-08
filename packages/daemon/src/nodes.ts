@@ -748,7 +748,7 @@ const verifyApp: NodeStep = async (run, current) => {
  * Puts `worktree` back at HEAD, removing untracked files but ignored ones such as installed
  * dependencies, and returns the paths it found changed.
  */
-async function discardChanges(worktree: string): Promise<string[]> {
+export async function discardChanges(worktree: string): Promise<string[]> {
   const status = await git(worktree, ["status", "--porcelain", "--untracked-files=all"]);
   const paths = status
     .split("\n")

@@ -38,16 +38,16 @@ A **run** is one agent session for an item or a task, referenced as `r-<nnnn>`.
 
 Items and tasks move through the same stages:
 
-| Stage     | What happens                                                                                                                                                                                            |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Intake    | kozod checks that the repository's Charter is ready, and holds the item for a start approval when its level asks for one.                                                                               |
-| Triage    | The triage agent reads the repository without changing it and drafts a plan: the work class, the risk tier, the approach, the completion conditions (DONE_WHEN) and the tasks. kozod checks the draft.  |
-| Planning  | The plan waits for your approval. The plan agent redrafts it after a rejection or an answer, and for a feature it first works out the acceptance criteria with you.                                     |
-| Building  | Each task is implemented in its worktree, then run through the gates, prove and diff-guard.                                                                                                             |
-| Reviewing | A review agent in a separate session judges the diff against the task's goal and DONE_WHEN, the repository's AGENTS.md and the plan's approach, and the verify agent drives the app and saves evidence. |
-| Handoff   | The task is rebased on the latest default branch and checked again; kozod writes the handoff report, and the diff waits for your merge.                                                                 |
-| Complete  | After your merge, kozod runs the gates on the merged default branch. An item is complete once all its tasks are.                                                                                        |
-| Cancelled | You cancelled the item or task.                                                                                                                                                                         |
+| Stage     | What happens                                                                                                                                                                                                                                                    |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Intake    | kozod checks that the repository's Charter is ready, and holds the item for a start approval when its level asks for one.                                                                                                                                       |
+| Triage    | The triage agent reads the repository without changing it and drafts a plan: the work class, the risk tier, the approach, the completion conditions (DONE_WHEN) and the tasks. kozod checks the draft.                                                          |
+| Planning  | The plan waits for your approval. The plan agent redrafts it after a rejection or an answer, and for a feature it first works out the acceptance criteria with you.                                                                                             |
+| Building  | Each task is implemented in its worktree, then run through the gates, prove and diff-guard.                                                                                                                                                                     |
+| Reviewing | A review agent in a separate session judges the diff against the task's goal and DONE_WHEN, the repository's AGENTS.md and the plan's approach, and the verify agent drives the app and saves evidence.                                                         |
+| Handoff   | The task is rebased on the latest default branch and checked again; kozod writes the handoff report, and the diff waits for your merge.                                                                                                                         |
+| Complete  | After your merge, kozod runs the gates on the merged default branch. An item is complete once all its tasks are; an item of two or more tasks is first checked as a whole by the verify agent against its DONE_WHEN, and goes back to Triage if it falls short. |
+| Cancelled | You cancelled the item or task.                                                                                                                                                                                                                                 |
 
 You can close any open item or task yourself with `kozo close <ref> --done` or
 `--cancel <reason>`.
