@@ -1,25 +1,9 @@
 import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  type ItemState,
-  isClosed,
-  type Message,
-  message,
-  proseLanguage,
-  repositoryLocale,
-  runFiles,
-} from "@kozo/core";
-import {
-  CommandStopped,
-  git,
-  modelFor,
-  runVerify,
-  SessionStopped,
-  verifyInstructions,
-  writeVerifyVerdict,
-} from "@kozo/verify";
+import { heldBy, type ItemState, isClosed, type Message, message, runFiles } from "@kozo/core";
+import { CommandStopped, git, runVerify, SessionStopped, writeVerifyVerdict } from "@kozo/verify";
 import { itemDirectory } from "./item-file.ts";
-import { discardChanges } from "./nodes.ts";
+import { discardChanges, verifySession } from "./nodes.ts";
 import { layersFor } from "./risk.ts";
 import type { Runner } from "./runner.ts";
 import { type Repository, tail } from "./task-run.ts";
@@ -40,7 +24,7 @@ export async function completeTask(
   const item = task ? runner.store.state.items[task.item] : undefined;
   // A held item changes no stage, so its task waits for the hold; the scheduler starts the
   // check once it clears.
-  if (!task || !item?.plan || task.stage !== "handoff" || task.hold || item.hold) return;
+  if (!task || !item?.plan || task.stage !== "handoff" || heldBy(runner.store.state, task)) return;
   const repository = await runner.repository(item.repository);
   const worktree = worktreePath(runner.home, repository.path, taskRef);
   const level = layersFor[task.risk].gates;
@@ -107,7 +91,7 @@ export async function completeTask(
   const accepted =
     result.status === "pass" && last && done.length >= 2
       ? await acceptItem(runner, item, worktree, repository, signal)
-      : ({ kind: "skipped" } as const);
+      : ({ kind: "pass" } as const);
   if (accepted === null) return;
   if (accepted.kind === "blocked") {
     await hold(runner.store, { item: item.ref, task: null }, "attention", accepted.reason);
@@ -143,7 +127,7 @@ export async function completeTask(
 }
 
 type Acceptance =
-  | { kind: "pass" | "skipped" }
+  | { kind: "pass" }
   | { kind: "fail"; note: Message }
   | { kind: "blocked"; reason: Message };
 
@@ -172,11 +156,7 @@ async function acceptItem(
     base: repository.base,
     goal: item.title,
     doneWhen,
-    language: proseLanguage(repositoryLocale(definition.factory, repository.path)),
-    verifier: runner.deps.verifier,
-    model: modelFor(definition, "verify"),
-    instructions: verifyInstructions(definition.agents.verify, definition.verifyApp),
-    maxCostUsd: repository.charter.limits.max_cost_usd,
+    ...verifySession(runner.deps.verifier, definition, repository),
     signal,
     log: (text) => void appendFile(logPath, text).catch(() => {}),
   }).catch(async (error: unknown) => {
@@ -198,7 +178,7 @@ async function acceptItem(
   if (verified === null) return null;
   if (verified.status === "MISCONFIGURED") {
     await runner.endRun(run, "succeeded", message("run.no-verify-app"));
-    return { kind: "skipped" };
+    return { kind: "pass" };
   }
   if (verified.status === "error") {
     const error = message("text", { text: verified.message });

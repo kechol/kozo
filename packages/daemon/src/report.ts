@@ -44,8 +44,9 @@ async function noticed(home: KozoHome, state: FactoryState, since: string): Prom
   const merged = Object.values(state.tasks).filter(
     (task) => task.merged !== null && task.merged.at >= since,
   );
-  for (const task of merged) {
-    for (const record of await runRecords(home, state, task)) {
+  const records = await Promise.all(merged.map((task) => runRecords(home, state, task)));
+  merged.forEach((task, index) => {
+    for (const record of records[index] ?? []) {
       for (const { path, note } of record.report?.out_of_scope ?? []) {
         const key = `${path ?? ""}\n${note.trim()}`;
         if (seen.has(key)) continue;
@@ -53,14 +54,12 @@ async function noticed(home: KozoHome, state: FactoryState, since: string): Prom
         notes.push({ task: task.ref, path: path ?? null, note });
       }
     }
-  }
+  });
   return notes;
 }
 
 /** The window a report covers when the request names none, and the longest it may cover. */
 export const reportDays = { default: 30, max: 365 } as const;
-
-/** The middle value of `values`, or null when there is none. */
 
 const share = (part: number, whole: number) => (whole === 0 ? null : part / whole);
 

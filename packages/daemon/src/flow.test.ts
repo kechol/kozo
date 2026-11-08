@@ -53,6 +53,10 @@ import { Runner } from "./runner.ts";
 import { resumePoint, Scheduler } from "./scheduler.ts";
 import { worktreePath } from "./worktrees.ts";
 
+/** Whether a process whose command line has `pattern` runs now. */
+const processRunning = (pattern: string) =>
+  Bun.spawnSync(["pgrep", "-f", pattern]).stdout.toString().trim() !== "";
+
 /** The failures `kozo report --days 7` lists for a test factory. */
 async function weekFailures(env: { store: EventStore; definition: { current: Definition } }) {
   const report = await buildReport(
@@ -3196,7 +3200,7 @@ test("one unit is still counted", () => {
             .replace("fast: [lint, test]", "fast: [slow, lint, test]"),
       },
     );
-    const running = () => Bun.spawnSync(["pgrep", "-f", slow]).stdout.toString().trim() !== "";
+    const running = () => processRunning(slow);
     const { ref } = await env.control.addItem({ title: "Low stock", class: "docs" });
     await env.settle();
     await env.control.act(ref, { kind: "item", item: { repo: null, number: 1 } }, "approve", {});
@@ -3219,8 +3223,7 @@ test("one unit is still counted", () => {
     await using env = await factoryOf((request) =>
       request.agent === "triage" ? [{ answer: codemodPlan }] : implement(),
     );
-    const running = () =>
-      Bun.spawnSync(["pgrep", "-f", "sleep 59"]).stdout.toString().trim() !== "";
+    const running = () => processRunning("sleep 59");
     const { ref } = await env.control.addItem({ title: "Low stock" });
     const item = { kind: "item", item: { repo: null, number: 1 } } as const;
     while (!running()) {

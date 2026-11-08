@@ -310,7 +310,7 @@ export class GitHubSync {
           // Whether to close the item or follow the Issue elsewhere is the owner's to decide. An
           // approval or a question it waited on can no longer be answered on the Issue, so this
           // hold takes its place.
-          await releaseHold(this.store, { item: item.ref, task: null }, () => [
+          await releaseHold(this.store, { item: item.ref, task: null }, [
             {
               hold: "attention",
               reason: message("hold.issue-gone", { issue: `${github}#${reference.item.number}` }),

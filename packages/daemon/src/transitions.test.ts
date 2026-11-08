@@ -93,7 +93,7 @@ describe("transitions", () => {
     const done = await releaseHold(
       env.store,
       item,
-      () => [{ hold: "paused", reason: message("text", { text: "kozo pause" }) }],
+      [{ hold: "paused", reason: message("text", { text: "kozo pause" }) }],
       { by: "human" },
     );
     stop();
@@ -108,11 +108,11 @@ describe("transitions", () => {
 
   test("releaseHold leaves out a move to the stage the subject is in, and appends nothing for a subject that is gone", async () => {
     await using env = await storeWithItem();
-    const gone = await releaseHold(env.store, { item: "K-9", task: null }, () => [
+    const gone = await releaseHold(env.store, { item: "K-9", task: null }, [
       { move: "triage", reason: message("text", { text: "approve" }) },
     ]);
     expect(gone).toBe(false);
-    const stayed = await releaseHold(env.store, item, () => [
+    const stayed = await releaseHold(env.store, item, [
       { move: "intake", reason: message("text", { text: "approve" }) },
     ]);
     expect(stayed).toBe(false);

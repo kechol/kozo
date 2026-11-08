@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { dayMs, type FactoryState, type WorkClass } from "@kozo/core";
+import { lastDiffChecked, splitStops } from "./queries.ts";
 
 /** What one task came to against its plan's estimate. */
 export interface Measured {
@@ -29,6 +30,7 @@ const minimum = 5;
 /** How far back calibration looks. */
 const window = 90;
 
+/** The middle value of `values`, or null when there is none. */
 export function median(values: readonly number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -69,22 +71,17 @@ export function measuredTasks(
   now: Date,
 ): Measured[] {
   const since = new Date(now.getTime() - window * dayMs).toISOString();
-  const counted = db.query<{ lines: number; files: number }, [string]>(
-    "select json_extract(line, '$.data.lines') as lines, json_extract(line, '$.data.files') as files from events where type = 'diff.checked' and task = ? order by id desc limit 1",
-  );
-  const stopped = db.query<{ n: number }, [string, string, string]>(
-    "select count(*) as n from events where type = 'stage.changed' and task = ? and json_extract(line, '$.data.reason.code') = 'stage.split-again' and json_extract(line, '$.data.reason.values.task') = ? and ts >= ?",
-  );
+  const stopped = splitStops(db, since);
   return Object.values(state.tasks).flatMap((task) => {
     if (state.items[task.item]?.repository !== repository) return [];
-    const stoppedForScope = (stopped.get(task.ref, task.ref, since)?.n ?? 0) > 0;
+    const stoppedForScope = stopped.has(task.ref);
     const merged = task.merged !== null && task.merged.at >= since;
     if (!merged && !stoppedForScope) return [];
     return [
       {
         class: task.class,
         estimate: task.estimate,
-        actual: merged ? (counted.get(task.ref) ?? null) : null,
+        actual: merged ? lastDiffChecked(db, task.ref) : null,
         stoppedForScope,
       },
     ];

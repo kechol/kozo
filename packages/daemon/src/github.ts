@@ -127,10 +127,10 @@ export const spawnGh: GhExec = async (args, stdin) => {
   return { stdout, stderr, code };
 };
 
-/** git with gh as its only credential helper, so that pushes use gh's sign-in. */
 // A fetch or a push that the network holds up would otherwise stop every job queued behind it.
 const networkTimeoutMs = 300_000;
 
+/** git with gh as its only credential helper, so that pushes use gh's sign-in. */
 const gitWithGh = (clone: string, args: readonly string[]) =>
   git(
     clone,
@@ -140,12 +140,16 @@ const gitWithGh = (clone: string, args: readonly string[]) =>
 
 /** The `GitHub` of gh, refusing any command line outside the list. */
 export function ghGitHub(exec: GhExec = spawnGh): GitHub {
-  const gh = async (args: string[], options: { stdin?: string; ok?: number[] } = {}) => {
+  /** Runs a listed gh command line and returns what it printed and its exit code. */
+  const run = async (args: string[], stdin?: string) => {
     if (!ghAllowed(args)) throw new GhRefused(`gh ${args.slice(0, 2).join(" ")} is not allowed`);
-    const result = await exec(args, options.stdin);
-    if (result.code !== 0 && !options.ok?.includes(result.code)) {
-      throw new GhError(`gh ${args.slice(0, 2).join(" ")}: ${result.stderr.trim()}`, result.code);
-    }
+    return await exec(args, stdin);
+  };
+  const failed = (args: string[], result: { stderr: string; code: number }) =>
+    new GhError(`gh ${args.slice(0, 2).join(" ")}: ${result.stderr.trim()}`, result.code);
+  const gh = async (args: string[], options: { stdin?: string; ok?: number[] } = {}) => {
+    const result = await run(args, options.stdin);
+    if (result.code !== 0 && !options.ok?.includes(result.code)) throw failed(args, result);
     return result.stdout;
   };
   const json = async <T>(args: string[], ok?: number[]) => JSON.parse(await gh(args, { ok })) as T;
@@ -303,8 +307,7 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
     },
     async checks(repository, pull) {
       const args = ["pr", "checks", String(pull), `--repo=${repository}`, "--json=name,bucket"];
-      if (!ghAllowed(args)) throw new GhRefused(`gh ${args.slice(0, 2).join(" ")} is not allowed`);
-      const result = await exec(args);
+      const result = await run(args);
       // gh pr checks exits 8 while checks are pending and may exit 1 once one has failed, still
       // listing them; a pull request without any check exits 1 and says so.
       if (result.code === 0 || result.code === 1 || result.code === 8) {
@@ -312,7 +315,7 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
         if (result.code === 1 && /no checks reported/i.test(result.stderr)) return [];
         if (result.code === 0 && result.stdout.trim() === "") return [];
       }
-      throw new GhError(`gh pr checks: ${result.stderr.trim()}`, result.code);
+      throw failed(args, result);
     },
     async permission(repository, login) {
       // A login outside GitHub's alphabet, such as a bot's `name[bot]`, has no permission to ask

@@ -396,14 +396,7 @@ export function createApi({
         clearInterval(keepalive);
         wake?.();
       });
-      // A first connection gets the latest events, as many as a view keeps; one that resumes
-      // gets every event it missed, read a page at a time rather than all at once.
-      for (
-        let page = after === 0 ? lastEvents(store.db, parsedReference, ref, replayed) : null;
-        ;
-        page = null
-      ) {
-        const rows = page ?? eventsAfter(store.db, parsedReference, ref, last, replayed);
+      const send = async (rows: readonly { id: number; line: string }[]) => {
         for (const row of rows) {
           await stream.writeSSE({
             id: String(row.id),
@@ -412,7 +405,16 @@ export function createApi({
           });
           last = row.id;
         }
-        if (stream.aborted || rows.length < replayed) break;
+        return rows.length;
+      };
+      // A first connection gets the latest events, as many as a view keeps; one that resumes
+      // gets every event it missed, read a page at a time rather than all at once. What arrives
+      // meanwhile waits in `pending`.
+      if (after === 0) await send(lastEvents(store.db, parsedReference, ref, replayed));
+      else {
+        let sent: number;
+        do sent = await send(eventsAfter(store.db, parsedReference, ref, last, replayed));
+        while (!stream.aborted && sent === replayed);
       }
       while (!stream.aborted) {
         const next = pending.shift();

@@ -7,7 +7,6 @@ import {
   autonomyLevel,
   type Charter,
   type HoldKind,
-  type ItemState,
   isClosed,
   type KozoHome,
   type Message,
@@ -17,7 +16,6 @@ import {
   runFiles,
   type Stage,
   startNeeded,
-  type TaskState,
   type Verb,
   type verbBodySchemas,
 } from "@kozo/core";
@@ -230,7 +228,7 @@ export class ControlPlane {
   private async release(
     kind: "item" | "task",
     ref: string,
-    after: (current: ItemState | TaskState) => AfterHold[],
+    after: readonly AfterHold[],
     reason?: Message,
     held?: HoldKind,
   ): Promise<boolean> {
@@ -275,7 +273,7 @@ export class ControlPlane {
       const approved = await this.release(
         "item",
         ref,
-        () => [...approval, { move: "triage", reason: message("stage.approve") }],
+        [...approval, { move: "triage", reason: message("stage.approve") }],
         said(body.text),
         "approval",
       );
@@ -290,10 +288,7 @@ export class ControlPlane {
     const accepted = await this.release(
       "item",
       ref,
-      () => [
-        { event: { type: "plan.accepted", item: ref, data: { plan, by: "human" } } },
-        ...approval,
-      ],
+      [{ event: { type: "plan.accepted", item: ref, data: { plan, by: "human" } } }, ...approval],
       said(body.text),
       "approval",
     );
@@ -316,8 +311,7 @@ export class ControlPlane {
     await this.release(
       "item",
       ref,
-      () =>
-        twice ? [{ hold: "attention", reason: message("hold.rejected-twice"), by: "kozod" }] : [],
+      twice ? [{ hold: "attention", reason: message("hold.rejected-twice"), by: "kozod" }] : [],
       said(body.reason),
     );
     if (twice) return { message: message("api.rejected-twice", { ref }) };
@@ -421,7 +415,7 @@ export class ControlPlane {
     await this.release(
       kind,
       ref,
-      () => (back ? [{ move: back, reason: message("stage.retry") }] : []),
+      back ? [{ move: back, reason: message("stage.retry") }] : [],
       said(body.text),
     );
     if (sendBack) return { message: message("api.retry-building", { ref }) };
@@ -467,7 +461,7 @@ export class ControlPlane {
     await this.release(
       "task",
       ref,
-      () => [{ hold: "taken", reason: message("hold.take") }],
+      [{ hold: "taken", reason: message("hold.take") }],
       message("hold.take"),
     );
     // Held first, so that the run stops at its node; the worktree is the human's once it has.
@@ -500,7 +494,7 @@ export class ControlPlane {
     await this.release(
       "task",
       ref,
-      () => [{ move: "building", reason: message("stage.return") }],
+      [{ move: "building", reason: message("stage.return") }],
       said(body.text),
     );
     return { message: message("api.returned", { ref }) };
@@ -562,7 +556,7 @@ export class ControlPlane {
     for (const task of tasks) {
       const state = this.store.state.tasks[task];
       if (!state || isClosed(state.stage)) continue;
-      await this.release("task", task, () => [{ move: to, reason }]);
+      await this.release("task", task, [{ move: to, reason }]);
       // Closed first, so that the run stops; its worktree goes once it has, and its branch with
       // it when cancelled.
       await this.runner?.stopWork(task);
@@ -575,7 +569,7 @@ export class ControlPlane {
     const stages = owner.tasks.map((task) => this.store.state.tasks[task]?.stage ?? "cancelled");
     if (kind === "task" && !stages.every(isClosed)) return;
     const closed = kind === "task" && stages.includes("complete") ? "complete" : to;
-    await this.release("item", item, () => [{ move: closed, reason }]);
+    await this.release("item", item, [{ move: closed, reason }]);
     // Triage or the plan agent may be running for the item itself; it stops once the item is closed.
     if (kind === "item") await this.runner?.stopWork(item);
   }

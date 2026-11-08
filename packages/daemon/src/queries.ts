@@ -232,6 +232,32 @@ export function costToday(db: Database, now: Date): number {
   return costBetween(db, midnightOf(now));
 }
 
+/** The last counts diff-guard took of a task's diff, or null before it took any. */
+export function lastDiffChecked(
+  db: Database,
+  task: string,
+): { lines: number; files: number } | null {
+  return (
+    db
+      .query<{ lines: number; files: number }, [string]>(
+        "select json_extract(line, '$.data.lines') as lines, json_extract(line, '$.data.files') as files from events where type = 'diff.checked' and task = ? order by id desc limit 1",
+      )
+      .get(task) ?? null
+  );
+}
+
+/** The tasks that a split again stopped since `since`, each the task whose block split its item. */
+export function splitStops(db: Database, since: string): Set<string> {
+  return new Set(
+    db
+      .query<{ task: string }, [string]>(
+        "select distinct task from events where type = 'stage.changed' and ts >= ? and json_extract(line, '$.data.reason.code') = 'stage.split-again' and json_extract(line, '$.data.reason.values.task') = task",
+      )
+      .all(since)
+      .map((row) => row.task),
+  );
+}
+
 export function activeRuns(db: Database): number {
   return (
     db.query<{ n: number }, []>("select count(*) as n from runs where state = 'running'").get()

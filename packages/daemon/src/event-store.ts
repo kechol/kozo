@@ -27,7 +27,6 @@ import { costToday, midnightOf } from "./queries.ts";
 
 type Data<T extends EventType> = Extract<Event, { type: T }>["data"];
 
-/** An event as kozod hands it to the store, which adds `v`, `ts`, `seq` and the defaults. */
 /** A line made and applied to the state, not yet written. */
 interface Staged {
   line: Event;
@@ -35,6 +34,7 @@ interface Staged {
   text: string;
 }
 
+/** An event as kozod hands it to the store, which adds `v`, `ts`, `seq` and the defaults. */
 export type NewEvent = {
   [T in EventType]: {
     type: T;

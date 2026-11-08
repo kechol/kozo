@@ -17,6 +17,7 @@ import {
   wrapRequest,
 } from "@kozo/core";
 import {
+  type Definition,
   diffGuardLine,
   git,
   globMatcher,
@@ -30,6 +31,7 @@ import {
   runVerify,
   SessionStopped,
   stopProcessesIn,
+  type Verifier,
   verifyInstructions,
   writeReviewVerdict,
   writeVerifyVerdict,
@@ -39,7 +41,14 @@ import { checkNotes } from "./instructions.ts";
 import { handoffReportPath, readItemFile, requestText } from "./item-file.ts";
 import { firstCodeChange, firstNonTestChange, layersFor, onlyDependencyFiles } from "./risk.ts";
 import { runRecords } from "./task-records.ts";
-import { type BlueprintRun, describe, type Node, type RunEnd, tail } from "./task-run.ts";
+import {
+  type BlueprintRun,
+  describe,
+  type Node,
+  type Repository,
+  type RunEnd,
+  tail,
+} from "./task-run.ts";
 import { externalWrite } from "./transitions.ts";
 import { takePorts } from "./worktree-ports.ts";
 import { claimTask, servicesCheckout } from "./worktrees.ts";
@@ -47,6 +56,19 @@ import { claimTask, servicesCheckout } from "./worktrees.ts";
 /** What the run's agents are told about the language of their prose, in its repository's locale. */
 const languageOf = (run: BlueprintRun) =>
   proseLanguage(repositoryLocale(run.definition.factory, run.repository.path));
+
+/** What every verify session in a repository gets, whatever it checks. */
+export const verifySession = (
+  verifier: Verifier,
+  definition: Definition,
+  repository: Repository,
+) => ({
+  language: proseLanguage(repositoryLocale(definition.factory, repository.path)),
+  verifier,
+  model: modelFor(definition, "verify"),
+  instructions: verifyInstructions(definition.agents.verify, definition.verifyApp),
+  maxCostUsd: repository.charter.limits.max_cost_usd,
+});
 
 /** Why a judge session failed, its own message when it has one. */
 const errorOf = (result: { message: string; reason?: Message }) =>
@@ -656,25 +678,20 @@ const verifyApp: NodeStep = async (run, current) => {
       repository.tip,
       definition,
     );
-    const session = child;
     verify = await runVerify({
       cwd: worktree,
       base: repository.base,
       goal: current.goal,
       doneWhen: current.done_when,
       ownerNotes: run.ownerWords().map((note) => render(note.text, "en")),
-      language: languageOf(run),
-      verifier: runner.deps.verifier,
-      model: modelFor(definition, "verify"),
-      instructions: verifyInstructions(definition.agents.verify, definition.verifyApp),
-      maxCostUsd: charter.limits.max_cost_usd,
+      ...verifySession(runner.deps.verifier, definition, repository),
       signal: run.signal,
       log: (text) => void run.log(text),
     }).catch(async (error: unknown) => {
       if (error instanceof SessionStopped) {
         // The run resumes at verify-app, whose next session needs the worktree back at HEAD.
         await discardChanges(worktree);
-        await runner.endRun(session, "stopped", undefined, error.costUsd);
+        await runner.endRun(child, "stopped", undefined, error.costUsd);
       }
       throw error;
     });

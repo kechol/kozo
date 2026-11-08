@@ -729,6 +729,14 @@ export function inOrder(state: FactoryState): { items: ItemState[]; tasks: TaskS
 }
 
 /** Why a task may not start a run now, or null when it may. */
+/**
+ * The hold that keeps a task from moving: its item's, since a held item changes no stage and its
+ * tasks wait with it, else the task's own; null when neither is held.
+ */
+export function heldBy(state: FactoryState, task: TaskState): Hold | null {
+  return state.items[task.item]?.hold ?? task.hold;
+}
+
 export function startBlocker(state: FactoryState, task: TaskState): string | null {
   if (state.paused)
     return `the factory is paused: ${state.pausedReason ? render(state.pausedReason, "en") : ""}`;

@@ -3,6 +3,7 @@ import {
   type BlockedReason,
   type FactoryState,
   type HoldKind,
+  heldBy,
   type ItemState,
   isClosed,
   type Message,
@@ -74,23 +75,53 @@ export async function hold(
   const event = await store.appendIf((state) => {
     const current = stateOf(state, subject);
     if (!current || current.hold) return null;
-    return {
-      type: "hold.set",
-      item: subject.item,
-      task: subject.task,
-      ...runEnvelope(state, run),
-      data: {
-        target: targetOf(subject),
-        hold,
-        by,
-        reason: cutValues(reason),
-        ...(blocked ? { blocked } : {}),
-        ...(approval ? { approval } : {}),
-      },
-    };
+    return holdSet(
+      subject,
+      hold,
+      reason,
+      by,
+      { ...runEnvelope(state, run) },
+      { blocked, approval },
+    );
   });
   return event !== null;
 }
+
+const holdSet = (
+  subject: Subject,
+  hold: HoldKind,
+  reason: Message,
+  by: Actor,
+  envelope: { run_id?: string; parent_run?: string | null } = {},
+  { blocked, approval }: { blocked?: BlockedReason; approval?: ApprovalKind } = {},
+): NewEvent => ({
+  type: "hold.set",
+  item: subject.item,
+  task: subject.task,
+  ...envelope,
+  data: {
+    target: targetOf(subject),
+    hold,
+    by,
+    reason: cutValues(reason),
+    ...(blocked ? { blocked } : {}),
+    ...(approval ? { approval } : {}),
+  },
+});
+
+const holdCleared = (subject: Subject, hold: HoldKind, by: Actor, reason?: Message): NewEvent => ({
+  type: "hold.cleared",
+  item: subject.item,
+  task: subject.task,
+  data: { target: targetOf(subject), hold, by, ...(reason ? { reason: cutValues(reason) } : {}) },
+});
+
+const noteAdded = (subject: Subject, kind: NoteKind, text: Message): NewEvent => ({
+  type: "note.added",
+  item: subject.item,
+  task: subject.task,
+  data: { kind, text: cutValues(text) },
+});
 
 /** Clears the subject's hold, only one of `kind` when it is given; resolves to whether it did. */
 export async function clearHold(
@@ -101,17 +132,7 @@ export async function clearHold(
   const event = await store.appendIf((state) => {
     const current = stateOf(state, subject);
     if (!current?.hold || (kind !== undefined && current.hold.kind !== kind)) return null;
-    return {
-      type: "hold.cleared",
-      item: subject.item,
-      task: subject.task,
-      data: {
-        target: targetOf(subject),
-        hold: current.hold.kind,
-        by,
-        ...(reason ? { reason: cutValues(reason) } : {}),
-      },
-    };
+    return holdCleared(subject, current.hold.kind, by, reason);
   });
   return event !== null;
 }
@@ -124,8 +145,7 @@ export type AfterHold =
   | { event: NewEvent };
 
 /**
- * Clears the subject's hold, when it has one, and appends the steps `after` makes of the
- * subject in the same turn of the store's queue, so that nothing, the scheduler included, sees
+ * Clears the subject's hold, when it has one, and appends the steps `after` in the same turn of the store's queue, so that nothing, the scheduler included, sees
  * the subject without a hold in between; a move to the stage the subject is in is left out.
  * Nothing happens when the subject is gone, or, with `kind`, when its hold is not of that kind;
  * resolves to whether anything was appended.
@@ -133,7 +153,7 @@ export type AfterHold =
 export async function releaseHold(
   store: EventStore,
   subject: Subject,
-  after: (current: ItemState | TaskState) => AfterHold[],
+  after: readonly AfterHold[],
   { by = "kozod", reason, kind }: { by?: Actor; reason?: Message; kind?: HoldKind } = {},
 ): Promise<boolean> {
   const written = await store.appendAllIf((state) => {
@@ -142,39 +162,17 @@ export async function releaseHold(
     // A verb that clears one kind of hold does nothing once that hold is gone, as when the same
     // approval arrives twice.
     if (kind !== undefined && current.hold?.kind !== kind) return null;
-    const target = targetOf(subject);
-    const events: NewEvent[] = [];
-    if (current.hold)
-      events.push({
-        type: "hold.cleared",
-        item: subject.item,
-        task: subject.task,
-        data: {
-          target,
-          hold: current.hold.kind,
-          by,
-          ...(reason ? { reason: cutValues(reason) } : {}),
-        },
-      });
-    for (const step of after(current)) {
+    const events: NewEvent[] = current.hold
+      ? [holdCleared(subject, current.hold.kind, by, reason)]
+      : [];
+    for (const step of after) {
       if ("move" in step) {
         if (step.move !== current.stage)
           events.push(stageChanged(subject, current.stage, step.move, step.reason, by));
-      } else if ("hold" in step) {
-        events.push({
-          type: "hold.set",
-          item: subject.item,
-          task: subject.task,
-          data: { target, hold: step.hold, by: step.by ?? by, reason: cutValues(step.reason) },
-        });
-      } else if ("note" in step) {
-        events.push({
-          type: "note.added",
-          item: subject.item,
-          task: subject.task,
-          data: { kind: step.note, text: cutValues(step.text) },
-        });
-      } else events.push(step.event);
+      } else if ("hold" in step)
+        events.push(holdSet(subject, step.hold, step.reason, step.by ?? by));
+      else if ("note" in step) events.push(noteAdded(subject, step.note, step.text));
+      else events.push(step.event);
     }
     return events;
   });
@@ -235,7 +233,7 @@ export async function completeMerged(
   const written = await store.appendAllIf((state) => {
     const task = state.tasks[subject.task];
     const item = state.items[subject.item];
-    if (!task || !item || task.stage !== "handoff" || task.hold || item.hold) return null;
+    if (!task || !item || task.stage !== "handoff" || heldBy(state, task)) return null;
     const events = [stageChanged(subject, task.stage, "complete", reason)];
     const others = item.tasks.filter((ref) => ref !== subject.task);
     if (
@@ -251,7 +249,7 @@ export async function completeMerged(
       ...events,
       // A failed check sends the item straight back to Triage, so it never looks complete in
       // between.
-      { type: "note.added", ...subject, data: { kind: "check", text: cutValues(back.note) } },
+      noteAdded(subject, "check", back.note),
       ...(back.defect
         ? [
             {
@@ -288,12 +286,7 @@ export async function splitTasks(
       const task = state.tasks[ref];
       if (!task || isClosed(task.stage)) continue;
       const subject = { item: itemRef, task: ref };
-      if (task.hold)
-        events.push({
-          type: "hold.cleared",
-          ...subject,
-          data: { target: "task", hold: task.hold.kind, by: "kozod" },
-        });
+      if (task.hold) events.push(holdCleared(subject, task.hold.kind, "kozod"));
       events.push(stageChanged(subject, task.stage, "cancelled", reason));
     }
     // A second block while the item is already back in Planning only cancels its own tasks;
@@ -317,12 +310,7 @@ export async function note(
   kind: NoteKind,
   text: Message,
 ): Promise<void> {
-  await store.append({
-    type: "note.added",
-    item: subject.item,
-    task: subject.task,
-    data: { kind, text: cutValues(text) },
-  });
+  await store.append(noteAdded(subject, kind, text));
 }
 
 /** Records a write kozod made outside itself, such as a push or a comment on an Issue. */

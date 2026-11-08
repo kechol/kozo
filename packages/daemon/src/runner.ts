@@ -2,6 +2,7 @@ import {
   type BlockedReason,
   blueprintNodes,
   demotedCharter,
+  heldBy,
   isClosed,
   type KozoHome,
   type Message,
@@ -31,6 +32,7 @@ import { askExplorer } from "./explorer.ts";
 import { writeHandoffReport } from "./handoff-report.ts";
 import type { Launcher } from "./launcher.ts";
 import { nodeSteps, startServices } from "./nodes.ts";
+import { readCharter } from "./repository.ts";
 import { RunRecords } from "./run-records.ts";
 import {
   BlueprintRun,
@@ -256,11 +258,14 @@ export class Runner implements RunnerOps {
     if (state.paused) return true;
     const item = state.items[state.tasks[taskRef]?.item ?? ""];
     if (!item) return true;
-    const { charter } = await this.repository(item.repository);
-    const budget = this.deps.definition.current.factory.budget.daily_usd;
+    const { factory } = this.deps.definition.current;
+    // A Charter that is not ready stops new work, so it stops a new attempt too.
+    const charter = await readCharter(item.repository, factory.mode, state);
+    if (!charter.ok) return true;
+    const budget = factory.budget.daily_usd;
     const spent = this.store.costToday(new Date());
     // This task's own reservation is the session about to start, as for any new work.
-    const others = this.records.reservedUsd - charter.limits.max_cost_usd;
+    const others = this.records.reservedUsd - charter.charter.limits.max_cost_usd;
     return spent + Math.max(0, others) >= budget;
   }
 
@@ -301,7 +306,7 @@ export class Runner implements RunnerOps {
     const stopReason = (task: TaskState | undefined) =>
       !task || isClosed(task.stage)
         ? message("run.closed")
-        : task.hold || this.store.state.items[task.item]?.hold
+        : heldBy(this.store.state, task)
           ? message("run.held")
           : this.records.stopping
             ? message("run.kozod-stopped")
@@ -331,12 +336,7 @@ export class Runner implements RunnerOps {
       const current = this.store.state.tasks[taskRef];
       if (!current || isClosed(current.stage))
         return await blueprintRun.stopHere("stopped", stopReason(current));
-      if (
-        current.hold ||
-        this.store.state.items[current.item]?.hold ||
-        this.records.stopping ||
-        signal.aborted
-      ) {
+      if (heldBy(this.store.state, current) || this.records.stopping || signal.aborted) {
         // The next run resumes at this node, not at the one that finished before the stop.
         await blueprintRun.checkpoint(node);
         return await blueprintRun.stopHere("stopped", stopReason(current));
