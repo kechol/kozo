@@ -40,6 +40,7 @@ import {
 } from "@kozo/verify";
 import type { AgentRequest } from "@kozo/worker";
 import { Automations } from "./automations.ts";
+import { measuredTasks } from "./calibration.ts";
 import { ControlPlane } from "./control-plane.ts";
 import { evalCaseOf } from "./eval.ts";
 import { EventStore } from "./event-store.ts";
@@ -1536,6 +1537,17 @@ describe("the minimal path", () => {
     expect((review as { noticed: unknown[] }).noticed).toEqual([
       { task, path: "src/cart.ts", note: "The cart rounds prices twice" },
       { task, path: null, note: "The README is stale" },
+    ]);
+    // What diff-guard counted, against the plan's estimate, for calibration.
+    const estimate = plan.plan.tasks[0]?.estimate;
+    if (!estimate) throw new Error("the fixture plan has a task");
+    expect(measuredTasks(env.store.db, env.store.state, env.repo.path, new Date())).toEqual([
+      {
+        class: "bugfix",
+        estimate,
+        actual: { lines: expect.any(Number), files: expect.any(Number) },
+        stoppedForScope: false,
+      },
     ]);
   }, 180_000);
 

@@ -11,6 +11,7 @@ import {
   waitsOnOwner,
   workClassSchema,
 } from "@kozo/core";
+import { calibrate, measuredTasks, median } from "./calibration.ts";
 import {
   costBetween,
   costOf,
@@ -60,14 +61,6 @@ async function noticed(home: KozoHome, state: FactoryState, since: string): Prom
 export const reportDays = { default: 30, max: 365 } as const;
 
 /** The middle value of `values`, or null when there is none. */
-function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? (sorted[middle] ?? null)
-    : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
-}
 
 const share = (part: number, whole: number) => (whole === 0 ? null : part / whole);
 
@@ -219,5 +212,8 @@ export async function buildReport(
     demotions: Object.values(state.demotions),
     cost_usd: costBetween(db, new Date(since)),
     noticed: home ? await noticed(home, state, since) : [],
+    calibration: factory.repositories.flatMap(({ path }) =>
+      calibrate(measuredTasks(db, state, path, now)).map((c) => ({ repository: path, ...c })),
+    ),
   };
 }

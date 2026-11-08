@@ -132,6 +132,7 @@ const examples: Record<EventType, unknown> = {
   "tool.result": { call_id: "c1", is_error: false, output: "status=pass" },
   "instruction.delivered": { queue_seq: 0, text: "Keep the old label for zero." },
   checkpoint: { head: null },
+  "diff.checked": { lines: 42, files: 3 },
   "gates.result": {
     level: "full",
     head: "9f3c2a1",

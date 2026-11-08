@@ -625,6 +625,14 @@ interface Metrics {
   cost_usd?: number;
   failures?: { kind: string; ref: string; at: string; text: string }[];
   noticed?: { task: string; path: string | null; note: string }[];
+  calibration?: {
+    repository: string;
+    class: string;
+    tasks: number;
+    lines: number;
+    files: number;
+    scope_blocks: number;
+  }[];
 }
 
 interface CostReport {
@@ -688,6 +696,16 @@ function metricLines(r: Metrics, t: Words): string[] {
     ...(r.cost_usd === undefined
       ? []
       : ["", `cost              ${t("cli.cost-in-window", { cost: dollars(r.cost_usd) })}`]),
+    ...(r.calibration && r.calibration.length > 0
+      ? [
+          "",
+          t("cli.calibration"),
+          ...r.calibration.map(
+            (c) =>
+              `  ${t("cli.class-in-repository", { class: c.class, repository: c.repository })}  ${t("cli.calibrated", { tasks: c.tasks, lines: c.lines.toFixed(1), files: c.files.toFixed(1), blocks: percent(c.scope_blocks) })}`,
+          ),
+        ]
+      : []),
     ...(r.noticed && r.noticed.length > 0
       ? [
           "",

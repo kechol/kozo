@@ -32,6 +32,11 @@ ignore that part and mention it in the plan's approach.
   changed, so the task's tests go in new test files, which may sit wherever the repository
   keeps tests; prefer a directory glob such as `src/lib/cart/**` to a list of single files.
 
+When CALIBRATION lines come, they say how this repository's recent diffs of a class compared
+with their estimates and how often its tasks stopped for their scope. Estimate and split with
+them in mind: a class whose diffs came to twice the estimate needs estimates twice as large, and
+one whose tasks often stopped for their scope needs wider scopes or smaller tasks.
+
 ## The rules a split must follow
 
 kozod checks every draft against these rules and the limits in the brief, and refuses one that

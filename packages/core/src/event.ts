@@ -250,6 +250,8 @@ export const eventSchema = z
         z.strictObject({ ...gatesRun, status: z.literal("MISCONFIGURED"), reason: text }),
       ]),
     ),
+    /** What diff-guard counted of a task's diff: its lines and files, generated ones left out. */
+    event("diff.checked", z.strictObject({ lines: tokens, files: tokens })),
     /** A task branch found in the default branch, and the first commit there that holds it. */
     event(
       "branch.merged",

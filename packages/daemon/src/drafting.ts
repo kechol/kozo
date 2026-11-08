@@ -21,6 +21,7 @@ import {
 } from "@kozo/core";
 import { listFiles, modelFor } from "@kozo/verify";
 import { taskSandbox } from "@kozo/worker";
+import { calibrate, calibrationLines, measuredTasks } from "./calibration.ts";
 import { checkNotes, ownerNotes } from "./instructions.ts";
 import { type ItemFile, readItemFile, requestText } from "./item-file.ts";
 import { checkPlan } from "./plan-checks.ts";
@@ -108,6 +109,9 @@ async function draftPlan(
     `ITEM        ${itemRef} in ${repository.path}, default branch ${repository.branch}`,
     `LIMITS      a task changes at most ${limits.max_changed_lines} lines in ${limits.max_files} files; an item has at most ${limits.max_tasks_per_item} tasks`,
     `PROTECTED   ${repository.charter.protected_paths.join(", ")}`,
+    ...calibrationLines(
+      calibrate(measuredTasks(runner.store.db, runner.store.state, repository.path, new Date())),
+    ),
     `REQUEST     ${wrapRequest(requestText(file))}`,
     ...[proseLanguage(repositoryLocale(definition.factory, repository.path))]
       .filter((rule) => rule !== null)

@@ -510,6 +510,15 @@ const verifyDeterministic: NodeStep = async (run, current) => {
     scope: current.scope,
     log: collect,
   });
+  if (guard.status === "pass" || guard.status === "fail") {
+    // What the diff came to, which calibration sets against the plan's estimate.
+    await runner.store.append({
+      ...run.envelope,
+      node,
+      type: "diff.checked",
+      data: { lines: guard.lines, files: guard.files.length - guard.generated.files },
+    });
+  }
   if (guard.status !== "pass") {
     const line = diffGuardLine(guard);
     // Only a changed diff passes diff-guard, so once the owner answers, the task resumes

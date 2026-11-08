@@ -135,8 +135,9 @@ kozo report [--days <n>] [--review | --cost] [--json]
 ```
 
 The metrics and failures of the last `<n>` days (30 by default) and the promotion proposals.
-`--review` adds each class's autonomy level, the demotions, the cost and what the merged tasks'
-implementers noticed out of their scope and left, which `kozo add` makes an item; `--cost`
+`--review` adds each class's autonomy level, the demotions, the cost, how the last 90 days' diffs
+of each class came out against their plans' estimates once five back it, and what the merged
+tasks' implementers noticed out of their scope and left, which `kozo add` makes an item; `--cost`
 lists each day's cost against the daily budget.
 
 ## Answering and deciding

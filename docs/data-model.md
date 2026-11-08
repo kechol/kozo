@@ -88,6 +88,7 @@ report and the dashboard only (`recordOnlyTypes` in `packages/core/src/state.ts`
 | `instruction.delivered` | no | An instruction from the queue reached the session |
 | `checkpoint` | yes | The task branch's commit at a checkpoint |
 | `gates.result` | no | The gates passed, failed or were misconfigured at a level |
+| `diff.checked` | no | The lines and files diff-guard counted of a task's diff |
 | `branch.merged` | yes | A task branch was found in the default branch |
 | `handoff.ready` | no | The commit handed to the human after the final verification passed |
 | `review.verdict` | no | Review's verdict |

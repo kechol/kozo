@@ -34,6 +34,11 @@ means in a triage draft:
   globs it may change as its scope, the IDs of tasks it depends on, and an estimate of the lines
   and files it changes. Existing tests cannot be changed, so a task's tests go in new files.
 
+When CALIBRATION lines come, they say how this repository's recent diffs of a class compared
+with their estimates and how often its tasks stopped for their scope. Estimate and split with
+them in mind: a class whose diffs came to twice the estimate needs estimates twice as large, and
+one whose tasks often stopped for their scope needs wider scopes or smaller tasks.
+
 ## A feature's acceptance criteria
 
 A feature's done_when are its acceptance criteria, and the owner decides them. Before you answer

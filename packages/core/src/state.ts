@@ -72,6 +72,8 @@ export interface TaskState {
   goal: string;
   done_when: string[];
   scope: string[];
+  /** The lines and files its plan estimated, which calibration compares with the diff. */
+  estimate: { lines: number; files: number };
   depends_on: string[];
   /** Whether the task only adds tests that pin behaviour its item keeps. */
   characterize: boolean;
@@ -170,6 +172,7 @@ export const recordOnlyTypes: ReadonlySet<EventType> = new Set<EventType>([
   "tool.result",
   "instruction.delivered",
   "gates.result",
+  "diff.checked",
   "handoff.ready",
   "review.verdict",
   "external.write",
@@ -476,6 +479,7 @@ function applyChange(state: FactoryState, event: Event): void {
           goal: planned.goal,
           done_when: planned.done_when,
           scope: planned.scope,
+          estimate: planned.estimate,
           depends_on: planned.depends_on.map((id) => `${plan.item}/${id}`),
           characterize: planned.characterize ?? false,
           codemod: planned.codemod ?? null,
