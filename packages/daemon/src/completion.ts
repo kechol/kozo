@@ -179,13 +179,22 @@ async function acceptItem(
     maxCostUsd: repository.charter.limits.max_cost_usd,
     signal,
     log: (text) => void appendFile(logPath, text).catch(() => {}),
-  })
-    .catch(async (error: unknown) => {
-      if (!(error instanceof SessionStopped)) throw error;
-      await runner.endRun(run, "stopped", undefined, error.costUsd);
-      return null;
-    })
-    .finally(() => discardChanges(worktree));
+  }).catch(async (error: unknown) => {
+    if (!(error instanceof SessionStopped)) throw error;
+    await runner.endRun(run, "stopped", undefined, error.costUsd);
+    return null;
+  });
+  // The evidence is kept from the worktree before the worktree goes back to the default branch,
+  // and a verdict whose evidence cannot be kept passes nothing.
+  let unkept: string | null = null;
+  try {
+    if (verified?.status === "verified")
+      await writeVerifyVerdict(runFiles(runner.home, run).dir, worktree, verified.record);
+  } catch (error) {
+    unkept = error instanceof Error ? error.message : String(error);
+  } finally {
+    await discardChanges(worktree);
+  }
   if (verified === null) return null;
   if (verified.status === "MISCONFIGURED") {
     await runner.endRun(run, "succeeded", message("run.no-verify-app"));
@@ -197,7 +206,11 @@ async function acceptItem(
     return { kind: "blocked", reason: message("hold.acceptance-blocked", { reason: error }) };
   }
   const { record } = verified;
-  await writeVerifyVerdict(runFiles(runner.home, run).dir, worktree, record).catch(() => "");
+  if (unkept !== null) {
+    const reason = message("text", { text: unkept });
+    await runner.endRun(run, "failed", reason, record.costUsd);
+    return { kind: "blocked", reason: message("hold.acceptance-blocked", { reason }) };
+  }
   await runner.endRun(run, "succeeded", undefined, record.costUsd);
   if (record.result === "pass") return { kind: "pass" };
   const summary = message("text", { text: record.summary });

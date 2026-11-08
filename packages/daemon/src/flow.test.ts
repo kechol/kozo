@@ -1590,7 +1590,8 @@ describe("the minimal path", () => {
         const instructions = request.prompt.slice(0, request.prompt.indexOf("</instructions>"));
         asked.push(instructions);
         const met = result === "pass";
-        if (met) await Bun.write(join(request.cwd, ".output", "verify", "seen.txt"), "seen\n");
+        // Outside every ignored path, so that only keeping it before the worktree goes back saves it.
+        if (met) await Bun.write(join(request.cwd, "verify-seen.txt"), "seen\n");
         const output = {
           result,
           summary: met ? "Both labels are explained." : "The sold-out label is not explained.",
@@ -1598,7 +1599,7 @@ describe("the minimal path", () => {
             condition,
             met,
             observation: met ? "It is there." : "It is missing.",
-            evidence: met ? [".output/verify/seen.txt"] : [],
+            evidence: met ? ["verify-seen.txt"] : [],
           })),
           cleanedUp: true,
         };
@@ -1645,6 +1646,9 @@ describe("the minimal path", () => {
     expect(env.store.state.items[ref]?.stage).toBe("complete");
     const run = Object.values(env.store.state.runs).find((entry) => entry.agent === "verify");
     expect(run).toMatchObject({ item: ref, task: null, state: "succeeded" });
+    // The evidence was kept from the worktree before it went back to the default branch.
+    const kept = runFiles(env.home, run?.ref ?? "").dir;
+    expect(await Bun.file(join(kept, "evidence", "verify-seen.txt")).exists()).toBe(true);
   }, 240_000);
 
   test("an item that fails as a whole goes back to Triage with what failed, and records no defect", async () => {
