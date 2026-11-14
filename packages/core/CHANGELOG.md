@@ -1,5 +1,27 @@
 # @kozo/core
 
+## 0.2.0
+
+### Minor Changes
+
+- [`e3698f8`](https://github.com/kechol/kozo/commit/e3698f8b03cbae3036686c130d9a18c818141a14) Thanks [@kechol](https://github.com/kechol)! - kozod records the size of each task's diff as diff-guard counted it, and once five merged tasks of a class back it, tells triage and plan how this repository's diffs of that class came out against their estimates and how often its tasks stopped for their scope; `kozo report --review` shows the same.
+
+- [`9e044c2`](https://github.com/kechol/kozo/commit/9e044c2b2c0b09eafd87848f3b0e11f3d7bc1fbb) Thanks [@kechol](https://github.com/kechol)! - The implement agent's brief now carries the plan's approach, the goal and scope of the item's other open tasks as work to leave to them, and what each task it builds on changed according to its run report, so tasks of one item fit together instead of each inventing its own pieces.
+
+- [`1d6570f`](https://github.com/kechol/kozo/commit/1d6570fbf66c49898588b7f0ac03551ec40f04e4) Thanks [@kechol](https://github.com/kechol)! - The built-in triage and plan agents check a draft before they answer: each task stands on its own once merged, each condition is observable, the scope holds the tests, types, migrations, configuration and documentation the change needs, what several tasks share is built once, and the approach names where the code goes.
+
+- [`3d51727`](https://github.com/kechol/kozo/commit/3d517274ea2aac7474f7c0c64211ded78e4dc7ac) Thanks [@kechol](https://github.com/kechol)! - `kozo admin install` adds a Structure and boundaries section to the repository's AGENTS.md, where you name the modules, which may depend on which, where new code goes and what a change should reuse, and its constraints show how a gate can keep those boundaries.
+
+- [`39d5928`](https://github.com/kechol/kozo/commit/39d59288954b51107b6165e47caccf78b40274d1) Thanks [@kechol](https://github.com/kechol)! - A plan may name what its tasks share: the names, places and data shapes more than one task uses, one line each. The dashboard and `kozo show` list them with the plan you approve, every task's brief carries them, and review holds every diff to them.
+
+- [`d248493`](https://github.com/kechol/kozo/commit/d248493611dd67a447653d86a3a337aa5977f078) Thanks [@kechol](https://github.com/kechol)! - `.kozo/constraints.yml` may list `together`, paths that change together such as an API and its documentation: kozo refuses a plan that may change one side and gives no task the other, and diff-guard refuses a diff that changes one side alone.
+
+- [`7e177f5`](https://github.com/kechol/kozo/commit/7e177f5b45ec8fcbafc88cdb7e4c0c5fd3367f86) Thanks [@kechol](https://github.com/kechol)! - `kozo admin init` also installs `weekly-boundaries.md`, an automation that asks every Monday at 04:00 for one place that breaks the Structure and boundaries section of the repository's AGENTS.md to be fixed; delete the file to stop it.
+
+### Patch Changes
+
+- [`e0d89bb`](https://github.com/kechol/kozo/commit/e0d89bbdf3511b28e686f0cb807c358d4485e4be) Thanks [@kechol](https://github.com/kechol)! - In GitHub mode kozod follows GitHub's irregular answers: failed checks and a pull request without checks no longer break the poll, a change request that the reviewer later approved or that was dismissed no longer sends the task back, an item whose Issue was deleted or moved is held for your attention instead of failing on every poll, and `kozo issue` run again after a failed close finishes with the Issue it opened instead of opening another.
+
 ## 0.1.0
 
 ### Minor Changes

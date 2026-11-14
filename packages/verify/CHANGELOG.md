@@ -1,5 +1,23 @@
 # @kozo/verify
 
+## 0.2.0
+
+### Minor Changes
+
+- [`b6657f3`](https://github.com/kechol/kozo/commit/b6657f35d87e702146c9991299ac27c8ae096c8a) Thanks [@kechol](https://github.com/kechol)! - Review now judges a diff also against the repository's AGENTS.md, read from the base branch so the diff cannot change it, and against the plan's approach, so a change in the wrong place, around an existing abstraction or against a written rule is sent back.
+
+- [`39d5928`](https://github.com/kechol/kozo/commit/39d59288954b51107b6165e47caccf78b40274d1) Thanks [@kechol](https://github.com/kechol)! - A plan may name what its tasks share: the names, places and data shapes more than one task uses, one line each. The dashboard and `kozo show` list them with the plan you approve, every task's brief carries them, and review holds every diff to them.
+
+- [`d248493`](https://github.com/kechol/kozo/commit/d248493611dd67a447653d86a3a337aa5977f078) Thanks [@kechol](https://github.com/kechol)! - `.kozo/constraints.yml` may list `together`, paths that change together such as an API and its documentation: kozo refuses a plan that may change one side and gives no task the other, and diff-guard refuses a diff that changes one side alone.
+
+### Patch Changes
+
+- [`b854542`](https://github.com/kechol/kozo/commit/b854542cb097edb67d8d60136685f907bf5bfda1) Thanks [@kechol](https://github.com/kechol)! - A fetch, push or `ls-remote` that the network holds up ends after five minutes instead of stopping kozod's polling, merge detection and automations behind it, and those jobs no longer pile up while one of them waits.
+
+- [`63b68b8`](https://github.com/kechol/kozo/commit/63b68b8dd459657e82445e9172af7957e4174c4f) Thanks [@kechol](https://github.com/kechol)! - `kozo pause --now`, `kozo take`, `kozo close` and stopping kozod end a running review or verify-app session at once instead of waiting for it to finish; the task resumes at the same node, and verify-app first puts the worktree back.
+- Updated dependencies [[`e3698f8`](https://github.com/kechol/kozo/commit/e3698f8b03cbae3036686c130d9a18c818141a14), [`e0d89bb`](https://github.com/kechol/kozo/commit/e0d89bbdf3511b28e686f0cb807c358d4485e4be), [`9e044c2`](https://github.com/kechol/kozo/commit/9e044c2b2c0b09eafd87848f3b0e11f3d7bc1fbb), [`1d6570f`](https://github.com/kechol/kozo/commit/1d6570fbf66c49898588b7f0ac03551ec40f04e4), [`3d51727`](https://github.com/kechol/kozo/commit/3d517274ea2aac7474f7c0c64211ded78e4dc7ac), [`39d5928`](https://github.com/kechol/kozo/commit/39d59288954b51107b6165e47caccf78b40274d1), [`d248493`](https://github.com/kechol/kozo/commit/d248493611dd67a447653d86a3a337aa5977f078), [`7e177f5`](https://github.com/kechol/kozo/commit/7e177f5b45ec8fcbafc88cdb7e4c0c5fd3367f86)]:
+  - @kozo/core@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes
