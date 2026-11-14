@@ -123,7 +123,8 @@ GitHub Release, whose notes gather that version's entries from every package's
 kechol/homebrew-tap repository as a GitHub App installed only on that
 repository: the job creates a token that may write only its contents and is
 revoked when the job ends, from the `HOMEBREW_TAP_APP_CLIENT_ID` variable and
-the `HOMEBREW_TAP_APP_PRIVATE_KEY` secret. Nobody publishes from a laptop.
+the `HOMEBREW_TAP_APP_PRIVATE_KEY` secret of the `release` environment, which
+only `v*` tags can deploy to. Nobody publishes from a laptop.
 
 ## What to keep out of the repository
 
