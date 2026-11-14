@@ -9,7 +9,7 @@
     "@kozo/dashboard": "workspace:*",
     "@kozo/verify": "workspace:*",
     "@kozo/worker": "workspace:*",
-    "hono": "4.13.14",
+    "hono": "4.13.17",
     "zod": "^4.6.7"
   },
   "devDependencies": {
