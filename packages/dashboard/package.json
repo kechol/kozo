@@ -9,8 +9,8 @@
   },
   "dependencies": {
     "@kozo/core": "workspace:*",
-    "@preact/signals": "2.11.3",
-    "preact": "11.0.2"
+    "@preact/signals": "2.11.4",
+    "preact": "11.2.0"
   },
   "devDependencies": {
     "happy-dom": "21.0.4"
