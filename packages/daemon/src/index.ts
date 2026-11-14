@@ -2,6 +2,7 @@ import { readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { apiPort, kozoHome } from "@kozo/core";
 import {
+  claudeExecutable,
   claudeJudge,
   claudeVerifier,
   definitionTip,
@@ -89,7 +90,7 @@ async function evaluate(names: readonly string[], out: Output): Promise<number> 
           .filter((name) => name.endsWith(".yml"))
           .sort()
           .map((name) => join(dir, name));
-  const claude = process.env.KOZO_CLAUDE ?? Bun.which("claude") ?? "claude";
+  const claude = claudeExecutable() ?? "claude";
   const egress = EgressProxy.start(
     (host) => hostAllowed(host, loaded.definition.factory.prepare_hosts ?? []),
     (line) => out.stderr(line),

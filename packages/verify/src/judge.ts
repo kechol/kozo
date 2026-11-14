@@ -152,6 +152,11 @@ export function localSandbox(filesystem: {
 /** Lets Claude Code remove its own sign-in variables from the environment of the shell. */
 export const scrubbedShell = { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1" };
 
+/** The user's own `claude`: `KOZO_CLAUDE` when set, else the one on `PATH`. */
+export function claudeExecutable(): string | undefined {
+  return process.env.KOZO_CLAUDE ?? Bun.which("claude") ?? undefined;
+}
+
 /**
  * A judge that runs the user's own `claude` through the Agent SDK. The session has no tools and
  * starts in an empty directory, so content in the prompt can only influence the answer.

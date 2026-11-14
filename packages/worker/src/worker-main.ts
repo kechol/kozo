@@ -1,4 +1,4 @@
-import { type Confine, platformConfine } from "@kozo/verify";
+import { type Confine, claudeExecutable, platformConfine } from "@kozo/verify";
 import { claudeAgent } from "./claude-agent.ts";
 import { claudeCliAgent } from "./claude-cli-agent.ts";
 import type { CodingAgent } from "./coding-agent.ts";
@@ -9,7 +9,7 @@ import { runSession, type WorkerSpec, workerSpecSchema } from "./session.ts";
  * executable, which a CLI session runs for its hooks and tools.
  */
 export function claudeAgentFor(runtime: WorkerSpec["runtime"], helper: readonly string[]) {
-  const claude = process.env.KOZO_CLAUDE ?? Bun.which("claude") ?? "claude";
+  const claude = claudeExecutable() ?? "claude";
   return runtime === "cli" ? claudeCliAgent(claude, helper) : claudeAgent(claude);
 }
 

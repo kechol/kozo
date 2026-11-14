@@ -2,7 +2,14 @@ import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { apiPort, itemLevel, type KozoHome, kozoHome, message } from "@kozo/core";
 import dashboard from "@kozo/dashboard/index.html";
-import { baseOf, type Confine, claudeJudge, claudeVerifier, platformConfine } from "@kozo/verify";
+import {
+  baseOf,
+  type Confine,
+  claudeExecutable,
+  claudeJudge,
+  claudeVerifier,
+  platformConfine,
+} from "@kozo/verify";
 import { CommandError, type Commands, createApi, serveApi } from "./api.ts";
 import { apiToken } from "./api-token.ts";
 import { Automations } from "./automations.ts";
@@ -166,7 +173,7 @@ export class Daemon {
       report(
         `kozod: refused the factory definition at ${atStart.refusal.commit.slice(0, 12)}; running ${atStart.refusal.running.slice(0, 12)}: ${atStart.refusal.issues.join("; ")}`,
       );
-    const claude = process.env.KOZO_CLAUDE ?? Bun.which("claude") ?? "claude";
+    const claude = claudeExecutable() ?? "claude";
     // prepare reaches other hosts only through this proxy, which reads the allowlist each time.
     const egress = started.adopt(
       EgressProxy.start(

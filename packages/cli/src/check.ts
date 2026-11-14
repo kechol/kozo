@@ -12,6 +12,7 @@ import {
   activeGitHubLogin,
   baseOf,
   charterPath,
+  claudeExecutable,
   constraintsPath,
   type Definition,
   definitionTip,
@@ -245,7 +246,7 @@ async function runTool(tool: string, args: string[]) {
 }
 
 async function claudeChecks(runtime: Factory["runtime"], t: Words): Promise<Check[]> {
-  const claude = process.env.KOZO_CLAUDE ?? Bun.which("claude");
+  const claude = claudeExecutable();
   if (!claude) return [{ name: "claude", status: "fail", detail: t("cli.check-claude-missing") }];
   const version = await runTool(claude, ["--version"]);
   if (version.code !== 0) {
