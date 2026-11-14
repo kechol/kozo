@@ -26,9 +26,15 @@ flowchart BT
 | `packages/cli` | `kozo`, a client of the local API, and the standalone `gates`, `diff-guard`, `prove`, `review` and `verify` commands |
 | `packages/dashboard` | The dashboard page, which kozod embeds and serves |
 | `testing` | Fixtures, the fake agent and the fake GitHub the tests share |
+| `templates` | The factory definition template in `templates/factory` and the target repository template in `templates/repository`. They are files, not a package |
 
 The arrows are every dependency between the packages. Nothing depends on `@kozo/daemon` or
-`@kozo/cli`, and `@kozo/core` depends on no other package.
+`@kozo/cli`, and `@kozo/core` depends on no other package. Apart from the packages,
+`@kozo/core` and `@kozo/verify` import files under `templates/` as text by relative paths, and
+the compiled binaries embed them: the core holds both templates as `factoryTemplate` and
+`repositoryTemplate`, and verify takes the review and verify agents and the verify-app skill
+from the factory template. Neither package builds outside this repository, and a change to a
+template changes what they produce.
 
 ## Processes
 
