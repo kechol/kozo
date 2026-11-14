@@ -11,7 +11,6 @@ export const findingSchema = z.strictObject({
   path: z.string().min(1).optional(),
   issue: z.string().min(1),
 });
-export type Finding = z.infer<typeof findingSchema>;
 
 /** What the review judge must answer, checked before anything is recorded. */
 export const reviewJudgmentSchema = z.strictObject({
@@ -19,7 +18,6 @@ export const reviewJudgmentSchema = z.strictObject({
   summary: z.string().min(1),
   findings: z.array(findingSchema),
 });
-export type ReviewJudgment = z.infer<typeof reviewJudgmentSchema>;
 
 export const reviewRecordSchema = reviewJudgmentSchema.extend({
   model: z.string().min(1),
@@ -46,7 +44,6 @@ export const verifyJudgmentSchema = z.strictObject({
   ),
   cleanedUp: z.boolean(),
 });
-export type VerifyJudgment = z.infer<typeof verifyJudgmentSchema>;
 
 export const verifyRecordSchema = verifyJudgmentSchema.extend({
   model: z.string().min(1),

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { type ParseResult, parseYamlDocument } from "./document.ts";
 import { type Locale, localeSchema } from "./message.ts";
 import { agentNameSchema } from "./work-model.ts";
 
@@ -69,8 +68,4 @@ export function repositoryLocale(factory: Factory, path: string): Locale {
   return (
     factory.repositories.find((repository) => repository.path === path)?.locale ?? factory.locale
   );
-}
-
-export function parseFactory(text: string): ParseResult<Factory> {
-  return parseYamlDocument(factorySchema, text);
 }

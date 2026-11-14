@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { workClassSchema } from "./charter.ts";
-import { jsonSchema, type ParseResult, parseYamlDocument } from "./document.ts";
+import { jsonSchema } from "./document.ts";
 import { itemReferenceSchema } from "./reference.ts";
 import { riskTierSchema } from "./work-model.ts";
 
@@ -75,20 +75,14 @@ export const planSchema = z
   .superRefine(checkTasks);
 export type Plan = z.infer<typeof planSchema>;
 
-export function parsePlan(text: string): ParseResult<Plan> {
-  return parseYamlDocument(planSchema, text);
-}
-
 /** The plan a triage agent drafts; kozod adds the version and the item. */
 export const planDraftSchema = z.strictObject(draftFields).superRefine(checkTasks);
-export type PlanDraft = z.infer<typeof planDraftSchema>;
 
 /** What a triage session answers: a plan draft, or the question that blocks one. */
 export const triageAnswerSchema = z.discriminatedUnion("outcome", [
   z.strictObject({ outcome: z.literal("plan"), plan: planDraftSchema }),
   z.strictObject({ outcome: z.literal("question"), question: z.string().min(1) }),
 ]);
-export type TriageAnswer = z.infer<typeof triageAnswerSchema>;
 
 // The API takes a tool's input schema only as one object at the top, without oneOf, so the
 // session answers in this flat shape and triageAnswerSchema checks the combination after.

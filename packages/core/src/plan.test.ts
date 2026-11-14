@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { parsePlan } from "./plan.ts";
+import { parseYamlDocument } from "./document.ts";
+import { planSchema } from "./plan.ts";
+
+const parse = (text: string) => parseYamlDocument(planSchema, text);
 
 const example = `version: 1
 item: app#212
@@ -24,14 +27,14 @@ tasks:
 `;
 
 function issuesOf(text: string) {
-  const result = parsePlan(text);
+  const result = parse(text);
   if (result.ok) throw new Error("expected the plan to be rejected");
   return result.issues;
 }
 
-describe("parsePlan", () => {
+describe("planSchema", () => {
   test("parses a plan with two tasks", () => {
-    const result = parsePlan(example);
+    const result = parse(example);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.tasks.map((task) => task.depends_on)).toEqual([[], ["t1"]]);
   });
@@ -79,7 +82,7 @@ describe("parsePlan", () => {
         "    depends_on: [t1]\n",
         `    depends_on: [t1]\n    codemod: ${JSON.stringify(codemod)}\n`,
       );
-    expect(parsePlan(withCodemod("npx codemod src/ui")).ok).toBe(true);
+    expect(parse(withCodemod("npx codemod src/ui")).ok).toBe(true);
     for (const hidden of [
       "npx codemod\nrm -rf src",
       "npx codemod\rrm",

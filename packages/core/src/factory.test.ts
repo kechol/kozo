@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { parseFactory } from "./factory.ts";
+import { parseYamlDocument } from "./document.ts";
+import { factorySchema } from "./factory.ts";
+
+const parse = (text: string) => parseYamlDocument(factorySchema, text);
 
 const example = `version: 1
 mode: github
@@ -16,25 +19,25 @@ budget: { daily_usd: 15 }
 `;
 
 function issuesOf(text: string) {
-  const result = parseFactory(text);
+  const result = parse(text);
   if (result.ok) throw new Error("expected factory.yml to be rejected");
   return result.issues;
 }
 
-describe("parseFactory", () => {
+describe("factorySchema", () => {
   test("parses a github-mode factory", () => {
-    const result = parseFactory(example);
+    const result = parse(example);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.agents?.review?.model).toBe("claude-opus-5-5");
   });
 
   test("runtime is sdk or cli", () => {
-    expect(parseFactory(example.replace("runtime: sdk", "runtime: cli")).ok).toBe(true);
+    expect(parse(example.replace("runtime: sdk", "runtime: cli")).ok).toBe(true);
     expect(issuesOf(example.replace("runtime: sdk", "runtime: api"))[0]).toStartWith("runtime:");
   });
 
   test("locale is en or ja", () => {
-    expect(parseFactory(example.replace("locale: en", "locale: ja")).ok).toBe(true);
+    expect(parse(example.replace("locale: en", "locale: ja")).ok).toBe(true);
     expect(issuesOf(example.replace("locale: en", "locale: fr"))[0]).toStartWith("locale:");
   });
 
@@ -59,7 +62,7 @@ describe("parseFactory", () => {
   test("a repository's intake label may not be one of kozo's own", () => {
     const labelled = (label: string) =>
       example.replace("github: me/site }", `github: me/site, label: "${label}" }`);
-    expect(parseFactory(labelled("kozo")).ok).toBe(true);
+    expect(parse(labelled("kozo")).ok).toBe(true);
     expect(issuesOf(labelled("kozo:accept"))).toEqual([
       "repositories.1.label: kozo: labels are kozo's own",
     ]);
@@ -67,6 +70,6 @@ describe("parseFactory", () => {
 
   test("local mode needs no GitHub names", () => {
     const local = example.replace("mode: github", "mode: local").replaceAll(/, github: [^ ]+/g, "");
-    expect(parseFactory(local).ok).toBe(true);
+    expect(parse(local).ok).toBe(true);
   });
 });
