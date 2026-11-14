@@ -1,5 +1,58 @@
 # @kozo/daemon
 
+## 0.2.0
+
+### Minor Changes
+
+- [`e3698f8`](https://github.com/kechol/kozo/commit/e3698f8b03cbae3036686c130d9a18c818141a14) Thanks [@kechol](https://github.com/kechol)! - kozod records the size of each task's diff as diff-guard counted it, and once five merged tasks of a class back it, tells triage and plan how this repository's diffs of that class came out against their estimates and how often its tasks stopped for their scope; `kozo report --review` shows the same.
+
+- [`0ab68a4`](https://github.com/kechol/kozo/commit/0ab68a4797bda4094e8dfa232f953e3b1abce612) Thanks [@kechol](https://github.com/kechol)! - An item of two or more tasks is checked as a whole after its last merge: the verify agent drives the app on the default branch against the item's DONE_WHEN, and an item that falls short goes back to Triage with what failed, without counting as a defect.
+
+- [`9af1d1c`](https://github.com/kechol/kozo/commit/9af1d1c3db45de54e945c9d4f8e09d4301713eb3) Thanks [@kechol](https://github.com/kechol)! - `kozo report --review` lists what the implementers of the window's merged tasks noticed out of their scope and left, once each, so that you can make the ones worth doing items with `kozo add`.
+
+- [`9e044c2`](https://github.com/kechol/kozo/commit/9e044c2b2c0b09eafd87848f3b0e11f3d7bc1fbb) Thanks [@kechol](https://github.com/kechol)! - The implement agent's brief now carries the plan's approach, the goal and scope of the item's other open tasks as work to leave to them, and what each task it builds on changed according to its run report, so tasks of one item fit together instead of each inventing its own pieces.
+
+- [`b6657f3`](https://github.com/kechol/kozo/commit/b6657f35d87e702146c9991299ac27c8ae096c8a) Thanks [@kechol](https://github.com/kechol)! - Review now judges a diff also against the repository's AGENTS.md, read from the base branch so the diff cannot change it, and against the plan's approach, so a change in the wrong place, around an existing abstraction or against a written rule is sent back.
+
+- [`39d5928`](https://github.com/kechol/kozo/commit/39d59288954b51107b6165e47caccf78b40274d1) Thanks [@kechol](https://github.com/kechol)! - A plan may name what its tasks share: the names, places and data shapes more than one task uses, one line each. The dashboard and `kozo show` list them with the plan you approve, every task's brief carries them, and review holds every diff to them.
+
+- [`d248493`](https://github.com/kechol/kozo/commit/d248493611dd67a447653d86a3a337aa5977f078) Thanks [@kechol](https://github.com/kechol)! - `.kozo/constraints.yml` may list `together`, paths that change together such as an API and its documentation: kozo refuses a plan that may change one side and gives no task the other, and diff-guard refuses a diff that changes one side alone.
+
+### Patch Changes
+
+- [`46abe64`](https://github.com/kechol/kozo/commit/46abe6444102b7cb60fee50f532e6cc64397816c) Thanks [@kechol](https://github.com/kechol)! - The event stream of an item, task or run starts with its latest 400 events, which is what the dashboard keeps and what `kozo show -f` now prints before it follows, and a stream that resumes reads what it missed a page at a time; the same approval sent twice is taken once, and a verb that no longer fits the state answers 409 instead of 500.
+
+- [`697376b`](https://github.com/kechol/kozo/commit/697376b5f250335dd92c640c578c4340b2f87355) Thanks [@kechol](https://github.com/kechol)! - A hold on an item, such as `kozo pause` of the item, stops its tasks' runs at their next node; closing an item stops its own triage or plan session; stopping kozod stops the prepare, gate and prove commands that are running; a run stopped before its implement session resumes there; and an Issue whose body ends in white space no longer counts as edited on every poll.
+
+- [`b854542`](https://github.com/kechol/kozo/commit/b854542cb097edb67d8d60136685f907bf5bfda1) Thanks [@kechol](https://github.com/kechol)! - A fetch, push or `ls-remote` that the network holds up ends after five minutes instead of stopping kozod's polling, merge detection and automations behind it, and those jobs no longer pile up while one of them waits.
+
+- [`9ebe5bc`](https://github.com/kechol/kozo/commit/9ebe5bca8808a97eedaa2bb00fbd8013c77f3fcd) Thanks [@kechol](https://github.com/kechol)! - Two kozods started at once for the same home can no longer both run, and a pid file left by a crashed kozod whose pid another program now has no longer keeps kozod from starting.
+
+- [`e86ab8a`](https://github.com/kechol/kozo/commit/e86ab8a312f9d0466d65be5b51146d184e03cd3b) Thanks [@kechol](https://github.com/kechol)! - kozod keeps the day's cost as events arrive instead of adding up every event of the day on each scheduler tick and each status request.
+
+- [`93d19f8`](https://github.com/kechol/kozo/commit/93d19f8cbc203422f71dfd982f6c64c524336587) Thanks [@kechol](https://github.com/kechol)! - An eval case tears down the services each task started in the checkout beside its worktree too, so containers such as a task's database no longer outlive the case.
+
+- [`e0d89bb`](https://github.com/kechol/kozo/commit/e0d89bbdf3511b28e686f0cb807c358d4485e4be) Thanks [@kechol](https://github.com/kechol)! - In GitHub mode kozod follows GitHub's irregular answers: failed checks and a pull request without checks no longer break the poll, a change request that the reviewer later approved or that was dismissed no longer sends the task back, an item whose Issue was deleted or moved is held for your attention instead of failing on every poll, and `kozo issue` run again after a failed close finishes with the Issue it opened instead of opening another.
+
+- [`3ae8104`](https://github.com/kechol/kozo/commit/3ae81041824745c3f0dcc25956e691abc7166c50) Thanks [@kechol](https://github.com/kechol)! - An item that is held when its last task merges, or when a task stops for its scope, no longer stays in Building for good: the check after the merge, and the split, wait until the hold clears.
+
+- [`fea33b8`](https://github.com/kechol/kozo/commit/fea33b809edb84e45aadd2cb5b0301b8c1068660) Thanks [@kechol](https://github.com/kechol)! - When kozo.db fails to record an event or to be rebuilt, kozod stops taking events and exits, as it already did for a log it cannot write, so its next start rebuilds the index from the logs instead of running on with an index that misses events or is closed.
+
+- [`12afcb7`](https://github.com/kechol/kozo/commit/12afcb765630b5e58509ab0465a3dfeebe775a41) Thanks [@kechol](https://github.com/kechol)! - Gates that are MISCONFIGURED in the check after a merge hold the task for attention instead of counting as a defect, so the class is not demoted and the item does not go back to Triage; `kozo retry` runs the check again once the constraints are fixed.
+
+- [`301a86e`](https://github.com/kechol/kozo/commit/301a86e4a08c029b65653e64c01dc73e8227afbb) Thanks [@kechol](https://github.com/kechol)! - A task's detail reads each run's report and verdicts through their schemas, so a file that is damaged or of another version shows as missing instead of as whatever it holds.
+
+- [`2e00fc6`](https://github.com/kechol/kozo/commit/2e00fc6c53ea0f09915f50bea82e889572d0973d) Thanks [@kechol](https://github.com/kechol)! - A task's next attempt after a failed check waits for room in the daily budget, and for the factory to be resumed, like any new work; `kozo say --ask` answers one question at a time, counts running work's reservations against the budget, and is stopped and waited for when kozod stops; and kozod no longer starts one more run than `concurrency` allows when a merged task's check takes a slot at the same moment.
+
+- [`63b68b8`](https://github.com/kechol/kozo/commit/63b68b8dd459657e82445e9172af7957e4174c4f) Thanks [@kechol](https://github.com/kechol)! - `kozo pause --now`, `kozo take`, `kozo close` and stopping kozod end a running review or verify-app session at once instead of waiting for it to finish; the task resumes at the same node, and verify-app first puts the worktree back.
+
+- [`1a456cd`](https://github.com/kechol/kozo/commit/1a456cd6a49839acbb38f1ece9defccd7835a8ea) Thanks [@kechol](https://github.com/kechol)! - `kozo take`, `return`, `approve`, `reject`, `retry` and `close` clear a hold and take their next step at once, so kozod can no longer start a run, or the plan agent, on the task or item in the moment between the two.
+- Updated dependencies [[`b854542`](https://github.com/kechol/kozo/commit/b854542cb097edb67d8d60136685f907bf5bfda1), [`e3698f8`](https://github.com/kechol/kozo/commit/e3698f8b03cbae3036686c130d9a18c818141a14), [`e0d89bb`](https://github.com/kechol/kozo/commit/e0d89bbdf3511b28e686f0cb807c358d4485e4be), [`9e044c2`](https://github.com/kechol/kozo/commit/9e044c2b2c0b09eafd87848f3b0e11f3d7bc1fbb), [`1d6570f`](https://github.com/kechol/kozo/commit/1d6570fbf66c49898588b7f0ac03551ec40f04e4), [`3d51727`](https://github.com/kechol/kozo/commit/3d517274ea2aac7474f7c0c64211ded78e4dc7ac), [`b6657f3`](https://github.com/kechol/kozo/commit/b6657f35d87e702146c9991299ac27c8ae096c8a), [`39d5928`](https://github.com/kechol/kozo/commit/39d59288954b51107b6165e47caccf78b40274d1), [`63b68b8`](https://github.com/kechol/kozo/commit/63b68b8dd459657e82445e9172af7957e4174c4f), [`d248493`](https://github.com/kechol/kozo/commit/d248493611dd67a447653d86a3a337aa5977f078), [`7e177f5`](https://github.com/kechol/kozo/commit/7e177f5b45ec8fcbafc88cdb7e4c0c5fd3367f86)]:
+  - @kozo/verify@0.2.0
+  - @kozo/core@0.2.0
+  - @kozo/dashboard@0.2.0
+  - @kozo/worker@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes

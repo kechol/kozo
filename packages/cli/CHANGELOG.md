@@ -1,5 +1,22 @@
 # @kozo/cli
 
+## 0.2.0
+
+### Minor Changes
+
+- [`e3698f8`](https://github.com/kechol/kozo/commit/e3698f8b03cbae3036686c130d9a18c818141a14) Thanks [@kechol](https://github.com/kechol)! - kozod records the size of each task's diff as diff-guard counted it, and once five merged tasks of a class back it, tells triage and plan how this repository's diffs of that class came out against their estimates and how often its tasks stopped for their scope; `kozo report --review` shows the same.
+
+- [`9af1d1c`](https://github.com/kechol/kozo/commit/9af1d1c3db45de54e945c9d4f8e09d4301713eb3) Thanks [@kechol](https://github.com/kechol)! - `kozo report --review` lists what the implementers of the window's merged tasks noticed out of their scope and left, once each, so that you can make the ones worth doing items with `kozo add`.
+
+- [`39d5928`](https://github.com/kechol/kozo/commit/39d59288954b51107b6165e47caccf78b40274d1) Thanks [@kechol](https://github.com/kechol)! - A plan may name what its tasks share: the names, places and data shapes more than one task uses, one line each. The dashboard and `kozo show` list them with the plan you approve, every task's brief carries them, and review holds every diff to them.
+
+### Patch Changes
+
+- [`46abe64`](https://github.com/kechol/kozo/commit/46abe6444102b7cb60fee50f532e6cc64397816c) Thanks [@kechol](https://github.com/kechol)! - The event stream of an item, task or run starts with its latest 400 events, which is what the dashboard keeps and what `kozo show -f` now prints before it follows, and a stream that resumes reads what it missed a page at a time; the same approval sent twice is taken once, and a verb that no longer fits the state answers 409 instead of 500.
+- Updated dependencies [[`b854542`](https://github.com/kechol/kozo/commit/b854542cb097edb67d8d60136685f907bf5bfda1), [`e3698f8`](https://github.com/kechol/kozo/commit/e3698f8b03cbae3036686c130d9a18c818141a14), [`e0d89bb`](https://github.com/kechol/kozo/commit/e0d89bbdf3511b28e686f0cb807c358d4485e4be), [`9e044c2`](https://github.com/kechol/kozo/commit/9e044c2b2c0b09eafd87848f3b0e11f3d7bc1fbb), [`1d6570f`](https://github.com/kechol/kozo/commit/1d6570fbf66c49898588b7f0ac03551ec40f04e4), [`3d51727`](https://github.com/kechol/kozo/commit/3d517274ea2aac7474f7c0c64211ded78e4dc7ac), [`b6657f3`](https://github.com/kechol/kozo/commit/b6657f35d87e702146c9991299ac27c8ae096c8a), [`39d5928`](https://github.com/kechol/kozo/commit/39d59288954b51107b6165e47caccf78b40274d1), [`63b68b8`](https://github.com/kechol/kozo/commit/63b68b8dd459657e82445e9172af7957e4174c4f), [`d248493`](https://github.com/kechol/kozo/commit/d248493611dd67a447653d86a3a337aa5977f078), [`7e177f5`](https://github.com/kechol/kozo/commit/7e177f5b45ec8fcbafc88cdb7e4c0c5fd3367f86)]:
+  - @kozo/verify@0.2.0
+  - @kozo/core@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes
