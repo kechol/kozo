@@ -134,11 +134,21 @@ jobs:
         run: |
           gh release download "$TAG" --pattern SHA256SUMS.txt --dir release
           bun run scripts/formula.ts --version "${TAG#v}" --sums release/SHA256SUMS.txt > kozo.rb
-      # HOMEBREW_TAP_TOKEN may write only kechol/homebrew-tap's contents.
+      # The tap's GitHub App is installed only on kechol/homebrew-tap; the token
+      # can write that repository's contents and is revoked when the job ends.
+      - name: Create a homebrew-tap token
+        id: tap-token
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          client-id: ${{ vars.HOMEBREW_TAP_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOMEBREW_TAP_APP_PRIVATE_KEY }}
+          owner: kechol
+          repositories: homebrew-tap
+          permission-contents: write
       - uses: actions/checkout@v7.0.1
         with:
           repository: kechol/homebrew-tap
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          token: ${{ steps.tap-token.outputs.token }}
           path: tap
       - name: Commit and push the formula
         env:

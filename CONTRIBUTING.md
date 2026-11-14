@@ -120,8 +120,10 @@ Actions build `kozo` and `kozod` for macOS and Linux and publish them as a
 GitHub Release, whose notes gather that version's entries from every package's
 `CHANGELOG.md` once each (`scripts/release-notes.ts`). For a stable version, the workflow then writes
 `Formula/kozo.rb` from the release's checksums and pushes it to the
-kechol/homebrew-tap repository with the `HOMEBREW_TAP_TOKEN` secret, a token
-that may write only that repository's contents. Nobody publishes from a laptop.
+kechol/homebrew-tap repository as a GitHub App installed only on that
+repository: the job creates a token that may write only its contents and is
+revoked when the job ends, from the `HOMEBREW_TAP_APP_CLIENT_ID` variable and
+the `HOMEBREW_TAP_APP_PRIVATE_KEY` secret. Nobody publishes from a laptop.
 
 ## What to keep out of the repository
 
