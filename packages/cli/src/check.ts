@@ -9,6 +9,7 @@ import {
   parseConstraints,
 } from "@kozo/core";
 import {
+  activeGitHubLogin,
   baseOf,
   charterPath,
   constraintsPath,
@@ -16,6 +17,7 @@ import {
   definitionTip,
   GitError,
   git,
+  githubSignInArgs,
   platformConfine,
   readDefinition,
   SandboxUnavailable,
@@ -304,20 +306,7 @@ async function ghCheck(t: Words): Promise<Check> {
       status: "fail",
       detail: t("cli.check-gh-missing"),
     };
-  const status = await runTool(gh, [
-    "auth",
-    "status",
-    "--active",
-    "--hostname=github.com",
-    "--json=hosts",
-  ]);
-  let login: string | undefined;
-  try {
-    const raw = JSON.parse(status.stdout) as {
-      hosts?: Record<string, { active?: boolean; login?: string }[]>;
-    };
-    login = raw.hosts?.["github.com"]?.find((account) => account.active)?.login;
-  } catch {}
+  const login = activeGitHubLogin((await runTool(gh, githubSignInArgs)).stdout);
   return login
     ? {
         name: t("cli.check-name-gh"),

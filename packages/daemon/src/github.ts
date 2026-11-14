@@ -7,7 +7,7 @@ import type {
   GitHubRepository,
   GitHubReview,
 } from "@kozo/core";
-import { git } from "@kozo/verify";
+import { activeGitHubLogin, git, githubSignInArgs } from "@kozo/verify";
 
 /** A gh command line outside the list, refused before gh runs. */
 export class GhRefused extends Error {}
@@ -352,14 +352,7 @@ export function ghGitHub(exec: GhExec = spawnGh): GitHub {
       return closed.at(-1)?.actor?.login ?? null;
     },
     async login() {
-      const raw = await json<{ hosts: Record<string, { active: boolean; login: string }[]> }>([
-        "auth",
-        "status",
-        "--active",
-        "--hostname=github.com",
-        "--json=hosts",
-      ]);
-      const login = raw.hosts["github.com"]?.find((account) => account.active)?.login;
+      const login = activeGitHubLogin(await gh(githubSignInArgs));
       if (!login) throw new GhError("gh is not signed in to github.com", 0);
       return login;
     },

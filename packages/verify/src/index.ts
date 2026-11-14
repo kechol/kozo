@@ -16,6 +16,7 @@ export * from "./diff-guard.ts";
 export * from "./factory-definition.ts";
 export * from "./gates.ts";
 export * from "./git.ts";
+export * from "./github-sign-in.ts";
 export * from "./judge.ts";
 export * from "./processes.ts";
 export * from "./prove.ts";
