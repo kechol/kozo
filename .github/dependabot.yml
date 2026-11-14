@@ -3,7 +3,7 @@ version: 2
 # Weekly, one grouped pull request per ecosystem where it can be. A release must be a week old
 # before it is proposed, so a compromised version is likely pulled before it reaches kozo.
 updates:
-  # The workflows pin each action to a commit; Dependabot moves the pin and its version comment.
+  # .github/workflows/actions.lock pins each action to a commit; Dependabot moves the version and its locked commit together.
   - package-ecosystem: github-actions
     directory: /
     schedule:

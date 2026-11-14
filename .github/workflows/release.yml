@@ -28,15 +28,15 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
       - name: Create or update the version pull request
-        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        uses: changesets/action@v2.1.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -51,10 +51,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
@@ -122,8 +122,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - uses: actions/checkout@v7.0.1
+      - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: "1.4.2"
       # The formula is built from the published release, so it names the archives users get.
@@ -134,11 +134,21 @@ jobs:
         run: |
           gh release download "$TAG" --pattern SHA256SUMS.txt --dir release
           bun run scripts/formula.ts --version "${TAG#v}" --sums release/SHA256SUMS.txt > kozo.rb
-      # HOMEBREW_TAP_TOKEN may write only kechol/homebrew-tap's contents.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The tap's GitHub App is installed only on kechol/homebrew-tap; the token
+      # can write that repository's contents and is revoked when the job ends.
+      - name: Create a homebrew-tap token
+        id: tap-token
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          client-id: ${{ vars.HOMEBREW_TAP_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOMEBREW_TAP_APP_PRIVATE_KEY }}
+          owner: kechol
+          repositories: homebrew-tap
+          permission-contents: write
+      - uses: actions/checkout@v7.0.1
         with:
           repository: kechol/homebrew-tap
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          token: ${{ steps.tap-token.outputs.token }}
           path: tap
       - name: Commit and push the formula
         env:
