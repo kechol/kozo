@@ -39,6 +39,7 @@ import {
   type Node,
   type Repository,
   type RunEnd,
+  RunnerError,
   type RunnerOps,
 } from "./task-run.ts";
 import { hold, move, splitTasks } from "./transitions.ts";
@@ -62,9 +63,6 @@ export interface RunnerDeps {
   /** kozod's egress proxy, prepare's only way out; without it prepare reaches any host. */
   egress?: Pick<EgressProxy, "issue" | "port">;
 }
-
-/** Thrown when the repository's documents keep a run from starting at all. */
-export class RunnerError extends Error {}
 
 /**
  * Runs the agent nodes of the factory and the deterministic nodes around them: triage for an

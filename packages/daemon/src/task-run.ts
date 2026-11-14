@@ -48,6 +48,9 @@ export interface Repository extends Base {
   constraints: Constraints;
 }
 
+/** Thrown when the repository's documents keep a run from starting at all. */
+export class RunnerError extends Error {}
+
 type RunState = "succeeded" | "failed" | "stopped" | "lost";
 type Layers = (typeof layersFor)[keyof typeof layersFor];
 

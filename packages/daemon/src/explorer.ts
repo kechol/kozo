@@ -13,8 +13,9 @@ import type { EventStore } from "./event-store.ts";
 import { readItemFile, requestText } from "./item-file.ts";
 import { recentLines } from "./queries.ts";
 import { readCharter } from "./repository.ts";
-import { type Runner, RunnerError } from "./runner.ts";
+import type { Runner } from "./runner.ts";
 import { runRecords } from "./task-records.ts";
+import { RunnerError } from "./task-run.ts";
 import { hasWorktree, worktreePath } from "./worktrees.ts";
 
 // The records are a summary for one question, not an archive: each part keeps its newest end.
